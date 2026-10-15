@@ -1,0 +1,37 @@
+---
+description: 企业知识库平台总规则：技术栈、目录结构、架构原则与编码规范
+alwaysApply: true
+---
+
+# 项目：企业知识库平台（Enterprise Knowledge Base）
+
+## 技术栈
+- 前端：Vue 3 + TypeScript + Vite + Element Plus + Pinia + Vue Router，axios 封装请求，SSE 用于流式回答
+- 后端：Python 3.11+、FastAPI、SQLAlchemy 2.0（async）、Alembic、Pydantic v2
+- 异步任务：Dramatiq（或 Celery）+ Redis
+- 存储：PostgreSQL 16、Redis 7、MinIO、Qdrant、OpenSearch 2.x（安装 IK 中文分词）
+- 认证：Keycloak（OIDC），AD/LDAP 由 Keycloak 联邦，后端只校验 JWT
+- 模型：通过 OpenAI 兼容接口调用（vLLM / TEI），Qwen3-Embedding、Qwen3-Reranker、LLM 均可配置
+
+## 目录结构
+- /backend/app/{api,core,models,schemas,services,repositories,workers,retrieval,llm}
+- /frontend/src/{api,views,components,stores,router,composables,utils}
+- /deploy/docker-compose.yml，/deploy/opensearch，/deploy/keycloak
+- /docs（每阶段更新 ADR 与接口说明）
+
+## 架构原则（必须遵守）
+1. PostgreSQL 是唯一真相源；Qdrant、OpenSearch 是派生索引，必须可从 PG+MinIO 全量重建。
+2. 索引同步用 Outbox 模式：业务事务内写 outbox，worker 幂等消费；chunk 以 chunk_id+version 为准。
+3. ACL：检索时前置过滤（payload/字段存授权主体：org_id、group_ids、role_ids、visibility），
+   回答前用 PG 二次校验；LLM 永远不能看到用户无权访问的内容；缓存 key 必须包含权限范围。
+4. 所有模型调用经由 llm/gateway 统一封装，支持超时、重试、降级，模型名与地址全部来自配置。
+5. 分层：api 只做参数校验与编排，业务逻辑在 services，数据访问在 repositories。
+6. 所有写操作记录审计日志；所有检索/问答记录 trace（query、召回、分数、最终上下文、耗时）。
+7. 多租户：所有业务表带 org_id，查询默认按 org 过滤。
+
+## 编码规范
+- 后端全类型注解，ruff + mypy 通过；pytest 覆盖 services 层核心逻辑；配置用 pydantic-settings。
+- 统一错误响应格式 {code, message, detail, trace_id}；分页统一 {items, total, page, size}。
+- 前端用 <script setup lang="ts">，API 类型与后端 schema 对齐，ESLint + Prettier。
+- 不要实现当前阶段范围外的功能；需要依赖后续阶段的地方留接口和 TODO。
+- 每阶段结束更新 README 与 /docs，并保证 docker compose up 能跑起来。

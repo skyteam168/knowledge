@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Env
+.env
+deploy/.env
+deploy/.env.prod
+deploy/observability/metrics-token
+deploy/backups/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store

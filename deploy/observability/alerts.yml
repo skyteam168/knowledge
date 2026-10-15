@@ -1,0 +1,66 @@
+groups:
+  - name: ekb
+    rules:
+      - alert: EkbHighErrorRate
+        expr: |
+          sum(rate(ekb_http_requests_total{status=~"5.."}[5m]))
+            / clamp_min(sum(rate(ekb_http_requests_total[5m])), 1e-9) > 0.05
+        for: 10m
+        labels: { severity: critical }
+        annotations:
+          summary: "API 5xx ratio above 5% for 10 minutes"
+
+      - alert: EkbSlowRequests
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le, route) (rate(ekb_http_request_duration_seconds_bucket{route!~".*/messages"}[5m]))
+          ) > 3
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "P95 latency of {{ $labels.route }} above 3s"
+
+      - alert: EkbSlowFirstToken
+        expr: |
+          histogram_quantile(0.95, sum by (le) (rate(ekb_llm_first_token_seconds_bucket[5m]))) > 5
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "LLM time to first token P95 above 5s"
+
+      - alert: EkbLlmErrors
+        expr: |
+          sum by (kind) (rate(ekb_llm_calls_total{outcome="error"}[5m]))
+            / clamp_min(sum by (kind) (rate(ekb_llm_calls_total[5m])), 1e-9) > 0.1
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "More than 10% of {{ $labels.kind }} model calls fail"
+
+      - alert: EkbQueueBacklog
+        expr: max by (queue) (ekb_queue_backlog) > 500
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "Task queue {{ $labels.queue }} backlog above 500 for 15 minutes"
+
+      - alert: EkbOutboxStuck
+        expr: max(ekb_outbox_oldest_pending_seconds) > 900
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "Index outbox has events pending for more than 15 minutes"
+
+      - alert: EkbOutboxDead
+        expr: max(ekb_outbox_events{status="dead"}) > 0
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Dead index outbox events need attention (管理 → 索引同步)"
+
+      - alert: EkbTargetDown
+        expr: up{job=~"ekb-.*"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "{{ $labels.job }} is not reachable"

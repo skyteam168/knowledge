@@ -1,0 +1,59 @@
+import type { SearchHit } from '@/api/types'
+
+export const DOC_TYPE_LABELS: Record<string, string> = {
+  pdf: 'PDF',
+  word: 'Word',
+  excel: 'Excel',
+  csv: 'CSV',
+  ppt: 'PPT',
+  text: '文本',
+  markdown: 'Markdown',
+  html: 'HTML',
+  other: '其他',
+}
+
+export function docTypeLabel(type: string): string {
+  return DOC_TYPE_LABELS[type] ?? type
+}
+
+/** "第 3 页" / "第 3-5 页" / "工作表 库存" / "第 2 张幻灯片", joined with " · ". */
+export function hitLocation(
+  hit: Pick<SearchHit, 'page_start' | 'page_end' | 'sheet_name' | 'slide_number'>,
+): string {
+  const parts: string[] = []
+  if (hit.page_start != null) {
+    parts.push(
+      hit.page_end != null && hit.page_end !== hit.page_start
+        ? `第 ${hit.page_start}-${hit.page_end} 页`
+        : `第 ${hit.page_start} 页`,
+    )
+  }
+  if (hit.sheet_name) parts.push(`工作表 ${hit.sheet_name}`)
+  if (hit.slide_number != null) parts.push(`第 ${hit.slide_number} 张幻灯片`)
+  return parts.join(' · ')
+}
+
+/**
+ * Local calendar days [start, end] (YYYY-MM-DD) -> UTC instants [from, to) where `to` is the
+ * midnight after `end`, matching the API's exclusive upper bound.
+ */
+export function dayRangeToParams(range: [string, string] | null | undefined): {
+  date_from?: string
+  date_to?: string
+} {
+  if (!range) return {}
+  const [start, end] = range.map((d) => {
+    const [y, m, day] = d.split('-').map(Number)
+    return new Date(y, m - 1, day)
+  })
+  end.setDate(end.getDate() + 1)
+  return { date_from: start.toISOString(), date_to: end.toISOString() }
+}
+
+export function formatScore(value: number | null | undefined, digits = 4): string {
+  return value == null ? '-' : value.toFixed(digits)
+}
+
+export function formatRank(value: number | null | undefined): string {
+  return value == null ? '-' : `#${value}`
+}

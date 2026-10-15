@@ -1,0 +1,329 @@
+name: ekb
+
+x-backend-env: &backend-env
+  APP_ENV: ${APP_ENV:-dev}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-ekb}:${POSTGRES_PASSWORD:-ekb}@postgres:5432/${POSTGRES_DB:-ekb}
+  REDIS_URL: redis://redis:6379/0
+  MINIO_ENDPOINT: http://minio:9000
+  MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+  MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+  # Browser-reachable MinIO address used to sign upload / preview URLs.
+  MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-http://localhost:9000}
+  PDF_PARSER: ${PDF_PARSER:-auto}
+  MINERU_API_URL: ${MINERU_API_URL:-}
+  QDRANT_URL: http://qdrant:6333
+  OPENSEARCH_URL: http://opensearch:9200
+  KEYCLOAK_URL: http://keycloak:8080
+  KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL:-http://localhost:8080}
+  KEYCLOAK_REALM: ekb
+  KEYCLOAK_AUDIENCE: ekb-backend
+  EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-http://mock-llm:9100/v1}
+  EMBEDDING_MODEL: ${EMBEDDING_MODEL:-mock-embedding}
+  EMBEDDING_DIM: ${EMBEDDING_DIM:-1024}
+  EMBEDDING_SEND_DIMENSIONS: ${EMBEDDING_SEND_DIMENSIONS:-false}
+  EMBEDDING_BATCH_SIZE: ${EMBEDDING_BATCH_SIZE:-32}
+  RERANK_BASE_URL: ${RERANK_BASE_URL:-http://mock-llm:9100/v1}
+  RERANK_MODEL: ${RERANK_MODEL:-mock-reranker}
+  RERANK_PATH: ${RERANK_PATH:-/rerank}
+  RERANK_INSTRUCT: ${RERANK_INSTRUCT:-}
+  CHAT_BASE_URL: ${CHAT_BASE_URL:-http://mock-llm:9100/v1}
+  CHAT_MODEL: ${CHAT_MODEL:-mock-chat}
+  CHAT_FALLBACK_BASE_URL: ${CHAT_FALLBACK_BASE_URL:-}
+  CHAT_FALLBACK_MODEL: ${CHAT_FALLBACK_MODEL:-}
+  CHAT_EXTRA_BODY: ${CHAT_EXTRA_BODY:-{}}
+  CHAT_EVIDENCE_MIN_SCORE: ${CHAT_EVIDENCE_MIN_SCORE:-0.2}
+  CHAT_EVIDENCE_CONFIDENT_SCORE: ${CHAT_EVIDENCE_CONFIDENT_SCORE:-0.5}
+  OPEN_API_ENABLED: ${OPEN_API_ENABLED:-true}
+  OPEN_API_KEY_PEPPER: ${OPEN_API_KEY_PEPPER:-change-me-open-api-pepper}
+  OPEN_API_TRUSTED_PROXIES: ${OPEN_API_TRUSTED_PROXIES:-[]}
+  LLM_API_KEY: ${LLM_API_KEY:-EMPTY}
+  LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+  INDEX_ALIAS: ${INDEX_ALIAS:-kb_chunks}
+  DIRECTORY_SECRET_KEY: ${DIRECTORY_SECRET_KEY:-change-me-directory-secret}
+  DIRECTORY_SYNC_MAX_DISABLE_RATIO: ${DIRECTORY_SYNC_MAX_DISABLE_RATIO:-0.2}
+  PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
+  OIDC_BRIDGE_ENABLED: ${OIDC_BRIDGE_ENABLED:-true}
+  OIDC_BRIDGE_SIGNING_KEY: ${OIDC_BRIDGE_SIGNING_KEY:-}
+  OIDC_BRIDGE_CLIENT_SECRET: ${OIDC_BRIDGE_CLIENT_SECRET:-change-me-oidc-bridge-secret}
+  OIDC_BRIDGE_INTERNAL_URL: ${OIDC_BRIDGE_INTERNAL_URL:-http://backend:8000}
+  KEYCLOAK_ADMIN_CLIENT_ID: ${KEYCLOAK_ADMIN_CLIENT_ID:-ekb-backend}
+  KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET:-ekb-backend-secret}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ekb}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ekb}
+      POSTGRES_DB: ${POSTGRES_DB:-ekb}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_HOST_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    # minio/minio was withdrawn from Docker Hub / anonymous quay.io; pgsty/silo is a drop-in fork.
+    image: pgsty/silo:RELEASE.2026-09-16T00-00-00Z
+    command: ["silo", "server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  qdrant:
+    image: qdrant/qdrant:v1.13.6
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          bash -c 'exec 3<>/dev/tcp/127.0.0.1/6333 &&
+          printf "GET /readyz HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" >&3 &&
+          grep -q "200 OK" <&3'
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  opensearch:
+    build:
+      context: ./opensearch
+      args:
+        OPENSEARCH_VERSION: ${OPENSEARCH_VERSION:-2.19.2}
+    image: ekb/opensearch-ik:${OPENSEARCH_VERSION:-2.19.2}
+    environment:
+      discovery.type: single-node
+      bootstrap.memory_lock: "true"
+      OPENSEARCH_JAVA_OPTS: ${OPENSEARCH_JAVA_OPTS:--Xms1g -Xmx1g}
+      DISABLE_SECURITY_PLUGIN: "true"
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    ports:
+      - "9200:9200"
+    volumes:
+      - os_data:/usr/share/opensearch/data
+      # Directory mount so edits are visible in place; reload via /admin/index/synonyms/reload.
+      - ./opensearch/analysis:/usr/share/opensearch/config/analysis:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s' || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 30s
+
+  opensearch-dashboards:
+    profiles: ["dashboards"]
+    image: opensearchproject/opensearch-dashboards:${OPENSEARCH_VERSION:-2.19.2}
+    environment:
+      OPENSEARCH_HOSTS: '["http://opensearch:9200"]'
+      DISABLE_SECURITY_DASHBOARDS_PLUGIN: "true"
+    ports:
+      - "5601:5601"
+    depends_on:
+      opensearch:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:5601/api/status || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.2
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: ${POSTGRES_USER:-ekb}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD:-ekb}
+      KC_HEALTH_ENABLED: "true"
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME: ${KEYCLOAK_PUBLIC_URL:-http://localhost:8080}
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      # Placeholders of the WeCom / DingTalk identity providers in realm-ekb.json.
+      EKB_PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
+      EKB_BRIDGE_INTERNAL_URL: ${OIDC_BRIDGE_INTERNAL_URL:-http://backend:8000}
+      OIDC_BRIDGE_CLIENT_SECRET: ${OIDC_BRIDGE_CLIENT_SECRET:-change-me-oidc-bridge-secret}
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./keycloak/realm-ekb.json:/opt/keycloak/data/import/realm-ekb.json:ro
+      - ./keycloak/themes/ekb:/opt/keycloak/themes/ekb:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          bash -c 'exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf "GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" >&3 &&
+          grep -q "\"UP\"" <&3'
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+  mock-llm:
+    build:
+      context: ./mock-llm
+    image: ekb/mock-llm:latest
+    environment:
+      MOCK_EMBEDDING_DIM: ${EMBEDDING_DIM:-1024}
+    ports:
+      - "9100:9100"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9100/health', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: ../backend
+      args:
+        INSTALL_DOCLING: ${INSTALL_DOCLING:-false}
+    image: ekb/backend:latest
+    command: ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+    environment:
+      <<: *backend-env
+      LLM_CONFIG_IMPORT_ON_STARTUP: "true"
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      opensearch:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 20s
+
+  worker:
+    build:
+      context: ../backend
+      args:
+        INSTALL_DOCLING: ${INSTALL_DOCLING:-false}
+    image: ekb/backend:latest
+    command: ["dramatiq", "app.workers.main", "--processes", "1", "--threads", "4"]
+    environment:
+      <<: *backend-env
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.workers.healthcheck"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  outbox-dispatcher:
+    image: ekb/backend:latest
+    command: ["python", "-m", "app.workers.outbox_dispatcher"]
+    environment:
+      <<: *backend-env
+    depends_on:
+      backend:
+        condition: service_healthy
+      worker:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.workers.healthcheck", "app.workers.outbox_dispatcher"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  scheduler:
+    image: ekb/backend:latest
+    command: ["python", "-m", "app.workers.scheduler"]
+    environment:
+      <<: *backend-env
+    depends_on:
+      backend:
+        condition: service_healthy
+      worker:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.workers.healthcheck", "app.workers.scheduler"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  frontend:
+    build:
+      context: ../frontend
+      args:
+        VITE_KEYCLOAK_URL: ${KEYCLOAK_PUBLIC_URL:-http://localhost:8080}
+    image: ekb/frontend:latest
+    ports:
+      - "3000:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pg_data:
+  redis_data:
+  minio_data:
+  qdrant_data:
+  os_data:

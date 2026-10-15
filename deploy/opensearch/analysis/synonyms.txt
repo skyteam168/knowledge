@@ -1,0 +1,7 @@
+# Solr synonym format, used by the search-time `ekb_synonym` filter (updateable).
+# After editing, call POST /api/v1/admin/index/synonyms/reload or
+# `python -m app.cli index reload-synonyms`; no reindex is needed.
+知识库, 知识中心
+报销, 费用报销
+请假, 休假
+人力资源, HR, 人事

@@ -1,0 +1,96 @@
+[project]
+name = "ekb-backend"
+version = "0.1.0"
+description = "Enterprise Knowledge Base backend"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115,<1.0",
+    "uvicorn[standard]>=0.34",
+    "pydantic[email]>=2.7",
+    "pydantic-settings>=2.3",
+    "sqlalchemy[asyncio]>=2.1",
+    "asyncpg>=0.29",
+    "alembic>=1.13",
+    "redis>=5.0",
+    "dramatiq[redis]>=1.17",
+    "httpx>=0.27",
+    "pyjwt[crypto]>=2.9",
+    "minio>=7.2.20",
+    "pdfplumber>=0.11.10",
+    "python-docx>=1.2.0",
+    "openpyxl>=3.1.5",
+    "python-pptx>=1.0.2",
+    "beautifulsoup4>=4.15.0",
+    "python-multipart>=0.0.32",
+    "tzdata>=2026.5",
+    "prometheus-client>=0.21",
+    "opentelemetry-api>=1.30",
+    "opentelemetry-sdk>=1.30",
+    "opentelemetry-exporter-otlp-proto-http>=1.30",
+    "opentelemetry-instrumentation-fastapi>=0.51b0",
+    "opentelemetry-instrumentation-sqlalchemy>=0.51b0",
+    "opentelemetry-instrumentation-httpx>=0.51b0",
+    "cryptography>=43",
+    "pymssql>=2.3",
+    "oracledb>=2.5",
+    "pymysql>=1.1",
+]
+
+[project.optional-dependencies]
+ocr = [
+    "rapidocr-onnxruntime>=1.4.4",
+]
+docling = [
+    "docling>=2.30",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.2",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "aiosqlite>=0.20",
+    "fpdf2>=2.8.9",
+]
+loadtest = [
+    "locust>=2.32",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+extend-exclude = ["alembic/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "N", "ASYNC", "SIM", "RUF"]
+ignore = ["RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["B011"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+plugins = ["pydantic.mypy"]
+files = ["app", "tests"]
+
+[[tool.mypy.overrides]]
+module = [
+    "dramatiq.*",
+    "docling.*",
+    "rapidocr_onnxruntime.*",
+    "openpyxl.*",
+    "numpy.*",
+    "pymssql.*",
+    "pymysql.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+markers = [
+    "acl: access-control regression suite (pytest -m acl)",
+]

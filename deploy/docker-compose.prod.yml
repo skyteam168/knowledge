@@ -1,0 +1,445 @@
+# Production stack (single host). Usage:
+#   cp .env.prod.example .env.prod   # fill in every value
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod --profile observability up -d
+#
+# Differences from docker-compose.yml (dev): no mock-llm (real model endpoints are required),
+# secrets are mandatory, infrastructure ports are not published, Keycloak runs in production
+# mode behind the TLS-terminating reverse proxy, migrations run once in a dedicated service,
+# images run as non-root, restart policies and resource limits are set.
+name: ekb-prod
+
+x-backend-env: &backend-env
+  APP_ENV: prod
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@postgres:5432/${POSTGRES_DB:-ekb}
+  # Per process; total = (pool + overflow) x WEB_CONCURRENCY + worker processes x threads.
+  DATABASE_POOL_SIZE: ${DATABASE_POOL_SIZE:-10}
+  DATABASE_MAX_OVERFLOW: ${DATABASE_MAX_OVERFLOW:-10}
+  REDIS_URL: redis://:${REDIS_PASSWORD:?}@redis:6379/0
+  MINIO_ENDPOINT: http://minio:9000
+  MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:?}
+  MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?}
+  MINIO_BUCKET: ${MINIO_BUCKET:-ekb-documents}
+  MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:?}
+  PDF_PARSER: ${PDF_PARSER:-auto}
+  MINERU_API_URL: ${MINERU_API_URL:-}
+  QDRANT_URL: http://qdrant:6333
+  QDRANT_API_KEY: ${QDRANT_API_KEY:?}
+  OPENSEARCH_URL: http://opensearch:9200
+  OPENSEARCH_REPLICAS: ${OPENSEARCH_REPLICAS:-0}
+  KEYCLOAK_URL: http://keycloak:8080
+  KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL:?}
+  KEYCLOAK_REALM: ${KEYCLOAK_REALM:-ekb}
+  KEYCLOAK_AUDIENCE: ekb-backend
+  CORS_ORIGINS: '["${PUBLIC_URL:?}"]'
+  LLM_PROVIDER: openai
+  EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:?}
+  EMBEDDING_MODEL: ${EMBEDDING_MODEL:?}
+  EMBEDDING_DIM: ${EMBEDDING_DIM:?}
+  EMBEDDING_SEND_DIMENSIONS: ${EMBEDDING_SEND_DIMENSIONS:-false}
+  EMBEDDING_BATCH_SIZE: ${EMBEDDING_BATCH_SIZE:-32}
+  RERANK_BASE_URL: ${RERANK_BASE_URL:?}
+  RERANK_MODEL: ${RERANK_MODEL:?}
+  RERANK_PATH: ${RERANK_PATH:-/rerank}
+  RERANK_INSTRUCT: ${RERANK_INSTRUCT:-}
+  CHAT_BASE_URL: ${CHAT_BASE_URL:?}
+  CHAT_MODEL: ${CHAT_MODEL:?}
+  CHAT_FALLBACK_BASE_URL: ${CHAT_FALLBACK_BASE_URL:-}
+  CHAT_FALLBACK_MODEL: ${CHAT_FALLBACK_MODEL:-}
+  CHAT_EXTRA_BODY: ${CHAT_EXTRA_BODY:-{}}
+  CHAT_EVIDENCE_MIN_SCORE: ${CHAT_EVIDENCE_MIN_SCORE:-0.2}
+  CHAT_EVIDENCE_CONFIDENT_SCORE: ${CHAT_EVIDENCE_CONFIDENT_SCORE:-0.5}
+  OPEN_API_ENABLED: ${OPEN_API_ENABLED:-true}
+  OPEN_API_KEY_PEPPER: ${OPEN_API_KEY_PEPPER:?set OPEN_API_KEY_PEPPER}
+  OPEN_API_TRUSTED_PROXIES: ${OPEN_API_TRUSTED_PROXIES:-[]}
+  LLM_API_KEY: ${LLM_API_KEY:-EMPTY}
+  INDEX_ALIAS: ${INDEX_ALIAS:-kb_chunks}
+  # Organization directory sync + WeCom / DingTalk scan login (OIDC bridge).
+  DIRECTORY_SECRET_KEY: ${DIRECTORY_SECRET_KEY:?set DIRECTORY_SECRET_KEY}
+  DIRECTORY_SYNC_MAX_DISABLE_RATIO: ${DIRECTORY_SYNC_MAX_DISABLE_RATIO:-0.2}
+  PUBLIC_BASE_URL: ${PUBLIC_URL:?}
+  OIDC_BRIDGE_ENABLED: ${OIDC_BRIDGE_ENABLED:-true}
+  OIDC_BRIDGE_SIGNING_KEY: ${OIDC_BRIDGE_SIGNING_KEY:?set OIDC_BRIDGE_SIGNING_KEY}
+  OIDC_BRIDGE_CLIENT_SECRET: ${OIDC_BRIDGE_CLIENT_SECRET:?set OIDC_BRIDGE_CLIENT_SECRET}
+  OIDC_BRIDGE_INTERNAL_URL: ${OIDC_BRIDGE_INTERNAL_URL:-http://backend:8000}
+  KEYCLOAK_ADMIN_CLIENT_ID: ${KEYCLOAK_ADMIN_CLIENT_ID:-ekb-backend}
+  KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET:-}
+  # Security hardening (see app/core/config.py for every option).
+  RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
+  VIRUS_SCAN_BACKEND: ${VIRUS_SCAN_BACKEND:-none}
+  CLAMAV_HOST: ${CLAMAV_HOST:-clamav}
+  PII_MASK_ON_INGEST: ${PII_MASK_ON_INGEST:-false}
+  PII_MASK_ON_OUTPUT: ${PII_MASK_ON_OUTPUT:-false}
+  # Observability.
+  METRICS_TOKEN: ${METRICS_TOKEN:?}
+  OTEL_ENABLED: ${OTEL_ENABLED:-false}
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}
+  OTEL_SAMPLE_RATIO: ${OTEL_SAMPLE_RATIO:-0.2}
+  LANGFUSE_HOST: ${LANGFUSE_HOST:-}
+  LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+  LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+
+x-restart: &restart
+  restart: unless-stopped
+
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "50m"
+      max-file: "5"
+
+services:
+  postgres:
+    <<: [*restart, *logging]
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_DB: ${POSTGRES_DB:-ekb}
+    command:
+      - postgres
+      - -c
+      - max_connections=${POSTGRES_MAX_CONNECTIONS:-300}
+      - -c
+      - shared_buffers=${POSTGRES_SHARED_BUFFERS:-1GB}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+      - ${BACKUP_DIR:-./backups}:/backups
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+    deploy:
+      resources:
+        limits: { memory: 4g }
+
+  redis:
+    <<: [*restart, *logging]
+    image: redis:7-alpine
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --requirepass
+      - ${REDIS_PASSWORD:?}
+      - --maxmemory
+      - ${REDIS_MAXMEMORY:-1gb}
+      # Task queues live here too: never evict them; cache keys all carry a TTL.
+      - --maxmemory-policy
+      - volatile-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" --no-auth-warning ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?}
+
+  minio:
+    <<: [*restart, *logging]
+    image: pgsty/silo:RELEASE.2026-09-16T00-00-00Z
+    command: ["silo", "server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?}
+    # Browsers upload / preview through presigned URLs: publish behind the reverse proxy.
+    ports:
+      - "${MINIO_BIND:-127.0.0.1}:9000:9000"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  qdrant:
+    <<: [*restart, *logging]
+    image: qdrant/qdrant:v1.13.6
+    environment:
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:?}
+    volumes:
+      - qdrant_data:/qdrant/storage
+      - ${BACKUP_DIR:-./backups}/qdrant:/qdrant/snapshots
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          bash -c 'exec 3<>/dev/tcp/127.0.0.1/6333 &&
+          printf "GET /readyz HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" >&3 &&
+          grep -q "200 OK" <&3'
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    deploy:
+      resources:
+        limits: { memory: 4g }
+
+  opensearch:
+    <<: [*restart, *logging]
+    build:
+      context: ./opensearch
+      args:
+        OPENSEARCH_VERSION: ${OPENSEARCH_VERSION:-2.19.2}
+    image: ekb/opensearch-ik:${OPENSEARCH_VERSION:-2.19.2}
+    environment:
+      discovery.type: single-node
+      bootstrap.memory_lock: "true"
+      OPENSEARCH_JAVA_OPTS: ${OPENSEARCH_JAVA_OPTS:--Xms2g -Xmx2g}
+      # Reachable only on the internal network; enable the security plugin for multi-host setups.
+      DISABLE_SECURITY_PLUGIN: "true"
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
+      path.repo: /usr/share/opensearch/snapshots
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+      nofile: { soft: 65536, hard: 65536 }
+    volumes:
+      - os_data:/usr/share/opensearch/data
+      - ./opensearch/analysis:/usr/share/opensearch/config/analysis:ro
+      - ${BACKUP_DIR:-./backups}/opensearch:/usr/share/opensearch/snapshots
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s' || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 30
+      start_period: 60s
+    deploy:
+      resources:
+        limits: { memory: 4g }
+
+  keycloak:
+    <<: [*restart, *logging]
+    image: quay.io/keycloak/keycloak:26.2
+    # --import-realm skips realms that already exist.
+    command: ["start", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:?}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: ${POSTGRES_USER:?}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD:?}
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+      # TLS terminates at the reverse proxy, which forwards X-Forwarded-* headers.
+      KC_HTTP_ENABLED: "true"
+      KC_PROXY_HEADERS: xforwarded
+      KC_HOSTNAME: ${KEYCLOAK_PUBLIC_URL:?}
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      # Placeholders of the WeCom / DingTalk identity providers in realm-ekb.json.
+      EKB_PUBLIC_BASE_URL: ${PUBLIC_URL:?}
+      EKB_BRIDGE_INTERNAL_URL: ${OIDC_BRIDGE_INTERNAL_URL:-http://backend:8000}
+      OIDC_BRIDGE_CLIENT_SECRET: ${OIDC_BRIDGE_CLIENT_SECRET:?set OIDC_BRIDGE_CLIENT_SECRET}
+    ports:
+      - "${KEYCLOAK_BIND:-127.0.0.1}:8080:8080"
+    volumes:
+      - ${KEYCLOAK_REALM_FILE:-./keycloak/realm-ekb.json}:/opt/keycloak/data/import/realm-ekb.json:ro
+      - ./keycloak/themes/ekb:/opt/keycloak/themes/ekb:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          bash -c 'exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf "GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" >&3 &&
+          grep -q "\"UP\"" <&3'
+      interval: 15s
+      timeout: 5s
+      retries: 30
+      start_period: 90s
+
+  migrate:
+    <<: *logging
+    build:
+      context: ../backend
+      target: api
+      args:
+        INSTALL_DOCLING: ${INSTALL_DOCLING:-false}
+    image: ${REGISTRY:-ekb}/backend:${TAG:-latest}
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      <<: *backend-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  backend:
+    <<: [*restart, *logging]
+    image: ${REGISTRY:-ekb}/backend:${TAG:-latest}
+    environment:
+      <<: *backend-env
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-4}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      opensearch:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits: { cpus: "4", memory: 4g }
+
+  worker:
+    <<: [*restart, *logging]
+    build:
+      context: ../backend
+      target: worker
+      args:
+        INSTALL_DOCLING: ${INSTALL_DOCLING:-false}
+    image: ${REGISTRY:-ekb}/backend-worker:${TAG:-latest}
+    command:
+      - dramatiq
+      - app.workers.main
+      - --processes
+      - "${WORKER_PROCESSES:-2}"
+      - --threads
+      - "${WORKER_THREADS:-4}"
+    environment:
+      <<: *backend-env
+      WORKER_METRICS_PORT: "9191"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.workers.healthcheck"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits: { cpus: "4", memory: 6g }
+
+  outbox-dispatcher:
+    <<: [*restart, *logging]
+    image: ${REGISTRY:-ekb}/backend-worker:${TAG:-latest}
+    command: ["python", "-m", "app.workers.outbox_dispatcher"]
+    environment:
+      <<: *backend-env
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.workers.healthcheck", "app.workers.outbox_dispatcher"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  scheduler:
+    <<: [*restart, *logging]
+    image: ${REGISTRY:-ekb}/backend-worker:${TAG:-latest}
+    command: ["python", "-m", "app.workers.scheduler"]
+    environment:
+      <<: *backend-env
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.workers.healthcheck", "app.workers.scheduler"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  frontend:
+    <<: [*restart, *logging]
+    build:
+      context: ../frontend
+      args:
+        VITE_KEYCLOAK_URL: ${KEYCLOAK_PUBLIC_URL:?}
+    image: ${REGISTRY:-ekb}/frontend:${TAG:-latest}
+    # Put the TLS-terminating reverse proxy (or load balancer) in front of this port.
+    ports:
+      - "${HTTP_BIND:-127.0.0.1}:${HTTP_PORT:-8088}:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  # ---- optional ------------------------------------------------------------------------
+
+  clamav:
+    <<: [*restart, *logging]
+    profiles: ["clamav"]
+    image: clamav/clamav:1.4
+    volumes:
+      - clamav_data:/var/lib/clamav
+    healthcheck:
+      test: ["CMD", "clamdcheck.sh"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 300s
+
+  # ---- observability (--profile observability) -----------------------------------------
+
+  otel-collector:
+    <<: [*restart, *logging]
+    profiles: ["observability"]
+    image: otel/opentelemetry-collector-contrib:0.120.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./observability/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+
+  jaeger:
+    <<: [*restart, *logging]
+    profiles: ["observability"]
+    image: jaegertracing/all-in-one:1.66.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "${OBS_BIND:-127.0.0.1}:16686:16686"
+
+  prometheus:
+    <<: [*restart, *logging]
+    profiles: ["observability"]
+    image: prom/prometheus:v3.2.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-15d}
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - ./observability/metrics-token:/etc/prometheus/metrics-token:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "${OBS_BIND:-127.0.0.1}:9090:9090"
+
+  grafana:
+    <<: [*restart, *logging]
+    profiles: ["observability"]
+    image: grafana/grafana:11.5.2
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./observability/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "${OBS_BIND:-127.0.0.1}:3001:3000"
+
+volumes:
+  pg_data:
+  redis_data:
+  minio_data:
+  qdrant_data:
+  os_data:
+  clamav_data:
+  prometheus_data:
+  grafana_data:
