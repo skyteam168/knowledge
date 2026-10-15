@@ -46,6 +46,7 @@ async def run(settings: Settings, stop: asyncio.Event) -> None:
     from app.workers.analytics import refresh_analytics
     from app.workers.curation import check_expirations, cluster_gaps
     from app.workers.directory import dispatch_directory_syncs
+    from app.workers.maintenance import purge_expired_data
 
     jobs = [
         Job(
@@ -59,6 +60,11 @@ async def run(settings: Settings, stop: asyncio.Event) -> None:
             "refresh_analytics",
             settings.analytics_refresh_interval_seconds,
             refresh_analytics.send,
+        ),
+        Job(
+            "purge_expired_data",
+            settings.retention_check_interval_seconds,
+            purge_expired_data.send,
         ),
     ]
     logger.info("scheduler_started", extra={"jobs": [j.name for j in jobs]})

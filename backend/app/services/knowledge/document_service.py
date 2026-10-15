@@ -18,7 +18,7 @@ from app.core.exceptions import (
     PermissionDeniedError,
     ValidationAppError,
 )
-from app.core.storage import ObjectStorage
+from app.core.storage import STAGING_PREFIX, ObjectStorage
 from app.models import Document, DocumentStatus, DocumentVersion, KnowledgeBase
 from app.models.base import new_id, utcnow
 from app.repositories.base import paginate
@@ -85,7 +85,7 @@ def to_document_out(doc: Document, perm: AclPermission | None) -> DocumentOut:
 
 
 def _staging_key(org_id: str, ticket: str) -> str:
-    return f"staging/{org_id}/{ticket}"
+    return f"{STAGING_PREFIX}{org_id}/{ticket}"
 
 
 def _preview_type(mime_type: str) -> str:

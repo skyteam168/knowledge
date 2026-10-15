@@ -12,6 +12,10 @@ from app.schemas.health import DependencyStatus, ReadinessResponse
 
 CheckFn = Callable[[], Awaitable[None]]
 
+# Rerank-only endpoints (e.g. DashScope) do not implement GET /models; a 404 / 405 still
+# proves the service answers, and real failures surface as degraded retrieval traces.
+MODEL_LISTING_UNSUPPORTED = (404, 405)
+
 
 @dataclass(frozen=True)
 class DependencyCheck:
@@ -91,7 +95,12 @@ def build_dependency_checks(settings: Settings, res: AppResources) -> list[Depen
     def model_check(base_url: str) -> CheckFn:
         async def _check() -> None:
             headers = {"Authorization": f"Bearer {settings.llm_api_key}"}
-            await _http_ok(res.http, f"{base_url.rstrip('/')}/models", headers=headers)
+            resp = await res.http.get(f"{base_url.rstrip('/')}/models", headers=headers)
+            if resp.status_code in MODEL_LISTING_UNSUPPORTED:
+                return
+            if resp.status_code in (401, 403):
+                raise RuntimeError(f"authentication failed (HTTP {resp.status_code})")
+            resp.raise_for_status()
 
         return _check
 

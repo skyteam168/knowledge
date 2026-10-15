@@ -15,7 +15,16 @@ from app.models.base import utcnow
 
 logger = logging.getLogger(__name__)
 
-QUEUES = ("default", "ingest", "index", "curation", "analytics", "evaluation")
+QUEUES = (
+    "default",
+    "ingest",
+    "index",
+    "curation",
+    "analytics",
+    "evaluation",
+    "directory",
+    "maintenance",
+)
 OUTBOX_STATUSES = (OutboxStatus.PENDING, OutboxStatus.PROCESSING, OutboxStatus.DEAD)
 
 

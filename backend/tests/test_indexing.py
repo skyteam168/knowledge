@@ -494,3 +494,9 @@ async def test_rebuild_dual_writes_then_switches_aliases(
     # Rollback is just an alias switch.
     assert await cli_run(["index", "activate", "1"], indexing.settings, indexing) == 0
     assert vec.aliases[ALIAS] == f"{ALIAS}_v1" == txt.aliases[ALIAS]
+
+    # The active generation is never dropped; the CLI reports it instead of a traceback.
+    assert await cli_run(["index", "drop", "1"], indexing.settings, indexing) == 2
+    assert f"{ALIAS}_v1" in vec.indexes
+    assert await cli_run(["index", "drop", "3"], indexing.settings, indexing) == 0
+    assert f"{ALIAS}_v3" not in vec.indexes

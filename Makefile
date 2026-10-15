@@ -1,7 +1,8 @@
 COMPOSE := docker compose -f deploy/docker-compose.yml
+PROD := docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod
 INFRA := postgres redis minio qdrant opensearch keycloak mock-llm
 
-.PHONY: install up down dev dev-infra dev-backend dev-worker dev-frontend migrate test test-backend test-acl test-frontend lint lint-backend lint-frontend format
+.PHONY: install up down dev dev-infra dev-backend dev-worker dev-frontend migrate test test-backend test-acl test-frontend lint lint-backend lint-frontend format prod-config prod-up prod-backup
 
 install:
 	cd backend && uv sync
@@ -12,6 +13,17 @@ up:
 
 down:
 	$(COMPOSE) down
+
+prod-config:
+	$(PROD) config --quiet
+
+# No service names: backend / worker / scheduler / outbox-dispatcher must ship the same build.
+prod-up: prod-config
+	$(PROD) up -d --build --wait
+
+prod-backup:
+	$(PROD) exec backup-postgres sh /scripts/pg-backup.sh once
+	$(PROD) exec backup-minio sh /scripts/minio-backup.sh once
 
 dev-infra:
 	$(COMPOSE) up -d --build --wait $(INFRA)

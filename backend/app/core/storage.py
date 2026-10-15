@@ -1,18 +1,26 @@
 import asyncio
 import hashlib
 import io
+import logging
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Protocol
 from urllib.parse import quote, urlparse
 
 from minio import Minio
-from minio.commonconfig import CopySource
+from minio.commonconfig import ENABLED, CopySource, Filter
 from minio.error import S3Error
+from minio.lifecycleconfig import Expiration, LifecycleConfig, Rule
 
 from app.core.config import Settings
 
+logger = logging.getLogger(__name__)
+
 HASH_CHUNK_SIZE = 1024 * 1024
+STAGING_PREFIX = "staging/"
+STAGING_RULE_ID = "ekb-expire-staging"
+# Upload tickets live for an hour; a day leaves ample room for slow completions.
+STAGING_EXPIRY_DAYS = 1
 
 
 @dataclass(frozen=True)
@@ -73,9 +81,29 @@ class MinioStorage:
         def _ensure() -> None:
             if not self._client.bucket_exists(self.bucket):
                 self._client.make_bucket(self.bucket)
+            try:
+                self._ensure_staging_expiry()
+            except S3Error:
+                logger.warning("staging_lifecycle_unavailable", exc_info=True)
 
         await asyncio.to_thread(_ensure)
         self._bucket_ready = True
+
+    def _ensure_staging_expiry(self) -> None:
+        """Abandoned presigned uploads never reach complete_upload; let MinIO drop them."""
+        current = self._client.get_bucket_lifecycle(self.bucket)
+        rules = list(current.rules) if current else []
+        if any(r.rule_id == STAGING_RULE_ID for r in rules):
+            return
+        rules.append(
+            Rule(
+                ENABLED,
+                rule_filter=Filter(prefix=STAGING_PREFIX),
+                rule_id=STAGING_RULE_ID,
+                expiration=Expiration(days=STAGING_EXPIRY_DAYS),
+            )
+        )
+        self._client.set_bucket_lifecycle(self.bucket, LifecycleConfig(rules))
 
     async def put_bytes(self, key: str, data: bytes, content_type: str) -> None:
         await asyncio.to_thread(

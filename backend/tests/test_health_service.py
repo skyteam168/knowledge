@@ -1,6 +1,44 @@
 import asyncio
+from types import SimpleNamespace
+from typing import cast
 
-from app.services.health_service import DependencyCheck, HealthService
+import httpx
+import pytest
+
+from app.core.config import Settings
+from app.core.resources import AppResources
+from app.services.health_service import DependencyCheck, HealthService, build_dependency_checks
+
+
+def _model_checks(status_by_host: dict[str, int]) -> dict[str, DependencyCheck]:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(status_by_host[request.url.host])
+
+    settings = Settings(
+        embedding_base_url="http://embed/v1",
+        rerank_base_url="http://rerank/v1",
+        chat_base_url="http://chat/v1",
+    )
+    res = SimpleNamespace(http=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+    checks = build_dependency_checks(settings, cast(AppResources, res))
+    return {c.name: c for c in checks if c.name in ("embedding", "rerank", "chat")}
+
+
+@pytest.mark.parametrize("code", [200, 404, 405])
+async def test_model_reachable_even_without_model_listing(code: int) -> None:
+    checks = _model_checks({"embed": 200, "rerank": code, "chat": 200})
+    result = await HealthService(list(checks.values()), 1.0).readiness()
+    assert result.checks["rerank"].status == "up"
+    assert result.status == "ready"
+
+
+@pytest.mark.parametrize(("code", "fragment"), [(401, "authentication"), (503, "503")])
+async def test_model_auth_or_server_errors_are_down(code: int, fragment: str) -> None:
+    checks = _model_checks({"embed": 200, "rerank": 200, "chat": code})
+    result = await HealthService(list(checks.values()), 1.0).readiness()
+    assert result.checks["chat"].status == "down"
+    assert fragment in (result.checks["chat"].error or "")
+    assert result.status == "degraded"
 
 
 async def _ok() -> None:

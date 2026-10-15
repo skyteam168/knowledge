@@ -36,6 +36,8 @@ from app.llm import EmbeddingSpec
 from app.models import KnowledgeBase
 from app.services.analytics.aggregator import AnalyticsAggregator
 from app.services.indexing.consistency import ConsistencyReport
+from app.services.indexing.generations import GenerationConflictError
+from app.services.indexing.rebuild import RebuildVerificationError
 from app.services.indexing.runtime import IndexingRuntime
 from app.services.keycloak_admin import BRIDGE_PROVIDERS, KeycloakAdmin, identity_provider
 
@@ -259,6 +261,9 @@ async def run(argv: list[str], settings: Settings, runtime: IndexingRuntime | No
     try:
         func: Command = args.func
         return await func(rt, args)
+    except (GenerationConflictError, RebuildVerificationError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     finally:
         if runtime is None:
             await rt.aclose()

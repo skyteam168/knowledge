@@ -23,6 +23,17 @@ vi.mock('@/api/search', () => ({
 vi.mock('@/api/knowledge', () => ({
   listKnowledgeBases: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, size: 50 }),
 }))
+vi.mock('@/api/chat', () => ({
+  listConversations: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, size: 50 }),
+  getConversation: vi.fn(),
+  createConversation: vi.fn(),
+  deleteConversation: vi.fn(),
+  updateConversation: vi.fn(),
+  askQuestion: vi.fn(),
+  requestKnowledge: vi.fn(),
+  sendFeedback: vi.fn(),
+  getCitationSource: vi.fn(),
+}))
 vi.mock('@/api/curation', () => ({
   getUnreadCount: vi.fn().mockResolvedValue({ unread: 3 }),
 }))
@@ -37,7 +48,7 @@ vi.mock('@/auth/client', () => ({
   logout: vi.fn(),
 }))
 
-async function mountWith(permissions: string[], path: string) {
+async function mountWith(permissions: string[], path: string, globalElementPlus = true) {
   const pinia = createPinia()
   setActivePinia(pinia)
   useAuthStore().setProfile(makeProfile(permissions))
@@ -46,7 +57,7 @@ async function mountWith(permissions: string[], path: string) {
   await router.isReady()
   const wrapper = mount(AppLayout, {
     global: {
-      plugins: [pinia, router, ElementPlus],
+      plugins: globalElementPlus ? [pinia, router, ElementPlus] : [pinia, router],
       directives: { permission: vPermission },
     },
   })
@@ -73,6 +84,22 @@ describe('AppLayout', () => {
     await flushPromises()
     expect(router.currentRoute.value.name).toBe('search')
     expect(wrapper.text()).toContain('支持行内筛选')
+  })
+
+  it('resolves every Element Plus component without global registration', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const { wrapper, router } = await mountWith(['*'], '/assistant', false)
+      await router.push('/search')
+      await flushPromises()
+      const unresolved = warn.mock.calls
+        .map((args) => String(args[0]))
+        .filter((msg) => msg.includes('Failed to resolve'))
+      expect(unresolved).toEqual([])
+      expect(wrapper.find('.el-menu').exists()).toBe(true)
+    } finally {
+      warn.mockRestore()
+    }
   })
 
   it('hides menus the user lacks permission for', async () => {

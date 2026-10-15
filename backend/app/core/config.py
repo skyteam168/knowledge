@@ -6,6 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEV_DIRECTORY_SECRET = "change-me-directory-secret"
 DEV_OIDC_BRIDGE_SECRET = "change-me-oidc-bridge-secret"
+DEV_OPEN_API_PEPPER = "change-me-open-api-pepper"
 
 
 class Settings(BaseSettings):
@@ -213,6 +214,17 @@ class Settings(BaseSettings):
     analytics_zombie_days: int = 90
     analytics_expiring_days: int = 30
 
+    # ---- data retention (days; 0 keeps rows forever) ----
+    # Traces hold questions and retrieved context; analytics keep their own daily summaries.
+    retention_trace_days: int = 180
+    retention_outbox_days: int = 30
+    retention_api_call_log_days: int = 180
+    retention_llm_usage_days: int = 365
+    # Audit logs are often subject to compliance rules: kept unless configured.
+    retention_audit_days: int = 0
+    retention_batch_size: int = 5000
+    retention_check_interval_seconds: float = 86400.0
+
     # ---- offline evaluation ----
     eval_judge_enabled: bool = True
     eval_judge_timeout_seconds: float = 60.0
@@ -263,7 +275,7 @@ class Settings(BaseSettings):
     # ---- open API for external agents ----
     open_api_enabled: bool = True
     # HMAC key for API key hashes; changing it invalidates every issued key.
-    open_api_key_pepper: str = "change-me-open-api-pepper"
+    open_api_key_pepper: str = DEV_OPEN_API_PEPPER
     open_api_default_rate_per_minute: int = 60
     open_api_max_top_k: int = 20
     # Characters of chunk content returned per retrieved item.
@@ -325,6 +337,10 @@ class Settings(BaseSettings):
         ]
         if self.oidc_bridge_enabled and not self.oidc_bridge_signing_key:
             missing.append("OIDC_BRIDGE_SIGNING_KEY")
+        if self.open_api_enabled and self.open_api_key_pepper == DEV_OPEN_API_PEPPER:
+            missing.append("OPEN_API_KEY_PEPPER")
+        if self.metrics_enabled and not self.metrics_token:
+            missing.append("METRICS_TOKEN")
         if missing:
             raise ValueError(f"Production requires: {', '.join(missing)}")
         return self

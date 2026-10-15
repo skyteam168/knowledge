@@ -52,6 +52,50 @@ jobs:
       - run: uv sync --frozen
       - run: uv run pytest -q
 
+  # Real PostgreSQL: every migration upgrades and downgrades, and the models match head.
+  migrations:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ekb
+          POSTGRES_PASSWORD: ekb
+          POSTGRES_DB: ekb
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ekb -d ekb"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      DATABASE_URL: postgresql+asyncpg://ekb:ekb@localhost:5432/ekb
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+      - run: uv run alembic upgrade head
+      - run: uv run alembic downgrade base
+      - run: uv run alembic upgrade head
+      - run: uv run alembic check
+
+  deploy-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: production compose interpolates with every required variable set
+        working-directory: deploy
+        run: |
+          sed -E 's/^([A-Z0-9_]+)=$/\1=ci-placeholder/' .env.prod.example > /tmp/ci.env
+          docker compose -f docker-compose.prod.yml --env-file /tmp/ci.env config --quiet
+          docker compose -f docker-compose.yml config --quiet
+      - name: prod realm has no demo users or localhost URLs
+        run: |
+          ! grep -nE 'localhost|"username": "(alice|bob|carol)"' deploy/keycloak/realm-ekb.prod.json
+
   frontend:
     runs-on: ubuntu-latest
     defaults:

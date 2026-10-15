@@ -1,6 +1,14 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
-import ElementPlus from 'element-plus'
+import {
+  ElInfiniteScroll,
+  ElLoading,
+  ElMessage,
+  ElMessageBox,
+  ElNotification,
+  ElPopoverDirective,
+  provideGlobalConfig,
+} from 'element-plus'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import 'element-plus/dist/index.css'
 import 'element-plus/theme-chalk/dark/css-vars.css'
@@ -20,7 +28,18 @@ async function bootstrap(): Promise<void> {
   const app = createApp(App)
   app.use(createPinia())
   app.use(router)
-  app.use(ElementPlus, { locale: zhCn })
+  // Components are imported on demand (vite.config.ts); these are the plugin-style APIs.
+  for (const plugin of [
+    ElInfiniteScroll,
+    ElLoading,
+    ElMessage,
+    ElMessageBox,
+    ElNotification,
+    ElPopoverDirective,
+  ]) {
+    app.use(plugin)
+  }
+  provideGlobalConfig({ locale: zhCn }, app, true)
   app.directive('permission', vPermission)
   app.mount('#app')
 }

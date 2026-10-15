@@ -22,8 +22,9 @@ export type DependencyState = 'up' | 'down'
 export interface DependencyStatus {
   status: DependencyState
   required: boolean
-  latency_ms: number
-  error: string | null
+  /** Omitted unless the request carries the metrics token. */
+  latency_ms?: number
+  error?: string | null
 }
 
 export interface ReadinessResponse {

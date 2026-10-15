@@ -43,7 +43,15 @@ def create_app(
             shutdown_tracing()
             logger.info("shutdown")
 
-    app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
+    public_docs = settings.app_env != "prod"
+    app = FastAPI(
+        title=settings.app_name,
+        version="0.1.0",
+        lifespan=lifespan,
+        docs_url="/docs" if public_docs else None,
+        redoc_url="/redoc" if public_docs else None,
+        openapi_url="/openapi.json" if public_docs else None,
+    )
 
     # Middleware order (outermost first): Metrics -> TraceId -> CORS -> Audit -> routes
     app.add_middleware(AuditMiddleware, path_prefix=settings.api_prefix)
