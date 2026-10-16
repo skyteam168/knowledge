@@ -176,8 +176,8 @@ services:
       EKB_PUBLIC_BASE_URL: ${PUBLIC_URL:?}
       KEYCLOAK_BACKEND_CLIENT_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET:?}
     ports:
-      # Host 8080/8081 may already be taken; map KEYCLOAK_HOST_PORT (default 8082) -> container 8080.
-      - "${KEYCLOAK_BIND:-0.0.0.0}:${KEYCLOAK_HOST_PORT:-8082}:8080"
+      # Prefer KEYCLOAK_HOST_PORT (default 8090); 8080/8081/8082 are often taken on shared hosts.
+      - "${KEYCLOAK_BIND:-0.0.0.0}:${KEYCLOAK_HOST_PORT:-8090}:8080"
     volumes:
       - ${KEYCLOAK_REALM_FILE:-./keycloak/realm-ekb.prod.json}:/opt/keycloak/data/import/realm-ekb.json:ro
       - ./keycloak/themes/ekb:/opt/keycloak/themes/ekb:ro
@@ -201,6 +201,8 @@ services:
       args:
         INSTALL_DOCLING: ${INSTALL_DOCLING:-false}
     image: ${REGISTRY:-ekb}/backend:${TAG:-latest}
+    # Local build only — do not pull from Docker Hub (ekb/* is not a public repo).
+    pull_policy: build
     command: ["alembic", "upgrade", "head"]
     environment:
       <<: *backend-env
@@ -208,7 +210,13 @@ services:
 
   backend:
     <<: [*restart, *logging, *host-gateway]
+    build:
+      context: ../backend
+      target: api
+      args:
+        INSTALL_DOCLING: ${INSTALL_DOCLING:-false}
     image: ${REGISTRY:-ekb}/backend:${TAG:-latest}
+    pull_policy: build
     environment:
       <<: *backend-env
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-4}
@@ -227,6 +235,7 @@ services:
   keycloak-setup:
     <<: [*logging, *host-gateway]
     image: ${REGISTRY:-ekb}/backend:${TAG:-latest}
+    pull_policy: never
     command: ["python", "-m", "app.cli", "keycloak", "setup-idp"]
     environment:
       <<: *backend-env
@@ -245,6 +254,7 @@ services:
       args:
         INSTALL_DOCLING: ${INSTALL_DOCLING:-false}
     image: ${REGISTRY:-ekb}/backend-worker:${TAG:-latest}
+    pull_policy: build
     command:
       - dramatiq
       - app.workers.main
@@ -268,6 +278,7 @@ services:
   outbox-dispatcher:
     <<: [*restart, *logging, *host-gateway]
     image: ${REGISTRY:-ekb}/backend-worker:${TAG:-latest}
+    pull_policy: never
     command: ["python", "-m", "app.workers.outbox_dispatcher"]
     environment:
       <<: *backend-env
@@ -284,6 +295,7 @@ services:
   scheduler:
     <<: [*restart, *logging, *host-gateway]
     image: ${REGISTRY:-ekb}/backend-worker:${TAG:-latest}
+    pull_policy: never
     command: ["python", "-m", "app.workers.scheduler"]
     environment:
       <<: *backend-env
@@ -304,6 +316,7 @@ services:
       args:
         VITE_KEYCLOAK_URL: ${KEYCLOAK_PUBLIC_URL:?}
     image: ${REGISTRY:-ekb}/frontend:${TAG:-latest}
+    pull_policy: build
     ports:
       - "${HTTP_BIND:-0.0.0.0}:${HTTP_PORT:-8088}:8080"
     depends_on:
