@@ -41,6 +41,7 @@ async def get_pipeline() -> IngestPipeline:
             chunker=Chunker(ChunkingConfig.from_settings(settings)),
             queue=DramatiqTaskQueue(),
             masker=PiiMasker(settings.pii_types) if settings.pii_mask_on_ingest else None,
+            settings=settings,
         )
     return _pipeline
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { citationOf, codeOfCopyButton, renderMarkdown } from '../markdown'
+import { citationOf, codeOfCopyButton, isSafeImageSrc, renderMarkdown } from '../markdown'
 
 describe('renderMarkdown', () => {
   it('renders citation markers as clickable superscripts', () => {
@@ -54,5 +54,26 @@ describe('citationOf', () => {
     expect(citationOf(sup)).toEqual({ n: 3, el: sup })
     expect(citationOf(root)).toBeNull()
     expect(citationOf(null)).toBeNull()
+  })
+})
+
+describe('images', () => {
+  it('allows https and same-origin api paths', () => {
+    expect(isSafeImageSrc('https://cdn.example.com/a.png')).toBe(true)
+    expect(isSafeImageSrc('/api/documents/1/preview')).toBe(true)
+    expect(isSafeImageSrc('http://evil.test/x.png')).toBe(false)
+    expect(isSafeImageSrc('data:image/png;base64,xx')).toBe(false)
+  })
+
+  it('renders safe markdown images and blocks unsafe ones', () => {
+    const ok = renderMarkdown('![图](https://cdn.example.com/a.png)')
+    expect(ok).toContain('class="md-img"')
+    expect(ok).toContain('src="https://cdn.example.com/a.png"')
+    const http = renderMarkdown('![图](http://evil.test/x.png)')
+    expect(http).not.toContain('<img')
+    expect(http).toContain('md-img-blocked')
+    // markdown-it does not parse javascript: as an image URL — stays plain text (also safe).
+    const js = renderMarkdown('![图](javascript:alert(1))')
+    expect(js).not.toContain('<img')
   })
 })

@@ -25,6 +25,15 @@ prod-backup:
 	$(PROD) exec backup-postgres sh /scripts/pg-backup.sh once
 	$(PROD) exec backup-minio sh /scripts/minio-backup.sh once
 
+# Linux host with existing PostgreSQL + Redis (e.g. 10.10.130.170).
+PROD_SERVER := docker compose -f deploy/docker-compose.prod.server.yml --env-file deploy/.env.prod.server
+
+prod-server-config:
+	$(PROD_SERVER) config --quiet
+
+prod-server-up: prod-server-config
+	$(PROD_SERVER) up -d --build --wait
+
 dev-infra:
 	$(COMPOSE) up -d --build --wait $(INFRA)
 

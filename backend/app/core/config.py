@@ -47,6 +47,13 @@ class Settings(BaseSettings):
     ocr_enabled: bool = True
     # Pages with fewer extracted characters than this are treated as scanned and OCR'd.
     ocr_min_page_chars: int = 20
+    # Citation page/slide rasters (PDF via pdfplumber; PPTX via LibreOffice when available).
+    page_image_enabled: bool = True
+    page_image_dpi: int = 144
+    page_image_max_edge: int = 1600
+    page_image_max_pages: int = 200
+    # Optional absolute path to soffice/libreoffice for PPTX→PDF conversion.
+    page_image_soffice_path: str | None = None
 
     chunk_parent_target_tokens: int = 1500
     chunk_parent_max_tokens: int = 2000
@@ -183,6 +190,10 @@ class Settings(BaseSettings):
     chat_temperature: float = 0.2
     chat_max_tokens: int = 1500
     chat_quote_max_chars: int = 300
+    # Answer phase 2: put presigned page/slide URLs into materials so the model can embed images.
+    chat_answer_images_enabled: bool = True
+    chat_answer_images_per_material: int = 2
+    chat_answer_images_total: int = 6
 
     # ---- knowledge loop (gaps -> review -> knowledge objects) ----
     # Incremental clustering: cosine similarity of question embeddings to a cluster centroid.

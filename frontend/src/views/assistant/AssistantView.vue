@@ -579,6 +579,7 @@ onBeforeUnmount(stop)
                     :content="msg.content"
                     :citations="msg.citations"
                     :streaming="msg.status === 'streaming'"
+                    :message-id="msg.status === 'done' ? msg.id : null"
                     @cite="(n) => openCitation(msg, n)"
                   />
                   <div v-if="msg.grounding === 'uncertain'" class="notice notice--warn">

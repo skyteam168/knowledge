@@ -67,12 +67,14 @@ from app.models.knowledge import (
     Chunk,
     ChunkType,
     Document,
+    DocumentPageAsset,
     DocumentStatus,
     DocumentVersion,
     KbVisibility,
     KnowledgeBase,
     OutboxEvent,
     OutboxStatus,
+    PageAssetKind,
 )
 from app.models.llm_config import ChatScene, LlmModel, LlmProvider, LlmRoute, ModelKind
 from app.models.open_api import (
@@ -115,8 +117,10 @@ __all__ = [
     "DirectorySourceType",
     "DirectorySyncRun",
     "Document",
+    "DocumentPageAsset",
     "DocumentStatus",
     "DocumentVersion",
+    "PageAssetKind",
     "EvalCase",
     "EvalCaseSource",
     "EvalDataset",

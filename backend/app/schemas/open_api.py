@@ -224,7 +224,11 @@ class OpenChunkOut(BaseModel):
     score: float | None
     page_start: int | None = None
     page_end: int | None = None
+    slide_number: int | None = None
     is_ko: bool = False
+    # Presigned page/slide image when the document was rasterized at ingest.
+    image_url: str | None = None
+    image_mime_type: str | None = None
 
 
 class OpenRetrieveOut(BaseModel):

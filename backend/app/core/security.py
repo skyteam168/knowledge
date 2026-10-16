@@ -41,11 +41,15 @@ class TokenClaims:
                 }
             )
         )
-        org_code = payload.get(settings.auth_org_claim) or settings.auth_default_org_code
+        # Keycloak user-attribute mappers may emit a JSON array for multi-valued attrs.
+        org_raw = payload.get(settings.auth_org_claim) or settings.auth_default_org_code
+        if isinstance(org_raw, (list, tuple)):
+            org_raw = next((x for x in org_raw if x), settings.auth_default_org_code)
+        org_code = str(org_raw).strip() or settings.auth_default_org_code
         return cls(
             sub=sub,
             username=str(payload.get("preferred_username") or sub),
-            org_code=str(org_code),
+            org_code=org_code,
             email=payload.get("email"),
             name=payload.get("name"),
             groups=groups,

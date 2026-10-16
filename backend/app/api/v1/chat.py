@@ -9,7 +9,7 @@ from app.api.deps import (
     RequestContextDep,
     ResourcesDep,
     SettingsDep,
-    provide,
+    get_conversation_service,
     require_permission,
 )
 from app.retrieval.pipeline import RetrievalPipeline
@@ -36,7 +36,7 @@ router = APIRouter(
     dependencies=[Depends(require_permission("chat:use"))],
 )
 
-ServiceDep = Annotated[ConversationService, Depends(provide(ConversationService))]
+ServiceDep = Annotated[ConversationService, Depends(get_conversation_service)]
 
 SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
 
@@ -107,6 +107,7 @@ async def ask(
                 ko_source=PublishedKnowledgeObjects(
                     session, ctx.user, settings.chat_expand_ko_limit
                 ),
+                storage=resources.storage,
             )
             async for event in answer.stream(conversation_id, data):
                 yield event.encode()

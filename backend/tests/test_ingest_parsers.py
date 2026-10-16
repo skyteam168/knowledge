@@ -33,7 +33,11 @@ def registry(settings: Settings) -> ParserRegistry:
 
 def test_detect_kind_prefers_extension_then_mime() -> None:
     assert detect_kind("a.DOCX") is FileKind.WORD
+    assert detect_kind("legacy.doc") is FileKind.WORD
+    assert detect_kind("photo.JPG") is FileKind.IMAGE
+    assert detect_kind("shot.png") is FileKind.IMAGE
     assert detect_kind("report", "application/pdf") is FileKind.PDF
+    assert detect_kind("x", "image/jpeg") is FileKind.IMAGE
     assert detect_kind("x.exe", "application/octet-stream") is None
 
 
@@ -147,6 +151,39 @@ def test_unsupported_and_corrupt_files(registry: ParserRegistry) -> None:
         registry.parse(b"MZ...", "tool.exe")
     with pytest.raises(ParseError):
         registry.parse(b"not a zip", "broken.docx")
+
+
+def test_legacy_doc_without_soffice_explains_requirement(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.services.ingest import office_convert
+
+    monkeypatch.setattr(office_convert, "convert_with_soffice", lambda *a, **k: None)
+    registry = ParserRegistry(settings.model_copy(update={"pdf_parser": "basic"}))
+    with pytest.raises(ParseError, match="LibreOffice"):
+        registry.parse(b"\xd0\xcf\x11\xe0" + b"\x00" * 64, "legacy.doc")
+
+
+def test_image_ocr_builds_text_and_page_location(settings: Settings) -> None:
+    from io import BytesIO
+
+    from PIL import Image
+
+    from app.services.ingest.parsers.image import ImageParser
+
+    buf = BytesIO()
+    Image.new("RGB", (80, 40), color=(255, 255, 255)).save(buf, format="PNG")
+
+    class FakeOcr:
+        def recognize(self, image: Any) -> list[str]:
+            return ["检验标准", "SLO -3/+2mm"]
+
+    doc = ImageParser(lambda: FakeOcr()).parse(buf.getvalue(), "spec.png")
+    assert doc.parser == "image"
+    assert doc.metadata["ocr_lines"] == 2
+    text = " ".join(b.text for b in doc.iter_blocks())
+    assert "检验标准" in text and "SLO" in text
+    assert doc.iter_blocks()[0].location.page == 1
 
 
 def test_parsed_document_round_trip(registry: ParserRegistry) -> None:

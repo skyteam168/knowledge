@@ -14,11 +14,13 @@ class FileKind(StrEnum):
     TEXT = "text"
     MARKDOWN = "markdown"
     HTML = "html"
+    IMAGE = "image"
 
 
 EXTENSIONS: dict[str, FileKind] = {
     ".pdf": FileKind.PDF,
     ".docx": FileKind.WORD,
+    ".doc": FileKind.WORD,
     ".xlsx": FileKind.EXCEL,
     ".xlsm": FileKind.EXCEL,
     ".csv": FileKind.CSV,
@@ -29,10 +31,14 @@ EXTENSIONS: dict[str, FileKind] = {
     ".markdown": FileKind.MARKDOWN,
     ".html": FileKind.HTML,
     ".htm": FileKind.HTML,
+    ".jpg": FileKind.IMAGE,
+    ".jpeg": FileKind.IMAGE,
+    ".png": FileKind.IMAGE,
 }
 
 MIME_TYPES: dict[FileKind, str] = {
     FileKind.PDF: "application/pdf",
+    # Canonical WORD MIME is OOXML; legacy .doc still maps to FileKind.WORD by extension.
     FileKind.WORD: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     FileKind.EXCEL: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     FileKind.CSV: "text/csv",
@@ -40,9 +46,24 @@ MIME_TYPES: dict[FileKind, str] = {
     FileKind.TEXT: "text/plain",
     FileKind.MARKDOWN: "text/markdown",
     FileKind.HTML: "text/html",
+    FileKind.IMAGE: "image/png",
 }
 
-_MIME_KINDS = {mime: kind for kind, mime in MIME_TYPES.items()}
+# Extension-specific MIME when the canonical kind MIME is wrong (e.g. .doc / .jpg).
+EXTENSION_MIME: dict[str, str] = {
+    ".doc": "application/msword",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+}
+
+_MIME_KINDS = {
+    **{mime: kind for kind, mime in MIME_TYPES.items()},
+    "application/msword": FileKind.WORD,
+    "image/jpeg": FileKind.IMAGE,
+    "image/jpg": FileKind.IMAGE,
+    "image/png": FileKind.IMAGE,
+}
 
 
 def detect_kind(filename: str, mime_type: str | None = None) -> FileKind | None:
@@ -53,7 +74,11 @@ def detect_kind(filename: str, mime_type: str | None = None) -> FileKind | None:
     return kind
 
 
-def canonical_mime(kind: FileKind) -> str:
+def canonical_mime(kind: FileKind, filename: str | None = None) -> str:
+    if filename:
+        suffix = PurePosixPath(filename.lower()).suffix
+        if suffix in EXTENSION_MIME:
+            return EXTENSION_MIME[suffix]
     return MIME_TYPES[kind]
 
 

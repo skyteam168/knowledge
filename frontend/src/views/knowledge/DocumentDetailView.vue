@@ -23,7 +23,18 @@ const router = useRouter()
 const auth = useAuthStore()
 
 const POLL_INTERVAL_MS = 3000
-const INLINE_EXTENSIONS = ['.pdf', '.txt', '.md', '.markdown', '.csv', '.html', '.htm']
+const INLINE_EXTENSIONS = [
+  '.pdf',
+  '.txt',
+  '.md',
+  '.markdown',
+  '.csv',
+  '.html',
+  '.htm',
+  '.jpg',
+  '.jpeg',
+  '.png',
+]
 
 const doc = ref<DocumentDetail | null>(null)
 const chunks = ref<Chunk[]>([])

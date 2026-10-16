@@ -144,6 +144,7 @@ async def preview(
         ),
         gateway=resources.llm,
         settings=settings,
+        storage=resources.storage,
     )
     out = await service.retrieve(data, audit=False)
     await service.audit.record(

@@ -1,5 +1,5 @@
 ---
-description: 企业知识库平台总规则：技术栈、目录结构、架构原则与编码规范
+description: 企业知识库平台总规则：技术栈、系统架构、目录结构、架构原则与编码规范
 alwaysApply: true
 ---
 
@@ -8,30 +8,125 @@ alwaysApply: true
 ## 技术栈
 - 前端：Vue 3 + TypeScript + Vite + Element Plus + Pinia + Vue Router，axios 封装请求，SSE 用于流式回答
 - 后端：Python 3.11+、FastAPI、SQLAlchemy 2.0（async）、Alembic、Pydantic v2
-- 异步任务：Dramatiq（或 Celery）+ Redis
-- 存储：PostgreSQL 16、Redis 7、MinIO、Qdrant、OpenSearch 2.x（安装 IK 中文分词）
-- 认证：Keycloak（OIDC），AD/LDAP 由 Keycloak 联邦，后端只校验 JWT
-- 模型：通过 OpenAI 兼容接口调用（vLLM / TEI），Qwen3-Embedding、Qwen3-Reranker、LLM 均可配置
+- 异步任务：Dramatiq + Redis；独立进程 outbox-dispatcher、scheduler
+- 存储：PostgreSQL 16（真相源）、Redis 7、MinIO、Qdrant、OpenSearch 2.x（IK 中文分词）
+- 认证：Keycloak（OIDC / PKCE）；AD/LDAP、企微/钉钉由 Keycloak 联邦或 OIDC Bridge；后端只校验 JWT（JWKS）
+- 模型：OpenAI 兼容网关（`llm/gateway`），Embedding / Rerank / Chat 均可配置（vLLM、TEI、百炼等）
 
 ## 目录结构
-- /backend/app/{api,core,models,schemas,services,repositories,workers,retrieval,llm}
-- /frontend/src/{api,views,components,stores,router,composables,utils}
-- /deploy/docker-compose.yml，/deploy/opensearch，/deploy/keycloak
-- /docs（每阶段更新 ADR 与接口说明）
+- `/backend/app/{api,core,models,schemas,services,repositories,workers,retrieval,llm}`
+- `/frontend/src/{api,views,components,stores,router,composables,utils}`
+- `/deploy`：docker-compose、opensearch、keycloak、mock-llm、nginx
+- `/docs`：开放平台、运维、ADR、压测等
+
+## 系统架构（审核结论）
+
+### 运行时拓扑
+```
+浏览器 ──► frontend(nginx:3000→8080)
+              ├─ /api、/oidc、/health|/ready ──► backend:8000
+              └─ 静态 SPA
+Keycloak:8080 ◄── OIDC 登录 / 身份代理
+backend ◄──► postgres | redis | minio | qdrant | opensearch | 外部 LLM
+worker(dramatiq) ◄── redis broker（ingest / index / curation / directory / eval …）
+outbox-dispatcher ──claim──► outbox 表 ──► worker 索引消费
+scheduler ──► 周期任务（聚类、分析聚合、保留策略等）
+```
+- 开发 compose 另映射 backend `8000`；生产宜仅经 nginx 暴露 API，勿把 8000 直接对公网。
+- `worker` / `scheduler` / `outbox-dispatcher` 与 `backend` **必须同镜像构建**，共享配置。
+
+### 后端分层
+| 层 | 职责 | 禁止 |
+| --- | --- | --- |
+| `api/` | 鉴权依赖、参数校验、编排、SSE/HTTP 响应 | 写业务规则、直连索引细节 |
+| `services/` | 业务逻辑、事务边界、审计、调用 retrieval/llm | 绕过 repository 拼复杂 SQL（例外：明确的读模型） |
+| `repositories/` | ORM 查询封装 | 权限决策、外部 IO（除 session） |
+| `retrieval/` | 双路召回、融合、hydrate、rerank、缓存 | 写 PG 业务表 |
+| `llm/` | Embedding/Rerank/Chat 统一客户端、用量、路由 | 业务 ACL |
+| `workers/` | Dramatiq actor、outbox 分发、调度入口 | HTTP 路由 |
+
+进程资源集中在 `AppResources`（engine、Redis、MinIO、JWKS、LLM、IndexingRuntime）。
+
+### 核心数据流
+
+**1. 文档入库**
+```
+上传 MinIO + PG Document
+  → worker parse（ParserRegistry：PDF/Office/.doc→LibreOffice、jpg/png→OCR）
+  → 可选页/幻灯片光栅 → document_page_assets + MinIO（PAGE_IMAGE_*）
+  → chunk（父子块）写入 PG
+  → 同事务 Outbox DOCUMENT_CHUNKS_READY
+  → outbox-dispatcher claim → worker 写 Qdrant + OpenSearch（别名/代次）
+```
+- PG chunk 为权威文本；索引可全量从 PG+MinIO 重建。
+- 入库前可对 chunk 文本做 PII 脱敏（配置开启时）。
+
+**2. 检索（站内搜索 / MCP search_knowledge / 问答召回）**
+```
+QueryPreprocessor → SearchFilter（org + ACL principals + kb 范围）
+  → Dense(Qdrant) ∥ Sparse(OpenSearch BM25) → RRF（可 boost KO）
+  → Hydrate：PG 取权威正文 + 二次 ACL 剔除
+  → Rerank → top_k
+```
+- 结果缓存 key 必须含权限范围 / 组织缓存代次；ACL 变更后递增代次使旧缓存失效。
+- Open API 另加 `allowed_kb_ids`（应用授权库硬上限）与内容截断。
+
+**3. AI 助手问答（站内 SSE / MCP ask_knowledge）**
+```
+改写/意图 →（闲聊/越界短路）
+  → 每子查询 SearchService → 合并 Hit
+  → KnowledgeExpansion（父块/邻居/KO）→ EvidenceAclChecker
+  → EvidenceValidator（拒答 / 不确定 / 自信）
+  → attach_material_images（可选）→ prompt → LLM stream
+  → 引用校验 + 未授权图片剥离 → 持久化 Message + QaTrace
+```
+- 站内与 Open API 共用 `AnswerService`；差异主要在调用身份、授权库、top_k、会话历史。
+
+**4. 知识闭环**
+- 拒答/低 grounding → KnowledgeGap → 聚类 → 审核工作台 → KO 编译/发布 → 再索引（KO 作为可检索条目）。
+
+**5. 开放平台**
+- API Key → 服务账号 `agent:<client_id>` + 绑定 principals × 授权 kb 交集。
+- REST：`/open/retrieve`、`/open/chat`；MCP：`list_knowledge_bases` / `search_knowledge` / `ask_knowledge`。
+- 检索条目与问答 `citations` 可带签名 `image_url`（会过期）。
+
+### 前端架构
+- `api/` 与后端 schema 对齐；`stores/auth` + Keycloak JS；路由 `meta.permission` 做菜单与守卫。
+- 助手：`askQuestion` SSE（meta/step/token/citations/done）；`AnswerContent` 拆分 markdown / table / echarts / mermaid / 图片。
+- 管理域：组织同步、索引、检索策略、模型、开放平台、评测、分析看板等。
+
+### 认证与权限
+- 功能权限 RBAC（角色 → permissions）；资源 ACL（kb/document：org / dept / group / role / user + 继承）。
+- 检索前置过滤 + 回答前 PG 复核；开放平台无超管旁路。
+- 企微/钉钉扫码：`/oidc/*` Bridge + Keycloak IdP。
+
+### 文档附图与答案可视化
+- 页图：`document_page_assets`；引用悬停/抽屉按需 presign。
+- 答案二期：`CHAT_ANSWER_IMAGES_*` 把签名 URL 写入 materials；仅允许引用这些 URL。
+- 答案可渲染表格、echarts、mermaid；图片仅 https 或同源 `/api`/`/oidc`。
+
+### 可观测与安全
+- TraceId 中间件、审计日志、QaTrace / RetrievalTrace、Prometheus metrics、可选 OTel。
+- 限流（用户/组织/Open API 滑动窗口）、输出脱敏、上传 file_guard、IP 白名单（Open API）。
 
 ## 架构原则（必须遵守）
 1. PostgreSQL 是唯一真相源；Qdrant、OpenSearch 是派生索引，必须可从 PG+MinIO 全量重建。
 2. 索引同步用 Outbox 模式：业务事务内写 outbox，worker 幂等消费；chunk 以 chunk_id+version 为准。
-3. ACL：检索时前置过滤（payload/字段存授权主体：org_id、group_ids、role_ids、visibility），
-   回答前用 PG 二次校验；LLM 永远不能看到用户无权访问的内容；缓存 key 必须包含权限范围。
-4. 所有模型调用经由 llm/gateway 统一封装，支持超时、重试、降级，模型名与地址全部来自配置。
-5. 分层：api 只做参数校验与编排，业务逻辑在 services，数据访问在 repositories。
-6. 所有写操作记录审计日志；所有检索/问答记录 trace（query、召回、分数、最终上下文、耗时）。
-7. 多租户：所有业务表带 org_id，查询默认按 org 过滤。
+3. ACL：检索时前置过滤（payload/字段存授权主体），回答前用 PG 二次校验；LLM 永远不能看到无权内容；缓存 key 必须包含权限范围。
+4. 所有模型调用经由 `llm/gateway`，支持超时、重试、降级；模型名与地址来自配置（或模型管理表 + 环境导入）。
+5. 分层：api 只做参数校验与编排，业务在 services，数据访问在 repositories。
+6. 写操作记审计；检索/问答记 trace（query、召回、分数、最终上下文、耗时）。
+7. 多租户：业务表带 `org_id`，查询默认按 org 过滤。
 
 ## 编码规范
 - 后端全类型注解，ruff + mypy 通过；pytest 覆盖 services 层核心逻辑；配置用 pydantic-settings。
-- 统一错误响应格式 {code, message, detail, trace_id}；分页统一 {items, total, page, size}。
-- 前端用 <script setup lang="ts">，API 类型与后端 schema 对齐，ESLint + Prettier。
-- 不要实现当前阶段范围外的功能；需要依赖后续阶段的地方留接口和 TODO。
-- 每阶段结束更新 README 与 /docs，并保证 docker compose up 能跑起来。
+- 统一错误响应 `{code, message, detail, trace_id}`；分页 `{items, total, page, size}`。
+- 前端 `<script setup lang="ts">`，API 类型与后端 schema 对齐，ESLint + Prettier。
+- 不要实现当前阶段范围外的功能；依赖后续阶段处留接口和 TODO。
+- 每阶段结束更新 README 与 `/docs`，并保证 `docker compose up` 能跑起来。
+
+## 改动时注意
+- 改索引 payload / ACL 字段：同步 hydrator、重建路径与缓存代次逻辑。
+- 改问答提示词或附图：同步 Open API/MCP 字段与前端渲染白名单。
+- 改鉴权或转发头：核对 `frontend/nginx.conf` 的 `X-Forwarded-For` 覆盖策略。
+- 新增 worker 任务：注册到 `workers/main`，并确认 scheduler/outbox 是否需要入口。

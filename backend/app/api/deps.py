@@ -14,6 +14,7 @@ from app.core.resources import AppResources
 from app.llm.usage import bind_usage_scope
 from app.services.audit_service import AuditContext
 from app.services.authz import AuthzCache, CurrentUser, PermissionResolver, PrincipalResolver
+from app.services.chat.conversation_service import ConversationService
 from app.services.context import BaseService, RequestContext
 from app.services.health_service import HealthService, build_dependency_checks
 from app.services.identity_sync_service import IdentitySyncService
@@ -156,6 +157,22 @@ def get_document_service(
         storage=resources.storage,
         queue=resources.task_queue,
         cache=resources.cache,
+        settings=settings,
+    )
+
+
+def get_conversation_service(
+    session: DbSessionDep,
+    ctx: RequestContextDep,
+    cache: AuthzCacheDep,
+    settings: SettingsDep,
+    resources: ResourcesDep,
+) -> ConversationService:
+    return ConversationService(
+        session,
+        ctx,
+        cache,
+        storage=resources.storage,
         settings=settings,
     )
 

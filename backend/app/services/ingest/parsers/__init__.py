@@ -10,6 +10,7 @@ from app.services.ingest.parsers.base import (
     canonical_mime,
     detect_kind,
 )
+from app.services.ingest.parsers.image import ImageParser
 from app.services.ingest.parsers.ocr import OcrEngine, load_ocr_engine
 from app.services.ingest.parsers.office import (
     CsvParser,
@@ -44,13 +45,14 @@ class ParserRegistry:
         ocr = ocr_factory if settings.ocr_enabled else None
         self._parsers: dict[FileKind, DocumentParser] = {
             FileKind.PDF: self._pdf_parser(ocr),
-            FileKind.WORD: WordParser(),
+            FileKind.WORD: WordParser(soffice_path=settings.page_image_soffice_path),
             FileKind.EXCEL: ExcelParser(),
             FileKind.CSV: CsvParser(),
             FileKind.PPT: PowerPointParser(),
             FileKind.TEXT: PlainTextParser(),
             FileKind.MARKDOWN: MarkdownParser(),
             FileKind.HTML: HtmlParser(),
+            FileKind.IMAGE: ImageParser(ocr),
         }
 
     def _pdf_parser(self, ocr: Callable[[], OcrEngine | None] | None) -> DocumentParser:

@@ -1,6 +1,10 @@
 from typing import Any
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.config import Settings
 from app.core.exceptions import NotFoundError, ValidationAppError
+from app.core.storage import ObjectStorage
 from app.models import (
     Chunk,
     Conversation,
@@ -16,7 +20,11 @@ from app.models import (
 from app.models.base import utcnow
 from app.repositories.base import paginate
 from app.repositories.chat_repo import ChunkRepository, ConversationRepository
-from app.repositories.knowledge_repo import DocumentRepository, KnowledgeBaseRepository
+from app.repositories.knowledge_repo import (
+    DocumentPageAssetRepository,
+    DocumentRepository,
+    KnowledgeBaseRepository,
+)
 from app.schemas.chat import (
     CitationOut,
     CitationSourceOut,
@@ -36,8 +44,9 @@ from app.schemas.chat import (
 )
 from app.schemas.common import Page
 from app.services.authz import AclPermission
+from app.services.authz.cache import AuthzCache
 from app.services.chat.expansion import overlap_len
-from app.services.context import BaseService
+from app.services.context import BaseService, RequestContext
 from app.services.knowledge.access import RESOURCE_DOCUMENT, KnowledgeAccess
 from app.services.knowledge.ko_access import KoAccess
 
@@ -79,6 +88,19 @@ def _conversation_snapshot(conv: Conversation) -> dict[str, Any]:
 
 
 class ConversationService(BaseService):
+    def __init__(
+        self,
+        session: AsyncSession,
+        ctx: RequestContext,
+        authz_cache: AuthzCache,
+        *,
+        storage: ObjectStorage | None = None,
+        settings: Settings | None = None,
+    ) -> None:
+        super().__init__(session, ctx, authz_cache)
+        self.storage = storage
+        self.settings = settings
+
     @property
     def repo(self) -> ConversationRepository:
         return ConversationRepository(self.session)
@@ -339,6 +361,12 @@ class ConversationService(BaseService):
             segments = [
                 SourceSegmentOut(chunk_id=cited.chunk_id, content=cited.quote, highlight=True)
             ]
+        image_url, image_mime = await self._citation_image(
+            doc.id,
+            cited.doc_version or doc.version,
+            slide_number=cited.slide_number,
+            page_start=cited.page_start,
+        )
         return CitationSourceOut(
             n=n,
             document=SourceDocumentOut(
@@ -353,10 +381,42 @@ class ConversationService(BaseService):
             heading_path=cited.heading_path,
             page_start=cited.page_start,
             page_end=cited.page_end,
+            sheet_name=cited.sheet_name,
+            slide_number=cited.slide_number,
+            image_url=image_url,
+            image_mime_type=image_mime,
             anchor_chunk_id=cited.chunk_id,
             quote=cited.quote,
             segments=segments,
         )
+
+    async def _citation_image(
+        self,
+        document_id: str,
+        version: int,
+        *,
+        slide_number: int | None,
+        page_start: int | None,
+    ) -> tuple[str | None, str | None]:
+        if self.storage is None or self.settings is None:
+            return None, None
+        asset = await DocumentPageAssetRepository(self.session).find_for_citation(
+            document_id,
+            version,
+            slide_number=slide_number,
+            page_start=page_start,
+        )
+        if asset is None:
+            return None, None
+        expires = self.settings.presign_expiry_seconds
+        url = self.storage.presign_get(
+            asset.minio_key,
+            expires,
+            filename=f"{asset.kind}-{asset.page_index}.png",
+            content_type=asset.mime_type,
+            attachment=False,
+        )
+        return url, asset.mime_type
 
     async def _ko_citation_source(self, n: int, cited: CitationOut) -> CitationSourceOut:
         live = await KoAccess(self.session).live_objects(self.ctx.user, [cited.document_id])

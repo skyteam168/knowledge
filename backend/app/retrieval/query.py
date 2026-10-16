@@ -31,6 +31,11 @@ DOC_TYPE_ALIASES: dict[str, str] = {
     "markdown": "markdown",
     "html": "html",
     "htm": "html",
+    "image": "image",
+    "img": "image",
+    "jpg": "image",
+    "jpeg": "image",
+    "png": "image",
 }
 DOC_TYPES = tuple(sorted(set(DOC_TYPE_ALIASES.values())))
 

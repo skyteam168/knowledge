@@ -81,3 +81,27 @@ describe('AnswerContent citation popover', () => {
     wrapper.unmount()
   })
 })
+
+describe('AnswerContent rich blocks', () => {
+  afterEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  it('renders markdown tables via AnswerTable', () => {
+    const wrapper = mount(AnswerContent, {
+      props: {
+        content: `| 车间 | 产量 |
+| --- | --- |
+| A | 10 |
+| B | 20 |`,
+        citations: [],
+      },
+      global: { plugins: [ElementPlus] },
+    })
+    expect(wrapper.find('[data-test="answer-table"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="table-chart-toggle"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('车间')
+    expect(wrapper.text()).toContain('产量')
+    wrapper.unmount()
+  })
+})

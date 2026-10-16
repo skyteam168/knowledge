@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.core.exceptions import AppError, NotFoundError
+from app.core.storage import ObjectStorage
 from app.llm import LLMGateway
 from app.models import Conversation, KnowledgeBase
 from app.repositories.chat_repo import ConversationRepository
@@ -29,6 +30,7 @@ from app.schemas.open_api import (
     OpenRetrieveOut,
 )
 from app.services.authz import AuthzCache
+from app.services.chat.answer_images import resolve_page_image
 from app.services.chat.answer_service import AnswerService, ChatEvent
 from app.services.chat.conversation_service import DEFAULT_TITLE, RESOURCE_CONVERSATION
 from app.services.chat.ko_source import PublishedKnowledgeObjects
@@ -97,12 +99,14 @@ class OpenApiService(BaseService):
         pipeline: RetrievalPipeline,
         gateway: LLMGateway,
         settings: Settings,
+        storage: ObjectStorage | None = None,
     ) -> None:
         super().__init__(session, ctx, authz_cache)
         self.caller = caller
         self.pipeline = pipeline
         self.gateway = gateway
         self.settings = settings
+        self.storage = storage
 
     # ---- knowledge bases ---------------------------------------------------------------
 
@@ -144,24 +148,43 @@ class OpenApiService(BaseService):
             if self.settings.pii_mask_on_output
             else (lambda s: s)
         )
-        items = [
-            OpenChunkOut(
-                rank=r.rank,
-                chunk_id=r.passage.chunk_id,
-                document_id=r.passage.document.id,
-                title=r.passage.document.title,
-                kb_id=r.passage.document.kb_id,
-                kb_name=r.passage.document.kb_name,
-                heading_path=list(r.passage.heading_path),
-                content=mask(r.passage.content[:limit]),
-                score=r.rerank_score,
-                page_start=r.passage.page_start,
-                page_end=r.passage.page_end,
-                is_ko=r.passage.is_ko,
-            )
+        results = [
+            r
             for r in (run.outcome.results if run.outcome else [])
             if r.passage.document.kb_id in self.caller.kb_ids
         ]
+        items: list[OpenChunkOut] = []
+        for r in results:
+            image_url, image_mime = (None, None)
+            if not r.passage.is_ko:
+                image_url, image_mime = await resolve_page_image(
+                    self.session,
+                    self.storage,
+                    self.settings,
+                    document_id=r.passage.document.id,
+                    version=r.passage.document.version,
+                    slide_number=r.passage.slide_number,
+                    page_start=r.passage.page_start,
+                )
+            items.append(
+                OpenChunkOut(
+                    rank=r.rank,
+                    chunk_id=r.passage.chunk_id,
+                    document_id=r.passage.document.id,
+                    title=r.passage.document.title,
+                    kb_id=r.passage.document.kb_id,
+                    kb_name=r.passage.document.kb_name,
+                    heading_path=list(r.passage.heading_path),
+                    content=mask(r.passage.content[:limit]),
+                    score=r.rerank_score,
+                    page_start=r.passage.page_start,
+                    page_end=r.passage.page_end,
+                    slide_number=r.passage.slide_number,
+                    is_ko=r.passage.is_ko,
+                    image_url=image_url,
+                    image_mime_type=image_mime,
+                )
+            )
         if audit:
             await self.audit.record(
                 self.audit_ctx,
@@ -230,6 +253,7 @@ class OpenApiService(BaseService):
                 self.session, self.ctx.user, self.settings.chat_expand_ko_limit
             ),
             allowed_kb_ids=self.caller.kb_ids,
+            storage=self.storage,
         )
         async for event in answer.stream(conversation_id, ask):
             outcome.feed(event)

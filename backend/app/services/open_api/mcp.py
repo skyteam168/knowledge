@@ -50,7 +50,10 @@ TOOLS: dict[str, dict[str, Any]] = {
     "search_knowledge": {
         "name": "search_knowledge",
         "title": "检索知识",
-        "description": "在授权知识库中做混合检索与重排，返回最相关的原文片段及出处。",
+        "description": (
+            "在授权知识库中做混合检索与重排，返回最相关的原文片段及出处；"
+            "若文档有页/幻灯片附图，条目含可访问的 image_url（签名链接，会过期）。"
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -66,7 +69,10 @@ TOOLS: dict[str, dict[str, Any]] = {
     "ask_knowledge": {
         "name": "ask_knowledge",
         "title": "知识问答",
-        "description": "基于授权知识库回答问题，答案带 [n] 引用；资料不足时会明确拒答。",
+        "description": (
+            "基于授权知识库回答问题，答案带 [n] 引用；资料不足时会明确拒答。"
+            "答案中可能含 Markdown 图片；citations 中含 image_url（签名链接，会过期）。"
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {

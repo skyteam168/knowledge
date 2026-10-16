@@ -2,6 +2,7 @@
 
 当前阶段：**阶段 7 — 分析与加固**（已完成）。已具备文档入库与索引、权限过滤的混合检索与重排、带引用的流式问答，
 以及运营分析看板、离线评测、可观测性、安全加固、压测与生产部署；已接入阿里云百炼真实模型（见下文）。
+近期补充：页/幻灯片附图入库、答案内嵌图与可视化、Open API / MCP 返回 `image_url`（见「文档附图与答案可视化」）。
 
 | 阶段 | 名称 | 主要内容 |
 | --- | --- | --- |
@@ -90,6 +91,11 @@ CHAT_MODEL=deepseek-v4-flash
 CHAT_EXTRA_BODY={"enable_thinking": false}   # 关闭思考模式，首 token 约 0.4s
 CHAT_EVIDENCE_MIN_SCORE=0.45       # 见下方「离线评测基线」
 CHAT_EVIDENCE_CONFIDENT_SCORE=0.7
+CHAT_ANSWER_IMAGES_ENABLED=true    # 答案材料挂页图 URL，模型可 Markdown 内嵌
+CHAT_ANSWER_IMAGES_PER_MATERIAL=2
+CHAT_ANSWER_IMAGES_TOTAL=6
+# PAGE_IMAGE_ENABLED=true          # 入库时生成 PDF/PPT/图片页光栅（默认开）
+# PDF_PARSER=auto                  # auto|docling|mineru|basic；mineru 需 MINERU_API_URL
 LLM_API_KEY=<百炼 API Key>
 MOCK_EMBEDDING_DIM=1024
 ```
@@ -98,7 +104,8 @@ MOCK_EMBEDDING_DIM=1024
 
 - Rerank 走 `compatible-api/v1`，用 `compatible-mode/v1/reranks` 会返回 404。
 - 新增配置项：`RERANK_PATH`、`RERANK_INSTRUCT`（可选的 rerank 指令）、`CHAT_EXTRA_BODY`（合并进 chat 请求体，
-  不能覆盖 `model` / `stream`）、`CHAT_EVIDENCE_MIN_SCORE`、`CHAT_EVIDENCE_CONFIDENT_SCORE`，两个 compose 文件都已透传。
+  不能覆盖 `model` / `stream`）、`CHAT_EVIDENCE_MIN_SCORE`、`CHAT_EVIDENCE_CONFIDENT_SCORE`、
+  `CHAT_ANSWER_IMAGES_*`，`deploy/docker-compose.yml` 已透传。
 - 更换 Embedding 模型或维度后需要重建索引（新索引代次会记录自己的 embedding 配置，重建成功后才切换）：
   `docker compose -f deploy/docker-compose.yml exec backend python -m app.cli index rebuild --embedding-model text-embedding-v4 --embedding-dim 1024 --strict`
 - 想切回内置 mock：三个 `*_BASE_URL` 改为 `http://mock-llm:9100/v1`，模型改为 `mock-embedding` / `mock-reranker` / `mock-chat`，
@@ -152,11 +159,33 @@ rerank 最高分分布：
 
 两次运行（「真实模型基线（默认阈值 0.2/0.5）」和「真实模型基线（阈值 0.45/0.7）」）都可以在前端「离线评测」页面的对比视图中查看逐题差异。
 
+## 文档附图与答案可视化
+
+入库与解析：
+
+- 常见 PDF / PPT(X) / Word；**`.doc`** 经 LibreOffice（容器内需 `soffice`）转 docx 再解析；**`jpg` / `png`** 经 RapidOCR 抽取文字。
+- 解析时可生成页或幻灯片光栅图，落入 `document_page_assets` 与 MinIO（配置 `PAGE_IMAGE_*`）。页图不进向量索引，供预览与配图。
+- PDF 后端：`PDF_PARSER=auto|docling|mineru|basic`；选 `mineru` 时需部署 MinerU 服务并配置 `MINERU_API_URL`。
+
+助手回答：
+
+- Markdown 表格、`echarts` / `mermaid` 代码块；仅允许 `https` 或同源 `/api` 图片地址。
+- **一期**：引用悬停与原文抽屉按需加载页图签名 URL。
+- **二期**：证据材料中附带签名图 URL，模型可用 `![说明](url)` 内嵌；落库前剥离未在材料中出现的图片链接。
+  开关与配额见上文 `CHAT_ANSWER_IMAGES_*`。
+
+开放平台 / MCP：
+
+- `search_knowledge` / `POST /open/retrieve`：命中条目含 `image_url`、`image_mime_type`（无页图则为 `null`）。
+- `ask_knowledge` / chat：`citations[]` 含 `image_url`；`answer` 中也可能含 Markdown 图片。签名链接会过期。
+- MCP 问答与站内助手共用同一 `AnswerService`；检索共用 `SearchService`。身份、授权知识库、`top_k`、会话历史不同时，结果不必与助手逐字相同。
+
 ## 开放平台（外部 Agent 接入）
 
 管理员在「管理 → 开放平台」创建接入应用并签发 API Key，外部 Agent 通过 REST（检索 / 问答）或 MCP 协议访问知识库。
 授权由两层共同决定：应用被授权的知识库是上限，应用绑定的代理身份（部门 / 用户组 / 角色）决定其中哪些文档可读，
 和同身份员工看到的内容一致。使用说明、接口、MCP 接入与维护见 [docs/open-platform.md](docs/open-platform.md)。
+检索 / 问答返回字段中的附图见上一节。
 
 ## 组织架构同步与扫码登录
 

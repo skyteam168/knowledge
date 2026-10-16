@@ -12,7 +12,7 @@ from app.core.db import create_session_factory
 from app.core.storage import MemoryStorage
 from app.llm import EmbeddingSpec, LLMError
 from app.llm.mock import MockEmbeddingClient
-from app.models import Chunk, Document, OutboxEvent, OutboxStatus
+from app.models import Chunk, Document, DocumentPageAsset, OutboxEvent, OutboxStatus
 from app.retrieval.backends import SearchBackends
 from app.retrieval.memory import MemoryTextIndex, MemoryVectorIndex
 from app.services.indexing.runtime import IndexingRuntime
@@ -37,6 +37,7 @@ def pipeline(
         parsers=ParserRegistry(settings.model_copy(update={"pdf_parser": "basic"})),
         chunker=Chunker(),
         queue=task_queue,
+        settings=settings,
     )
 
 
@@ -121,6 +122,38 @@ def docs_of(index: MemoryVectorIndex | MemoryTextIndex, document_id: str) -> dic
 
 def acl_sets(index: MemoryVectorIndex | MemoryTextIndex, document_id: str) -> set[tuple[str, ...]]:
     return {tuple(d["acl_read_principals"]) for d in docs_of(index, document_id).values()}
+
+
+async def test_parse_persists_pdf_page_assets(
+    api: httpx.AsyncClient,
+    engine: AsyncEngine,
+    pipeline: IngestPipeline,
+    storage: MemoryStorage,
+) -> None:
+    from tests.samples import make_pdf
+
+    bob = await me(api, BOB)
+    kb = await create_kb(api, "页图库")
+    resp = await api.post(
+        f"/api/v1/knowledge-bases/{kb['id']}/documents",
+        files={"file": ("guide.pdf", make_pdf(), "application/pdf")},
+        headers=BOB,
+    )
+    assert resp.status_code == 200, resp.text
+    doc = dict(resp.json()["document"])
+    assert await pipeline.parse(doc["id"], doc["version"])
+
+    async with create_session_factory(engine)() as session:
+        rows = list(
+            (
+                await session.execute(
+                    select(DocumentPageAsset).where(DocumentPageAsset.document_id == doc["id"])
+                )
+            ).scalars()
+        )
+    assert rows and all(r.kind == "page" for r in rows)
+    assert await storage.get_bytes(rows[0].minio_key)
+    assert bob["org_id"] == rows[0].org_id
 
 
 async def test_upload_is_indexed_into_both_backends(

@@ -213,6 +213,7 @@ def _service(
         ),
         gateway=resources.llm,
         settings=settings,
+        storage=resources.storage,
     )
 
 

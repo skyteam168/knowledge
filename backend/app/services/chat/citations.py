@@ -93,4 +93,7 @@ class CitationValidator:
             "score": ev.score,
             "is_ko": ev.is_ko,
             "ko_type": doc.tags[0] if ev.is_ko and doc.tags else None,
+            # Presigned when answer images were attached; may expire in stored history.
+            "image_url": ev.images[0].url if ev.images else None,
+            "image_mime_type": ev.images[0].mime_type if ev.images else None,
         }

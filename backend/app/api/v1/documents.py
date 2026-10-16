@@ -1,6 +1,6 @@
-from typing import Annotated
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Query, Response
 
 from app.api.deps import get_document_service, require_permission
 from app.schemas.knowledge import (
@@ -58,6 +58,20 @@ async def preview_url(document_id: str, service: ServiceDep) -> PreviewOut:
 @router.get("/{document_id}/download-url", response_model=PreviewOut, dependencies=CanRead)
 async def download_url(document_id: str, service: ServiceDep) -> PreviewOut:
     return await service.download_url(document_id)
+
+
+@router.get(
+    "/{document_id}/pages/{page_index}/preview-url",
+    response_model=PreviewOut,
+    dependencies=CanRead,
+)
+async def page_preview_url(
+    document_id: str,
+    page_index: int,
+    service: ServiceDep,
+    kind: Annotated[Literal["page", "slide"], Query()] = "page",
+) -> PreviewOut:
+    return await service.page_asset_url(document_id, kind=kind, page_index=page_index)
 
 
 @router.get("/{document_id}/acl", response_model=DocumentAclOut, dependencies=CanRead)

@@ -21,10 +21,16 @@ def _open_error(exc: Exception, kind: str) -> ParseError:
     return ParseError(f"Cannot open {kind} file: {type(exc).__name__}: {exc}")
 
 
+_OLE2 = b"\xd0\xcf\x11\xe0"
+
+
 class WordParser:
-    """.docx: keeps heading hierarchy (Heading N styles / outline level) and tables in order."""
+    """.docx directly; legacy .doc is converted to .docx via LibreOffice when available."""
 
     name = "docx"
+
+    def __init__(self, soffice_path: str | None = None) -> None:
+        self.soffice_path = soffice_path
 
     def parse(self, data: bytes, filename: str) -> ParsedDocument:
         import docx
@@ -32,8 +38,9 @@ class WordParser:
         from docx.table import Table
         from docx.text.paragraph import Paragraph
 
+        payload, parser_name, meta = self._normalize(data, filename)
         try:
-            document: DocxDocument = docx.Document(io.BytesIO(data))
+            document: DocxDocument = docx.Document(io.BytesIO(payload))
         except (zipfile.BadZipFile, KeyError, ValueError) as exc:
             raise _open_error(exc, "Word") from exc
 
@@ -57,7 +64,34 @@ class WordParser:
                 parsed = table_from_rows(rows)
                 if parsed:
                     builder.table(parsed)
-        return builder.build(self.name)
+        parsed_doc = builder.build(parser_name)
+        if meta:
+            parsed_doc.metadata.update(meta)
+        return parsed_doc
+
+    def _normalize(
+        self, data: bytes, filename: str
+    ) -> tuple[bytes, str, dict[str, Any]]:
+        lower = filename.lower()
+        legacy = lower.endswith(".doc") and not lower.endswith(".docx")
+        ole2 = data.startswith(_OLE2)
+        if not legacy and not ole2:
+            return data, self.name, {}
+        from app.services.ingest.office_convert import convert_with_soffice
+        from app.services.ingest.parsers.base import ParseError
+
+        converted = convert_with_soffice(
+            data,
+            source_suffix=".doc",
+            to_format="docx",
+            soffice_path=self.soffice_path,
+        )
+        if not converted:
+            raise ParseError(
+                "Legacy .doc requires LibreOffice (soffice) to convert to .docx. "
+                "Install LibreOffice or re-save the file as .docx."
+            )
+        return converted, "doc", {"converted_from": "doc"}
 
     @staticmethod
     def _row_cells(row: Any) -> list[str]:

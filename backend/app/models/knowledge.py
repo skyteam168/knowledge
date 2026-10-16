@@ -41,6 +41,13 @@ class ChunkType(StrEnum):
     TITLE = "title"
 
 
+class PageAssetKind(StrEnum):
+    """Rasterized page (PDF) or slide (PPT) image for citation preview."""
+
+    PAGE = "page"
+    SLIDE = "slide"
+
+
 class KnowledgeBase(IdMixin, TenantMixin, TimestampMixin, Base):
     """A knowledge base. Its resource_acl entries are the default ACL inherited by documents."""
 
@@ -106,6 +113,37 @@ class DocumentVersion(IdMixin, TenantMixin, Base):
     sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     minio_key: Mapped[str] = mapped_column(String(1024), nullable=False)
     created_by: Mapped[str | None] = mapped_column(String(32))
+    created_at: Mapped[datetime] = created_at_column()
+
+
+class DocumentPageAsset(IdMixin, TenantMixin, Base):
+    """One rasterized page/slide image stored alongside the original Office/PDF file."""
+
+    __tablename__ = "document_page_assets"
+    __table_args__ = (
+        UniqueConstraint(
+            "document_id",
+            "document_version",
+            "kind",
+            "page_index",
+            name="uq_doc_page_assets_doc_ver_kind_idx",
+        ),
+        Index("ix_document_page_assets_doc_ver", "document_id", "document_version"),
+    )
+
+    document_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False
+    )
+    document_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    # 1-based PDF page or PPT slide number (matches Chunk.page_start / slide_number).
+    page_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    minio_key: Mapped[str] = mapped_column(String(1024), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    width: Mapped[int | None] = mapped_column(Integer)
+    height: Mapped[int | None] = mapped_column(Integer)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     created_at: Mapped[datetime] = created_at_column()
 
 

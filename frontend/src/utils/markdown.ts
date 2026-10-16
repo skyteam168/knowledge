@@ -47,7 +47,30 @@ function create(): MarkdownIt {
       `<pre><code>${md.utils.escapeHtml(token.content)}</code></pre></div>`
     )
   }
+  // Safe images only: https or same-origin /api| /oidc paths (presigned previews).
+  md.renderer.rules.image = (tokens, idx) => {
+    const token = tokens[idx]
+    const src = token.attrGet('src') || ''
+    const alt = md.utils.escapeHtml(token.content || '')
+    if (!isSafeImageSrc(src)) {
+      return `<span class="md-img-blocked" title="不安全的图片地址">${alt || '图片'}</span>`
+    }
+    const safe = md.utils.escapeHtml(src)
+    return (
+      `<span class="md-img-wrap">` +
+      `<img class="md-img" src="${safe}" alt="${alt}" loading="lazy" role="button" tabindex="0" data-src="${safe}" />` +
+      `</span>`
+    )
+  }
   return md
+}
+
+export function isSafeImageSrc(src: string): boolean {
+  const s = src.trim()
+  if (!s || s.startsWith('data:') || s.startsWith('javascript:')) return false
+  if (s.startsWith('https://')) return true
+  if (s.startsWith('/api/') || s.startsWith('/oidc/')) return true
+  return false
 }
 
 /** Code text of a clicked copy button inside rendered markdown, if any. */

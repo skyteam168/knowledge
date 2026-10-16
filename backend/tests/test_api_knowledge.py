@@ -32,6 +32,7 @@ def pipeline(
         parsers=ParserRegistry(settings.model_copy(update={"pdf_parser": "basic"})),
         chunker=Chunker(),
         queue=task_queue,
+        settings=settings,
     )
 
 

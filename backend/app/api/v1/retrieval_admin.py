@@ -7,6 +7,7 @@ from app.api.deps import (
     DbSessionDep,
     RequestContextDep,
     SettingsDep,
+    get_conversation_service,
     provide,
     require_permission,
 )
@@ -39,7 +40,7 @@ def get_profile_service(
 
 ProfileServiceDep = Annotated[RetrievalProfileService, Depends(get_profile_service)]
 TraceServiceDep = Annotated[RetrievalTraceService, Depends(provide(RetrievalTraceService))]
-ConversationServiceDep = Annotated[ConversationService, Depends(provide(ConversationService))]
+ConversationServiceDep = Annotated[ConversationService, Depends(get_conversation_service)]
 
 
 @router.get("/profiles", response_model=list[RetrievalProfileOut])

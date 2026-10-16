@@ -19,11 +19,12 @@ from app.core.exceptions import (
     ValidationAppError,
 )
 from app.core.storage import STAGING_PREFIX, ObjectStorage
-from app.models import Document, DocumentStatus, DocumentVersion, KnowledgeBase
+from app.models import Document, DocumentStatus, DocumentVersion, KnowledgeBase, PageAssetKind
 from app.models.base import new_id, utcnow
 from app.repositories.base import paginate
 from app.repositories.knowledge_repo import (
     ChunkRepository,
+    DocumentPageAssetRepository,
     DocumentRepository,
     KnowledgeBaseRepository,
 )
@@ -167,7 +168,7 @@ class DocumentService(BaseService):
             raise ValidationAppError("Empty file")
         if size > self.settings.upload_max_bytes:
             raise FileTooLargeError(detail={"max_bytes": self.settings.upload_max_bytes})
-        return name, canonical_mime(kind), kind
+        return name, canonical_mime(kind, name), kind
 
     # ---- upload ----
 
@@ -423,6 +424,38 @@ class DocumentService(BaseService):
 
     async def download_url(self, document_id: str) -> PreviewOut:
         return await self._file_url(document_id, attachment=True)
+
+    async def page_asset_url(
+        self, document_id: str, *, kind: str, page_index: int
+    ) -> PreviewOut:
+        if kind not in {PageAssetKind.PAGE.value, PageAssetKind.SLIDE.value}:
+            raise NotFoundError("Page asset not found")
+        doc, _, _ = await self._doc(document_id, AclPermission.READ)
+        asset = await DocumentPageAssetRepository(self.session).get(
+            doc.id, doc.version, kind, page_index
+        )
+        if asset is None:
+            raise NotFoundError("Page asset not found")
+        expires = self.settings.presign_expiry_seconds
+        filename = f"{kind}-{page_index}.png"
+        url = self.storage.presign_get(
+            asset.minio_key,
+            expires,
+            filename=filename,
+            content_type=asset.mime_type,
+            attachment=False,
+        )
+        await self.audit.record(
+            self.audit_ctx,
+            "document.page_preview",
+            RESOURCE_DOCUMENT,
+            doc.id,
+            None,
+            {"kb_id": doc.kb_id, "version": doc.version, "kind": kind, "page_index": page_index},
+        )
+        return PreviewOut(
+            url=url, filename=filename, mime_type=asset.mime_type, expires_in=expires
+        )
 
     async def _file_url(self, document_id: str, *, attachment: bool) -> PreviewOut:
         doc, _, _ = await self._doc(document_id, AclPermission.READ)

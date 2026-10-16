@@ -736,6 +736,9 @@ export interface Citation {
   /** Cites a knowledge object: document_id = KO id, doc_version = its published version. */
   is_ko?: boolean
   ko_type?: KoType | null
+  /** Presigned page/slide preview when available (may expire). */
+  image_url?: string | null
+  image_mime_type?: string | null
 }
 
 export interface MessageFeedback {
@@ -835,6 +838,11 @@ export interface CitationSource {
   heading_path: string[]
   page_start: number | null
   page_end: number | null
+  sheet_name?: string | null
+  slide_number?: number | null
+  /** Short-lived ACL-safe URL of the cited page/slide raster, if available. */
+  image_url?: string | null
+  image_mime_type?: string | null
   anchor_chunk_id: string
   quote: string
   segments: { chunk_id: string; content: string; highlight: boolean }[]

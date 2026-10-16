@@ -61,6 +61,9 @@ class CitationOut(BaseModel):
     # Cites a knowledge object: document_id = ko_id, doc_version = its published version.
     is_ko: bool = False
     ko_type: str | None = None
+    # Presigned page/slide preview when available (expires; refresh via citation source API).
+    image_url: str | None = None
+    image_mime_type: str | None = None
 
 
 class FeedbackOut(BaseModel):
@@ -187,6 +190,11 @@ class CitationSourceOut(BaseModel):
     heading_path: list[str]
     page_start: int | None
     page_end: int | None
+    sheet_name: str | None = None
+    slide_number: int | None = None
+    # Short-lived ACL-safe URL of the cited page/slide raster (if extracted at ingest).
+    image_url: str | None = None
+    image_mime_type: str | None = None
     anchor_chunk_id: str
     quote: str
     segments: list[SourceSegmentOut]

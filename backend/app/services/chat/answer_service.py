@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.core.exceptions import AppError, NotFoundError, ValidationAppError
+from app.core.storage import ObjectStorage
 from app.llm import ChatMessage, LLMError, LLMGateway
 from app.llm.usage import FEATURE_ASSISTANT, STAGE_GENERATE, iterate_in_scope, scope_with
 from app.models import (
@@ -42,6 +43,11 @@ from app.schemas.chat import AskIn
 from app.services.authz import AuthzCache
 from app.services.chat import prompt
 from app.services.chat.acl_check import EvidenceAclChecker
+from app.services.chat.answer_images import (
+    allowed_image_urls,
+    attach_material_images,
+    resolve_page_image,
+)
 from app.services.chat.citations import CitationResult, CitationValidator
 from app.services.chat.conversation_service import DEFAULT_TITLE, RESOURCE_MESSAGE
 from app.services.chat.evidence import EvidenceValidator, Hit, Verdict
@@ -134,10 +140,12 @@ class AnswerService(BaseService):
         settings: Settings,
         ko_source: KnowledgeObjectSource | None = None,
         allowed_kb_ids: frozenset[str] | None = None,
+        storage: ObjectStorage | None = None,
     ) -> None:
         super().__init__(session, ctx, authz_cache)
         self.settings = settings
         self.allowed_kb_ids = allowed_kb_ids
+        self.storage = storage
         self.gateway = gateway
         self.repo = ConversationRepository(session)
         self.search = SearchService(session, ctx, authz_cache, pipeline=pipeline, settings=settings)
@@ -385,6 +393,7 @@ class AnswerService(BaseService):
             return
 
         uncertain = decision.verdict == Verdict.UNCERTAIN
+        await attach_material_images(self.session, evidences, self.storage, self.settings)
         messages = prompt.answer_messages(
             run.query, rewrite.query, evidences, run.history, uncertain=uncertain
         )
@@ -394,6 +403,7 @@ class AnswerService(BaseService):
             "uncertain": uncertain,
             "history_messages": len(run.history),
             "chars": sum(len(m.content) for m in messages),
+            "answer_images": sum(len(e.images) for e in evidences),
             # The final context exactly as given to the model.
             "materials": [
                 {"n": i, **e.describe(with_content=True)} for i, e in enumerate(evidences, start=1)
@@ -404,6 +414,12 @@ class AnswerService(BaseService):
             yield event
 
         result = self.citations.validate("".join(parts), evidences)
+        image_urls = allowed_image_urls(evidences)
+        filtered = prompt.filter_answer_images(result.answer, image_urls)
+        if filtered != result.answer:
+            result = replace(result, answer=filtered)
+            run.steps["prompt"]["stripped_unauthorized_images"] = True
+        await self._enrich_citation_images(result.citations)
         grounding = Grounding.UNCERTAIN if uncertain else Grounding.GROUNDED
         if not result.grounded:
             grounding = Grounding.LOW_GROUNDING
@@ -419,6 +435,33 @@ class AnswerService(BaseService):
             )
         async for event in self._finish(run, result, grounding):
             yield event
+
+    async def _enrich_citation_images(self, citations: list[dict[str, Any]]) -> None:
+        """Ensure citations carry a fresh page/slide preview URL when assets exist."""
+        if self.storage is None or not self.settings.page_image_enabled:
+            return
+        for cite in citations:
+            if cite.get("image_url") or cite.get("is_ko"):
+                continue
+            doc_id = cite.get("document_id")
+            version = cite.get("doc_version")
+            if not isinstance(doc_id, str) or not isinstance(version, int):
+                continue
+            url, mime = await resolve_page_image(
+                self.session,
+                self.storage,
+                self.settings,
+                document_id=doc_id,
+                version=version,
+                slide_number=cite.get("slide_number")
+                if isinstance(cite.get("slide_number"), int)
+                else None,
+                page_start=cite.get("page_start")
+                if isinstance(cite.get("page_start"), int)
+                else None,
+            )
+            cite["image_url"] = url
+            cite["image_mime_type"] = mime
 
     async def _retrieve(self, run: _Run, rewrite: RewriteResult) -> list[Hit]:
         t = time.perf_counter()

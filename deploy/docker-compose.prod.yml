@@ -67,6 +67,11 @@ x-backend-env: &backend-env
   KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET:?set KEYCLOAK_ADMIN_CLIENT_SECRET}
   # Security hardening (see app/core/config.py for every option).
   RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
+  RATE_LIMIT_WINDOW_SECONDS: ${RATE_LIMIT_WINDOW_SECONDS:-60}
+  RATE_LIMIT_USER_REQUESTS: ${RATE_LIMIT_USER_REQUESTS:-300}
+  RATE_LIMIT_ORG_REQUESTS: ${RATE_LIMIT_ORG_REQUESTS:-3000}
+  RATE_LIMIT_CHAT_USER_REQUESTS: ${RATE_LIMIT_CHAT_USER_REQUESTS:-20}
+  RATE_LIMIT_CHAT_ORG_REQUESTS: ${RATE_LIMIT_CHAT_ORG_REQUESTS:-300}
   VIRUS_SCAN_BACKEND: ${VIRUS_SCAN_BACKEND:-none}
   CLAMAV_HOST: ${CLAMAV_HOST:-clamav}
   PII_MASK_ON_INGEST: ${PII_MASK_ON_INGEST:-false}
@@ -150,7 +155,7 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?}
     # Browsers upload / preview through presigned URLs: publish behind the reverse proxy.
     ports:
-      - "${MINIO_BIND:-127.0.0.1}:9000:9000"
+      - "${MINIO_BIND:-127.0.0.1}:${MINIO_HOST_PORT:-9000}:9000"
     volumes:
       - minio_data:/data
     healthcheck:

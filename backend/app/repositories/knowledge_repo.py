@@ -1,9 +1,16 @@
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 
-from sqlalchemy import ColumnElement, Select, func, or_, select, true
+from sqlalchemy import ColumnElement, Select, delete, func, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Chunk, Document, DocumentVersion, KnowledgeBase
+from app.models import (
+    Chunk,
+    Document,
+    DocumentPageAsset,
+    DocumentVersion,
+    KnowledgeBase,
+    PageAssetKind,
+)
 
 
 class KnowledgeBaseRepository:
@@ -138,3 +145,67 @@ class ChunkRepository:
             .limit(limit)
         )
         return list((await self.session.execute(stmt)).scalars())
+
+
+class DocumentPageAssetRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def replace_for_version(
+        self, document_id: str, version: int, assets: list[DocumentPageAsset]
+    ) -> None:
+        await self.session.execute(
+            delete(DocumentPageAsset).where(
+                DocumentPageAsset.document_id == document_id,
+                DocumentPageAsset.document_version == version,
+            )
+        )
+        self.session.add_all(assets)
+
+    async def get(
+        self, document_id: str, version: int, kind: str, page_index: int
+    ) -> DocumentPageAsset | None:
+        stmt = select(DocumentPageAsset).where(
+            DocumentPageAsset.document_id == document_id,
+            DocumentPageAsset.document_version == version,
+            DocumentPageAsset.kind == kind,
+            DocumentPageAsset.page_index == page_index,
+        )
+        return (await self.session.execute(stmt)).scalar_one_or_none()
+
+    async def find_for_citation(
+        self,
+        document_id: str,
+        version: int,
+        *,
+        slide_number: int | None,
+        page_start: int | None,
+    ) -> DocumentPageAsset | None:
+        if slide_number is not None:
+            asset = await self.get(document_id, version, PageAssetKind.SLIDE.value, slide_number)
+            if asset is not None:
+                return asset
+        if page_start is not None:
+            return await self.get(document_id, version, PageAssetKind.PAGE.value, page_start)
+        return None
+
+    async def list_by_indices(
+        self,
+        document_id: str,
+        version: int,
+        kind: str,
+        indices: Sequence[int],
+    ) -> list[DocumentPageAsset]:
+        if not indices:
+            return []
+        stmt = (
+            select(DocumentPageAsset)
+            .where(
+                DocumentPageAsset.document_id == document_id,
+                DocumentPageAsset.document_version == version,
+                DocumentPageAsset.kind == kind,
+                DocumentPageAsset.page_index.in_(list(indices)),
+            )
+            .order_by(DocumentPageAsset.page_index)
+        )
+        return list((await self.session.execute(stmt)).scalars().all())

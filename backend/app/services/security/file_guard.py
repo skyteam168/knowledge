@@ -17,16 +17,21 @@ from app.services.ingest.parsers.base import FileKind
 logger = logging.getLogger(__name__)
 
 _OOXML = b"PK\x03\x04"
+_OLE2 = b"\xd0\xcf\x11\xe0"  # legacy .doc / .xls / .ppt
+_JPEG = b"\xff\xd8\xff"
+_PNG = b"\x89PNG\r\n\x1a\n"
 _BINARY_MAGIC = (
     b"%PDF-",
     _OOXML,
     b"MZ",  # Windows executables
     b"\x7fELF",
-    b"\xd0\xcf\x11\xe0",  # OLE2 (legacy Office, often macro carriers)
+    _OLE2,
     b"\xca\xfe\xba\xbe",  # Mach-O / Java class
     b"\x1f\x8b",  # gzip
     b"Rar!",
     b"7z\xbc\xaf",
+    _JPEG,
+    _PNG,
 )
 _TEXT_KINDS = {FileKind.TEXT, FileKind.MARKDOWN, FileKind.CSV, FileKind.HTML}
 SNIFF_BYTES = 4096
@@ -54,8 +59,13 @@ def content_matches(kind: FileKind, head: bytes) -> bool:
     if kind == FileKind.PDF:
         # Some generators prepend a few bytes before the header.
         return b"%PDF-" in head[:1024]
-    if kind in (FileKind.WORD, FileKind.EXCEL, FileKind.PPT):
+    if kind == FileKind.WORD:
+        # .docx is OOXML (ZIP); legacy .doc is OLE2.
+        return head.startswith(_OOXML) or head.startswith(_OLE2)
+    if kind in (FileKind.EXCEL, FileKind.PPT):
         return head.startswith(_OOXML)
+    if kind == FileKind.IMAGE:
+        return head.startswith(_JPEG) or head.startswith(_PNG)
     if kind in _TEXT_KINDS:
         if any(head.startswith(m) for m in _BINARY_MAGIC):
             return False

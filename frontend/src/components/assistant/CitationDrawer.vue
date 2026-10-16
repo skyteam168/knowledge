@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
+import { ElImageViewer } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { getCitationSource } from '@/api/chat'
 import { HttpError } from '@/api/http'
@@ -18,6 +19,7 @@ const source = ref<CitationSource | null>(null)
 const error = ref('')
 const loading = ref(false)
 const body = ref<HTMLElement>()
+const previewOpen = ref(false)
 
 async function load(): Promise<void> {
   const { messageId, citation } = props
@@ -75,7 +77,11 @@ function openKoSource(documentId: string, chunkId: string | null): void {
 }
 
 function location(s: CitationSource): string {
-  return hitLocation({ ...s, sheet_name: null, slide_number: null })
+  return hitLocation({
+    ...s,
+    sheet_name: s.sheet_name ?? null,
+    slide_number: s.slide_number ?? null,
+  })
 }
 </script>
 
@@ -150,6 +156,17 @@ function location(s: CitationSource): string {
           class="notice"
           title="该文档在回答生成后已更新，以下内容可能与回答引用时不同"
         />
+        <div v-if="source.image_url" class="page-image">
+          <button type="button" class="page-image__btn" @click="previewOpen = true">
+            <img
+              :src="source.image_url"
+              alt="引用页附图"
+              loading="lazy"
+              class="page-image__img"
+            />
+          </button>
+          <div class="page-image__hint">点击查看大图</div>
+        </div>
         <div class="segments">
           <p
             v-for="seg in source.segments"
@@ -161,6 +178,12 @@ function location(s: CitationSource): string {
           </p>
         </div>
         <el-button type="primary" plain @click="openDocument">打开原文档</el-button>
+        <ElImageViewer
+          v-if="previewOpen && source.image_url"
+          :url-list="[source.image_url]"
+          teleported
+          @close="previewOpen = false"
+        />
       </template>
       <template v-else-if="error && citation">
         <el-alert type="warning" show-icon :closable="false" class="notice" :title="error" />
@@ -230,5 +253,30 @@ function location(s: CitationSource): string {
 }
 .ko-src {
   margin-top: 8px;
+}
+.page-image {
+  margin: 12px 0;
+}
+.page-image__btn {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 1px solid var(--ekb-code-border, var(--el-border-color));
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--el-fill-color-light);
+  cursor: zoom-in;
+}
+.page-image__img {
+  display: block;
+  width: 100%;
+  max-height: 360px;
+  object-fit: contain;
+  background: #fff;
+}
+.page-image__hint {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 </style>

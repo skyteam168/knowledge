@@ -6,18 +6,21 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
+from app.core.storage import MemoryStorage
 from app.llm import ChatMessage, ChatResult, LLMError, build_mock_gateway
 from app.llm.mock import mock_answer
-from app.models import Chunk, Document, KnowledgeBase
+from app.models import Chunk, Document, DocumentPageAsset, KnowledgeBase, PageAssetKind
 from app.repositories.chat_repo import ChunkRepository
 from app.retrieval.pipeline import DocumentInfo, Passage
 from app.services.chat import prompt
+from app.services.chat.answer_images import attach_material_images, resolve_page_image
 from app.services.chat.citations import CitationValidator, strip_citations
 from app.services.chat.evidence import (
     Evidence,
     EvidenceKind,
     EvidenceValidator,
     Hit,
+    MaterialImage,
     Verdict,
 )
 from app.services.chat.expansion import (
@@ -71,7 +74,17 @@ def test_citation_validator_keeps_valid_and_removes_unknown_numbers() -> None:
     assert first["n"] == 1 and first["document_id"] == "doc1" and first["chunk_id"] == "c1"
     assert first["title"] == "年假制度" and first["heading_path"] == ["第一章", "年假"]
     assert first["quote"] == "员工享有…"
+    assert first["image_url"] is None
     assert second["n"] == 2 and second["page_start"] == 4
+
+
+def test_citation_validator_includes_material_image_url() -> None:
+    url = "https://cdn.example.com/p4.png"
+    ev = evidence("见图", page_start=4)
+    ev.images = [MaterialImage(url=url, caption="第 4 页", mime_type="image/png")]
+    result = CitationValidator().validate("见图[1]", [ev])
+    assert result.citations[0]["image_url"] == url
+    assert result.citations[0]["image_mime_type"] == "image/png"
 
 
 def test_citation_validator_ignores_links_and_code() -> None:
@@ -203,6 +216,101 @@ def test_mock_chat_answers_with_citations() -> None:
     )
     answer = mock_answer(user[0].content, user[-1].content)
     assert "年假为五天" in answer and "[1]" in answer
+
+
+def test_prompt_includes_material_images_and_filters_unauthorized() -> None:
+    url = "https://cdn.example.com/page-3.png"
+    ev = evidence("见图示流量", page_start=3)
+    ev.images = [MaterialImage(url=url, caption="第 3 页")]
+    messages = prompt.answer_messages("流量多少？", None, [ev], [], uncertain=False)
+    body = messages[-1].content
+    assert "配图" in body and f"![第 3 页]({url})" in body
+    assert "禁止编造" in messages[0].content
+
+    answer = f"如图所示：![流量]({url}) 另见 ![坏链](https://evil.test/x.png) 结束[1]"
+    cleaned = prompt.filter_answer_images(answer, {url})
+    assert f"![流量]({url})" in cleaned
+    assert "evil.test" not in cleaned
+    assert "坏链" in cleaned
+    # Code fences keep invented URLs untouched (not rendered as images by markdown-it fence).
+    fenced = "```\n![x](https://evil.test/y.png)\n```\n正文![ok](" + url + ")"
+    assert "evil.test" in prompt.filter_answer_images(fenced, {url})
+
+
+async def test_attach_material_images_presigns_pages(session: AsyncSession) -> None:
+    org = await make_org(session)
+    kb = KnowledgeBase(org_id=org.id, name="kb-img")
+    session.add(kb)
+    await session.flush()
+    doc = Document(
+        org_id=org.id,
+        kb_id=kb.id,
+        title="工艺图册",
+        filename="guide.pdf",
+        mime_type="application/pdf",
+        size_bytes=10,
+        sha256="1" * 64,
+        minio_key="docs/guide.pdf",
+    )
+    session.add(doc)
+    await session.flush()
+    for index in (2, 3, 4):
+        session.add(
+            DocumentPageAsset(
+                org_id=org.id,
+                document_id=doc.id,
+                document_version=1,
+                kind=PageAssetKind.PAGE.value,
+                page_index=index,
+                minio_key=f"pages/{doc.id}/v1/page-{index}.png",
+                mime_type="image/png",
+                width=100,
+                height=100,
+                size_bytes=12,
+                content_hash=f"{index}" * 64,
+            )
+        )
+    await session.flush()
+
+    storage = MemoryStorage()
+    settings = Settings(
+        chat_answer_images_enabled=True,
+        chat_answer_images_per_material=2,
+        chat_answer_images_total=6,
+        page_image_enabled=True,
+        presign_expiry_seconds=600,
+    )
+    doc_info = DocumentInfo(
+        id=doc.id,
+        title=doc.title,
+        filename=doc.filename,
+        kb_id=kb.id,
+        kb_name=kb.name,
+        version=1,
+        doc_type="pdf",
+        tags=[],
+        updated_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+    evs = [
+        evidence("页内容", document=doc_info, page_start=2, page_end=4),
+        evidence("无页", n=2),
+    ]
+    await attach_material_images(session, evs, storage, settings)
+    assert len(evs[0].images) == 2
+    assert [img.caption for img in evs[0].images] == ["第 2 页", "第 3 页"]
+    assert all(img.url.startswith(storage.base_url) for img in evs[0].images)
+    assert evs[1].images == []
+
+    url, mime = await resolve_page_image(
+        session,
+        storage,
+        settings,
+        document_id=doc.id,
+        version=1,
+        slide_number=None,
+        page_start=3,
+    )
+    assert mime == "image/png" and url is not None and "page-3" in url
 
 
 # ---- expansion ------------------------------------------------------------------------------

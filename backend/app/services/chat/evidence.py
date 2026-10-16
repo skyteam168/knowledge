@@ -26,6 +26,15 @@ class EvidenceKind(StrEnum):
     KO = "ko"
 
 
+@dataclass(frozen=True)
+class MaterialImage:
+    """Presigned page/slide image the model may embed via Markdown."""
+
+    url: str
+    caption: str
+    mime_type: str | None = None
+
+
 @dataclass
 class Evidence:
     """One numbered material [n] of the prompt."""
@@ -49,6 +58,8 @@ class Evidence:
     is_ko: bool = False
     tokens: int = 0
     truncated: bool = False
+    # Presigned page/slide URLs attached after ACL (answer phase 2).
+    images: list[MaterialImage] = field(default_factory=list)
 
     @property
     def anchor_chunk_id(self) -> str:
@@ -67,6 +78,10 @@ class Evidence:
             "tokens": self.tokens,
             "truncated": self.truncated,
             "is_ko": self.is_ko,
+            "images": [
+                {"caption": img.caption, "url": img.url, "mime_type": img.mime_type}
+                for img in self.images
+            ],
         }
         if with_content:
             data["content"] = self.content
