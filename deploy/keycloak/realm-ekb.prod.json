@@ -9,7 +9,7 @@
     "en"
   ],
   "defaultLocale": "zh-CN",
-  "sslRequired": "external",
+  "sslRequired": "none",
   "registrationAllowed": false,
   "loginWithEmailAllowed": true,
   "accessTokenLifespan": 1800,
