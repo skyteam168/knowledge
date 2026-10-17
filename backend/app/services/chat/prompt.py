@@ -1,7 +1,7 @@
 """Prompts of the assistant. Retrieved materials are wrapped as data, never as instructions."""
 
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 from app.llm import ChatMessage
 from app.services.chat.citations import strip_citations
@@ -32,7 +32,8 @@ ANSWER_SYSTEM_PROMPT = """你是企业知识库的问答助手。请严格遵守
 正文为合法 JSON 的 ECharts option（仅 JSON，禁止 function/回调）。
    - 流程、时序、状态用 mermaid 代码块（语言标记 mermaid），保持简短可读。
    - 仅当某条资料含有「配图」段落且给出了图片 URL 时，可在答案中用 Markdown \
-图片语法 ![说明](url) 原样引用这些 URL；禁止编造、改写、拼接或使用资料以外的任何链接；\
+图片语法 ![说明](地址) 原样引用这些图片地址（形如 ekb-image:1）；\
+禁止编造、改写、拼接或使用资料以外的任何链接；\
 无配图时不要插入图片。"""
 
 UNCERTAIN_RULE = """7. 注意：本次检索到的资料与问题的相关度不高。只回答资料明确支持的部分，\
@@ -76,10 +77,10 @@ def render_material(n: int, ev: Evidence) -> str:
     lines += ["内容：", defuse(ev.content)]
     if ev.images:
         lines.append(
-            "配图（仅可在答案中用 Markdown 图片语法引用下列 URL，禁止编造其他链接）："
+            "配图（仅可在答案中用 Markdown 图片语法原样引用下列地址，禁止编造其他链接）："
         )
         for img in ev.images:
-            lines.append(f"![{defuse(img.caption)}]({img.url})")
+            lines.append(f"![{defuse(img.caption)}]({img.ref or img.url})")
     lines.append("</material>")
     return "\n".join(lines)
 
@@ -137,14 +138,14 @@ _MD_IMAGE = re.compile(r"!\[([^\]]*)\]\(([^)\s]+)\)")
 _CODE_BLOCK = re.compile(r"```.*?(?:```|$)|`[^`\n]*`", re.DOTALL)
 
 
-def filter_answer_images(answer: str, allowed: set[str] | frozenset[str]) -> str:
-    """Keep only Markdown images whose URL was provided in materials."""
+def filter_answer_images(answer: str, allowed: Mapping[str, str]) -> str:
+    """Resolve image refs to their presigned URL; drop images not provided in materials."""
 
     def scrub(text: str) -> str:
         def repl(match: re.Match[str]) -> str:
-            url = match.group(2).strip()
-            if url in allowed:
-                return match.group(0)
+            target = allowed.get(match.group(2).strip())
+            if target:
+                return f"![{match.group(1)}]({target})"
             alt = match.group(1).strip()
             return alt or ""
 

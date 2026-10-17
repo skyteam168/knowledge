@@ -6,6 +6,7 @@ export interface RenderEnv {
 }
 
 const CITE = /^\[(\d{1,3})\](?!\()/
+const IMAGE_REF_PREFIX = 'ekb-image:'
 
 function citationRule(state: StateInline, silent: boolean): boolean {
   if (state.src.charCodeAt(state.pos) !== 0x5b /* [ */) return false
@@ -52,6 +53,10 @@ function create(): MarkdownIt {
     const token = tokens[idx]
     const src = token.attrGet('src') || ''
     const alt = md.utils.escapeHtml(token.content || '')
+    // Placeholder while streaming; the final answer carries the presigned URL.
+    if (src.startsWith(IMAGE_REF_PREFIX)) {
+      return `<span class="md-img-pending">${alt || '图片'}</span>`
+    }
     if (!isSafeImageSrc(src)) {
       return `<span class="md-img-blocked" title="不安全的图片地址">${alt || '图片'}</span>`
     }

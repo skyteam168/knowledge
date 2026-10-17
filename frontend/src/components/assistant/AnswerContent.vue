@@ -322,7 +322,8 @@ function onClick(event: Event): void {
   cursor: zoom-in;
   background: var(--ekb-bg-fill);
 }
-.markdown :deep(.md-img-blocked) {
+.markdown :deep(.md-img-blocked),
+.markdown :deep(.md-img-pending) {
   color: var(--el-text-color-secondary);
   font-size: 13px;
 }

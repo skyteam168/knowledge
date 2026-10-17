@@ -33,6 +33,9 @@ class MaterialImage:
     url: str
     caption: str
     mime_type: str | None = None
+    # Short placeholder shown to the model instead of the long presigned URL; models
+    # tend to "decode" %20/%27 in URLs, which breaks the signature.
+    ref: str = ""
 
 
 @dataclass

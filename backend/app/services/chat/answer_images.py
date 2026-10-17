@@ -12,6 +12,8 @@ from app.models import PageAssetKind
 from app.repositories.knowledge_repo import DocumentPageAssetRepository
 from app.services.chat.evidence import Evidence, MaterialImage
 
+IMAGE_REF_PREFIX = "ekb-image:"
+
 
 async def resolve_page_image(
     session: AsyncSession,
@@ -65,6 +67,7 @@ async def attach_material_images(
     repo = DocumentPageAssetRepository(session)
     remaining = total_budget
     expires = settings.presign_expiry_seconds
+    seq = 0
 
     for ev in evidences:
         if remaining <= 0 or ev.is_ko:
@@ -90,8 +93,14 @@ async def attach_material_images(
                 content_type=asset.mime_type,
                 attachment=False,
             )
+            seq += 1
             images.append(
-                MaterialImage(url=url, caption=caption, mime_type=asset.mime_type)
+                MaterialImage(
+                    url=url,
+                    caption=caption,
+                    mime_type=asset.mime_type,
+                    ref=f"{IMAGE_REF_PREFIX}{seq}",
+                )
             )
             remaining -= 1
             if remaining <= 0:
@@ -118,5 +127,12 @@ def _caption(kind: str, index: int) -> str:
     return f"第 {index} 页"
 
 
-def allowed_image_urls(evidences: Sequence[Evidence]) -> set[str]:
-    return {img.url for ev in evidences for img in ev.images}
+def answer_image_targets(evidences: Sequence[Evidence]) -> dict[str, str]:
+    """Image address the model may write (placeholder ref or exact URL) -> real URL."""
+    targets: dict[str, str] = {}
+    for ev in evidences:
+        for img in ev.images:
+            targets[img.url] = img.url
+            if img.ref:
+                targets[img.ref] = img.url
+    return targets

@@ -13,7 +13,11 @@ from app.models import Chunk, Document, DocumentPageAsset, KnowledgeBase, PageAs
 from app.repositories.chat_repo import ChunkRepository
 from app.retrieval.pipeline import DocumentInfo, Passage
 from app.services.chat import prompt
-from app.services.chat.answer_images import attach_material_images, resolve_page_image
+from app.services.chat.answer_images import (
+    answer_image_targets,
+    attach_material_images,
+    resolve_page_image,
+)
 from app.services.chat.citations import CitationValidator, strip_citations
 from app.services.chat.evidence import (
     Evidence,
@@ -227,14 +231,31 @@ def test_prompt_includes_material_images_and_filters_unauthorized() -> None:
     assert "配图" in body and f"![第 3 页]({url})" in body
     assert "禁止编造" in messages[0].content
 
+    allowed = answer_image_targets([ev])
     answer = f"如图所示：![流量]({url}) 另见 ![坏链](https://evil.test/x.png) 结束[1]"
-    cleaned = prompt.filter_answer_images(answer, {url})
+    cleaned = prompt.filter_answer_images(answer, allowed)
     assert f"![流量]({url})" in cleaned
     assert "evil.test" not in cleaned
     assert "坏链" in cleaned
     # Code fences keep invented URLs untouched (not rendered as images by markdown-it fence).
     fenced = "```\n![x](https://evil.test/y.png)\n```\n正文![ok](" + url + ")"
-    assert "evil.test" in prompt.filter_answer_images(fenced, {url})
+    assert "evil.test" in prompt.filter_answer_images(fenced, allowed)
+
+
+def test_prompt_uses_image_refs_and_restores_presigned_url() -> None:
+    url = (
+        "https://kb.test:9443/b/p/1.png?response-content-disposition=inline%3B%20"
+        "filename%2A%3DUTF-8%27%27page-1.png&X-Amz-Signature=abc"
+    )
+    ev = evidence("见图", page_start=1)
+    ev.images = [MaterialImage(url=url, caption="第 1 页", ref="ekb-image:1")]
+    body = prompt.answer_messages("q", None, [ev], [], uncertain=False)[-1].content
+    assert "![第 1 页](ekb-image:1)" in body and url not in body
+
+    allowed = answer_image_targets([ev])
+    out = prompt.filter_answer_images("如图 ![第 1 页](ekb-image:1) [1]", allowed)
+    assert out == f"如图 ![第 1 页]({url}) [1]"
+    assert prompt.filter_answer_images("![x](ekb-image:9)", allowed) == "x"
 
 
 async def test_attach_material_images_presigns_pages(session: AsyncSession) -> None:
@@ -299,6 +320,7 @@ async def test_attach_material_images_presigns_pages(session: AsyncSession) -> N
     assert len(evs[0].images) == 2
     assert [img.caption for img in evs[0].images] == ["第 2 页", "第 3 页"]
     assert all(img.url.startswith(storage.base_url) for img in evs[0].images)
+    assert [img.ref for img in evs[0].images] == ["ekb-image:1", "ekb-image:2"]
     assert evs[1].images == []
 
     url, mime = await resolve_page_image(

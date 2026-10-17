@@ -44,7 +44,7 @@ from app.services.authz import AuthzCache
 from app.services.chat import prompt
 from app.services.chat.acl_check import EvidenceAclChecker
 from app.services.chat.answer_images import (
-    allowed_image_urls,
+    answer_image_targets,
     attach_material_images,
     resolve_page_image,
 )
@@ -414,11 +414,12 @@ class AnswerService(BaseService):
             yield event
 
         result = self.citations.validate("".join(parts), evidences)
-        image_urls = allowed_image_urls(evidences)
-        filtered = prompt.filter_answer_images(result.answer, image_urls)
+        image_targets = answer_image_targets(evidences)
+        filtered = prompt.filter_answer_images(result.answer, image_targets)
         if filtered != result.answer:
+            if filtered.count("![") < result.answer.count("!["):
+                run.steps["prompt"]["stripped_unauthorized_images"] = True
             result = replace(result, answer=filtered)
-            run.steps["prompt"]["stripped_unauthorized_images"] = True
         await self._enrich_citation_images(result.citations)
         grounding = Grounding.UNCERTAIN if uncertain else Grounding.GROUNDED
         if not result.grounded:

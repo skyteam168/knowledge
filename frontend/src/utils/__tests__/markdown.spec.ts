@@ -76,4 +76,10 @@ describe('images', () => {
     const js = renderMarkdown('![图](javascript:alert(1))')
     expect(js).not.toContain('<img')
   })
+
+  it('renders streaming image refs as a pending label', () => {
+    const html = renderMarkdown('![第 1 页](ekb-image:1)')
+    expect(html).toContain('md-img-pending')
+    expect(html).not.toContain('<img')
+  })
 })
