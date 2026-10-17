@@ -93,6 +93,10 @@ class Upstream:
             )
         if path == prefix and request.method == "POST":
             body = json.loads(request.content)
+            if body.get("email") and any(
+                u.get("email") == body["email"] for u in self.kc_users.values()
+            ):
+                return httpx.Response(409, json={"errorMessage": "User exists with same email"})
             uid = f"kc-{len(self.kc_users) + 1}"
             self.kc_users[uid] = {"id": uid, **body}
             return httpx.Response(201, headers={"Location": f"http://kc{prefix}/{uid}"})
@@ -515,6 +519,8 @@ async def test_open_password_login_creates_keycloak_account(env: Env, engine: As
     assert body["username"] == "zhangsan" and body["created"] is True
     password = body["temporary_password"]
     assert len(password) == 12
+    assert any(c.isupper() for c in password) and any(c.islower() for c in password)
+    assert any(c.isdigit() for c in password)
 
     account = next(iter(env.upstream.kc_users.values()))
     assert account["username"] == "zhangsan" and account["attributes"] == {"org_id": ["org-demo"]}
@@ -548,6 +554,25 @@ async def test_open_password_login_creates_keycloak_account(env: Env, engine: As
         f"/api/v1/admin/users/{env.ids['zhangsan']}/password-login", headers=auth("carol-token")
     )
     assert denied.status_code == 403
+
+
+async def test_password_login_reports_email_taken_by_other_account(env: Env) -> None:
+    env.upstream.kc_users["kc-admin"] = {
+        "id": "kc-admin",
+        "username": "admin",
+        "email": "zhangsan@example.com",
+        "enabled": True,
+        "attributes": {"org_id": ["org-demo"]},
+    }
+    alice = auth("alice-token")
+    await env.api.get("/api/v1/auth/me", headers=alice)
+    resp = await env.api.post(
+        f"/api/v1/admin/users/{env.ids['zhangsan']}/password-login", headers=alice
+    )
+    assert resp.status_code == 409, resp.text
+    body = resp.json()
+    assert body["code"] == "KEYCLOAK_CONFLICT" and "邮箱" in body["message"]
+    assert env.upstream.kc_passwords == {}
 
 
 async def test_password_login_refuses_account_of_another_org(env: Env) -> None:

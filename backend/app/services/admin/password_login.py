@@ -17,9 +17,14 @@ PASSWORD_ALPHABET = string.ascii_letters + string.digits
 
 
 def temporary_password(length: int = 12) -> str:
+    # Must satisfy the prod realm policy: length(12) + upper + lower + digit.
     while True:
         value = "".join(secrets.choice(PASSWORD_ALPHABET) for _ in range(length))
-        if any(c.isdigit() for c in value) and any(c.isalpha() for c in value):
+        if (
+            any(c.isdigit() for c in value)
+            and any(c.isupper() for c in value)
+            and any(c.islower() for c in value)
+        ):
             return value
 
 

@@ -20,6 +20,20 @@ class KeycloakAdminError(AppError):
     message = "Keycloak admin request failed"
 
 
+_CONFLICT_MESSAGES = {
+    "User exists with same email": "该邮箱已被其他 Keycloak 账号使用，请修改其中一方的邮箱",
+    "User exists with same username": "Keycloak 中已存在同名账号",
+}
+
+
+def _conflict_message(resp: httpx.Response) -> str:
+    try:
+        raw = str(resp.json().get("errorMessage") or "")
+    except ValueError:
+        raw = ""
+    return _CONFLICT_MESSAGES.get(raw) or f"Keycloak 账号冲突（{raw or 'HTTP 409'}）"
+
+
 class KeycloakAdmin:
     def __init__(
         self,
@@ -104,6 +118,13 @@ class KeycloakAdmin:
                 "Keycloak 管理账号权限不足（需要 realm-management 的 manage-users / view-users）",
                 code="KEYCLOAK_ADMIN_FORBIDDEN",
                 detail={"path": path},
+            )
+        if resp.status_code == 409:
+            raise KeycloakAdminError(
+                _conflict_message(resp),
+                code="KEYCLOAK_CONFLICT",
+                status_code=409,
+                detail={"path": path, "body": resp.text[:300]},
             )
         if resp.status_code >= 400:
             raise KeycloakAdminError(
