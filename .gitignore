@@ -19,6 +19,9 @@ deploy/.env.prod
 deploy/.env.prod.server
 deploy/observability/metrics-token
 deploy/backups/
+deploy/certs/*.pem
+deploy/certs/*.key
+deploy/certs/*.crt
 
 # IDE / OS
 .idea/

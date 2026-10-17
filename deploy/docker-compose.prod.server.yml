@@ -4,10 +4,12 @@
 # Usage (on the Linux server):
 #   cp .env.prod.server.example .env.prod.server   # fill secrets + PG/Redis
 #   # create DBs: CREATE DATABASE ekb; CREATE DATABASE keycloak;
+#   # HTTPS (self-signed): put cert.pem + key.pem in SSL_CERT_DIR (default ./certs)
 #   docker compose -f docker-compose.prod.server.yml --env-file .env.prod.server up -d --build --wait
 #
 # host.docker.internal -> host gateway (Docker 20.10+). Point POSTGRES_HOST/REDIS_HOST at it
 # when PG/Redis listen on the host, or use the LAN IP if they listen on 10.10.130.170.
+# TLS gateway: 8443→frontend, 8444→Keycloak, 9443→MinIO (avoid BT/panel :443).
 name: ekb-prod
 
 x-host-gateway: &host-gateway
@@ -324,6 +326,25 @@ services:
         condition: service_healthy
       keycloak-setup:
         condition: service_completed_successfully
+
+  # Self-signed / LAN TLS edge (cert.pem + key.pem under SSL_CERT_DIR).
+  tls-gateway:
+    <<: [*restart, *logging]
+    image: nginx:1.27-alpine
+    ports:
+      - "${TLS_BIND:-0.0.0.0}:${TLS_HTTPS_PORT:-8443}:443"
+      - "${TLS_BIND:-0.0.0.0}:${TLS_KEYCLOAK_PORT:-8444}:8443"
+      - "${TLS_BIND:-0.0.0.0}:${TLS_MINIO_PORT:-9443}:9443"
+    volumes:
+      - ./nginx/tls-gateway.conf:/etc/nginx/conf.d/default.conf:ro
+      - ${SSL_CERT_DIR:-./certs}:/etc/nginx/certs:ro
+    depends_on:
+      frontend:
+        condition: service_started
+      keycloak:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
 
   backup-postgres:
     <<: [*restart, *logging, *host-gateway]
