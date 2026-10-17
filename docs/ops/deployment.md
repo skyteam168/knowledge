@@ -86,6 +86,7 @@ $DC --profile observability up -d
 
 ## 7. 运维文档
 
+- [单机部署（复用宿主机 PG / Redis + 自签 HTTPS）](deployment-server.md)
 - [备份与恢复](backup-restore.md)
 - [索引重建与一致性修复](reindex.md)
 - [更换 embedding 模型](embedding-migration.md)

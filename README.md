@@ -48,6 +48,8 @@ Keycloak 预置 realm `ekb`：客户端 `ekb-frontend`（public + PKCE）、`ekb
 测试用户 `alice`(kb_admin) / `bob`(kb_editor) / `carol`(kb_viewer)，密码均为 `password`，
 组 `engineering`、`sales`，用户属性 `org_id=org-demo`（映射到 token claim `org_id`、`groups`）。
 
+生产部署见 [docs/ops/deployment.md](docs/ops/deployment.md)；复用服务器已有 PostgreSQL / Redis、局域网 IP + 自签 HTTPS 的单机部署（含 Keycloak 管理员创建与排障）见 [docs/ops/deployment-server.md](docs/ops/deployment-server.md)。
+
 ## 本地开发
 
 依赖：Docker、Python 3.11 + [uv](https://docs.astral.sh/uv/)、Node 22。
