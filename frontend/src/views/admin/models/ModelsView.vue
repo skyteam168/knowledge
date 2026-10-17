@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { HttpError } from '@/api/http'
@@ -31,21 +32,26 @@ import { formatDateTime } from '@/utils/format'
 type Tab = 'routes' | 'models' | 'providers'
 type TagType = 'primary' | 'success' | 'warning' | 'info' | 'danger'
 
-const SCENE_LABELS: Record<ModelScene, string> = {
-  chat: '对话',
-  chat_fallback: '备用对话',
-  embedding: '向量（Embedding）',
-  rerank: '重排（Rerank）',
+const KINDS: ModelKind[] = ['chat', 'embedding', 'rerank']
+const SOURCE_TYPES: Record<ModelSceneInfo['source'], TagType> = {
+  page: 'success',
+  config: 'info',
+  index: 'warning',
 }
-const KIND_LABELS: Record<ModelKind, string> = {
-  chat: '对话',
-  embedding: '向量',
-  rerank: '重排',
+
+const { t } = useI18n()
+
+function sceneLabel(scene: ModelScene): string {
+  return t(`models.scene.${scene}`)
 }
-const SOURCE_LABELS: Record<ModelSceneInfo['source'], { label: string; type: TagType }> = {
-  page: { label: '页面配置', type: 'success' },
-  config: { label: '部署配置', type: 'info' },
-  index: { label: '随索引固定', type: 'warning' },
+
+const kindLabels = computed(
+  () =>
+    Object.fromEntries(KINDS.map((k) => [k, t(`models.kind.${k}`)])) as Record<ModelKind, string>,
+)
+
+function sourceTag(source: ModelSceneInfo['source']): { label: string; type: TagType } {
+  return { label: t(`models.source.${source}`), type: SOURCE_TYPES[source] }
 }
 
 const tab = ref<Tab>('routes')
@@ -61,13 +67,18 @@ async function runCheck(modelId: string, name: string): Promise<void> {
   try {
     const r = await checkModel(modelId)
     if (r.ok) {
-      const parts = [`${name} 可用，耗时 ${r.latency_ms} ms`]
-      if (r.first_token_ms !== null) parts.push(`首字 ${r.first_token_ms} ms`)
-      if (r.sample) parts.push(`返回：${r.sample}`)
-      ElMessage.success({ message: parts.join('，'), duration: 5000 })
+      const parts = [t('models.check.ok', { name, ms: r.latency_ms })]
+      if (r.first_token_ms !== null) {
+        parts.push(t('models.check.firstToken', { ms: r.first_token_ms }))
+      }
+      if (r.sample) parts.push(t('models.check.sample', { sample: r.sample }))
+      ElMessage.success({ message: parts.join(t('models.check.separator')), duration: 5000 })
       if (r.warning) ElMessage.warning({ message: r.warning, duration: 8000 })
     } else {
-      ElMessage.error({ message: `${name} 不可用：${r.message}`, duration: 8000 })
+      ElMessage.error({
+        message: t('models.check.failed', { name, message: r.message }),
+        duration: 8000,
+      })
     }
     await Promise.all([loadOverview(), loadModels()])
   } finally {
@@ -76,9 +87,9 @@ async function runCheck(modelId: string, name: string): Promise<void> {
 }
 
 function checkTag(status: string | null): { label: string; type: TagType } {
-  if (status === 'ok') return { label: '正常', type: 'success' }
-  if (status === 'error') return { label: '异常', type: 'danger' }
-  return { label: '未检测', type: 'info' }
+  if (status === 'ok') return { label: t('models.checkStatus.ok'), type: 'success' }
+  if (status === 'error') return { label: t('models.checkStatus.error'), type: 'danger' }
+  return { label: t('models.checkStatus.none'), type: 'info' }
 }
 
 // ---- scene routing ----------------------------------------------------------------
@@ -105,7 +116,7 @@ function resetRouteForm(): void {
 }
 
 function optionLabel(m: ModelItem): string {
-  return `${m.name}（${m.provider_name}）`
+  return t('models.optionLabel', { name: m.name, provider: m.provider_name })
 }
 
 async function submitRoutes(chatId: string | null, fallbackId: string | null, force = false) {
@@ -119,22 +130,32 @@ async function submitRoutes(chatId: string | null, fallbackId: string | null, fo
     resetRouteForm()
     ElMessage.success(
       chatId
-        ? `已切换，当前服务立即生效，其他服务 ${overview.value.refresh_seconds} 秒内生效`
-        : '已恢复为部署配置',
+        ? t('models.routes.switched', { seconds: overview.value.refresh_seconds })
+        : t('models.routes.restored'),
     )
     await loadModels()
   } catch (e) {
     if (e instanceof HttpError && e.code === 'MODEL_CHECK_FAILED') {
       const failures = (e.detail as ModelCheckFailure[]) ?? []
       const text = failures
-        .map((f) => `${SCENE_LABELS[f.scene]}「${f.model}」：${f.message}`)
+        .map((f) =>
+          t('models.routes.failureLine', {
+            scene: sceneLabel(f.scene),
+            model: f.model,
+            message: f.message,
+          }),
+        )
         .join('\n')
       await loadModels()
       try {
         await ElMessageBox.confirm(
-          `${text}\n\n模型检测未通过，强制切换可能导致 AI 助手无法回答。仍要切换吗？`,
-          '模型检测未通过',
-          { type: 'warning', confirmButtonText: '仍然切换', cancelButtonText: '取消' },
+          t('models.routes.forceConfirm', { failures: text }),
+          t('models.routes.forceTitle'),
+          {
+            type: 'warning',
+            confirmButtonText: t('models.routes.forceButton'),
+            cancelButtonText: t('common.cancel'),
+          },
         )
       } catch {
         return
@@ -152,18 +173,16 @@ async function submitRoutes(chatId: string | null, fallbackId: string | null, fo
 
 async function saveRoutes(): Promise<void> {
   if (!routeForm.chat) {
-    ElMessage.warning('请选择对话模型')
+    ElMessage.warning(t('models.routes.selectChat'))
     return
   }
   await submitRoutes(routeForm.chat, routeForm.fallback || null)
 }
 
 async function resetRoutes(): Promise<void> {
-  await ElMessageBox.confirm(
-    '恢复后对话将使用部署配置（deploy/.env）中的模型，确定吗？',
-    '恢复为部署配置',
-    { type: 'warning' },
-  )
+  await ElMessageBox.confirm(t('models.routes.resetConfirm'), t('models.routes.resetToConfig'), {
+    type: 'warning',
+  })
   await submitRoutes(null, null)
 }
 
@@ -245,7 +264,7 @@ async function saveModel(): Promise<void> {
         name: modelEditor.name.trim(),
       })
     }
-    ElMessage.success('已保存')
+    ElMessage.success(t('common.saved'))
     modelEditor.visible = false
     await Promise.all([loadModels(), loadProviders(), loadOverview()])
   } finally {
@@ -254,9 +273,13 @@ async function saveModel(): Promise<void> {
 }
 
 async function removeModel(model: ModelItem): Promise<void> {
-  await ElMessageBox.confirm(`确定删除模型「${model.name}」？`, '删除', { type: 'warning' })
+  await ElMessageBox.confirm(
+    t('models.list.deleteConfirm', { name: model.name }),
+    t('common.delete'),
+    { type: 'warning' },
+  )
   await deleteModel(model.id)
-  ElMessage.success('已删除')
+  ElMessage.success(t('common.deleted'))
   await Promise.all([loadModels(), loadProviders()])
 }
 
@@ -311,7 +334,7 @@ async function saveProvider(): Promise<void> {
     } else {
       await createModelProvider(body)
     }
-    ElMessage.success('已保存')
+    ElMessage.success(t('common.saved'))
     providerEditor.visible = false
     await Promise.all([loadProviders(), loadModels(), loadOverview()])
   } finally {
@@ -322,7 +345,9 @@ async function saveProvider(): Promise<void> {
 async function toggleProvider(provider: ModelProvider, enabled: boolean): Promise<void> {
   try {
     await updateModelProvider(provider.id, { enabled })
-    ElMessage.success(enabled ? '已启用' : '已停用')
+    ElMessage.success(
+      enabled ? t('models.providers.enabledToast') : t('models.providers.disabledToast'),
+    )
   } finally {
     await Promise.all([loadProviders(), loadModels()])
   }
@@ -332,8 +357,15 @@ async function syncProvider(provider: ModelProvider): Promise<void> {
   syncing.value[provider.id] = true
   try {
     const r = await syncProviderModels(provider.id)
-    const extra = r.missing.length ? `，${r.missing.length} 个已不在列表中` : ''
-    ElMessage.success(`共列出 ${r.listed} 个模型，新增 ${r.added} 个${extra}`)
+    ElMessage.success(
+      r.missing.length
+        ? t('models.providers.syncResultMissing', {
+            listed: r.listed,
+            added: r.added,
+            missing: r.missing.length,
+          })
+        : t('models.providers.syncResult', { listed: r.listed, added: r.added }),
+    )
     await Promise.all([loadProviders(), loadModels()])
   } finally {
     syncing.value[provider.id] = false
@@ -342,12 +374,12 @@ async function syncProvider(provider: ModelProvider): Promise<void> {
 
 async function removeProvider(provider: ModelProvider): Promise<void> {
   await ElMessageBox.confirm(
-    `确定删除提供方「${provider.name}」及其 ${provider.model_count} 个模型？`,
-    '删除',
+    t('models.providers.deleteConfirm', { name: provider.name, count: provider.model_count }),
+    t('common.delete'),
     { type: 'warning' },
   )
   await deleteModelProvider(provider.id)
-  ElMessage.success('已删除')
+  ElMessage.success(t('common.deleted'))
   await Promise.all([loadProviders(), loadModels()])
 }
 
@@ -360,46 +392,49 @@ onMounted(async () => {
 <template>
   <el-card shadow="never" class="models">
     <el-tabs v-model="tab">
-      <el-tab-pane label="场景路由" name="routes">
+      <el-tab-pane :label="t('models.routes.tab')" name="routes">
         <el-table :data="overview?.scenes ?? []" size="small" class="scenes">
-          <el-table-column label="场景" width="150">
-            <template #default="{ row }">{{ SCENE_LABELS[row.scene as ModelScene] }}</template>
+          <el-table-column :label="t('models.routes.scene')" width="150">
+            <template #default="{ row }">{{ sceneLabel(row.scene as ModelScene) }}</template>
           </el-table-column>
-          <el-table-column label="当前模型" min-width="180">
+          <el-table-column :label="t('models.routes.currentModel')" min-width="180">
             <template #default="{ row }">
               <span v-if="row.model" class="mono">{{ row.model }}</span>
-              <el-text v-else type="info">未设置</el-text>
-              <div v-if="row.dim" class="sub">{{ row.dim }} 维</div>
+              <el-text v-else type="info">{{ t('models.routes.notSet') }}</el-text>
+              <div v-if="row.dim" class="sub">{{ t('models.routes.dim', { dim: row.dim }) }}</div>
             </template>
           </el-table-column>
-          <el-table-column label="接口地址" min-width="260" show-overflow-tooltip>
+          <el-table-column
+            :label="t('models.routes.baseUrl')"
+            min-width="260"
+            show-overflow-tooltip
+          >
             <template #default="{ row }">
               <span class="mono">{{ row.base_url ?? '—' }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="来源" width="110">
+          <el-table-column :label="t('models.routes.source')" width="110">
             <template #default="{ row }">
-              <el-tag
-                :type="SOURCE_LABELS[row.source as ModelSceneInfo['source']].type"
-                size="small"
-              >
-                {{ SOURCE_LABELS[row.source as ModelSceneInfo['source']].label }}
+              <el-tag :type="sourceTag(row.source as ModelSceneInfo['source']).type" size="small">
+                {{ sourceTag(row.source as ModelSceneInfo['source']).label }}
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="状态" width="90">
+          <el-table-column :label="t('common.status')" width="90">
             <template #default="{ row }">
               <el-tag :type="checkTag(row.last_check_status).type" size="small">
                 {{ checkTag(row.last_check_status).label }}
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="说明" min-width="220">
+          <el-table-column :label="t('models.routes.note')" min-width="220">
             <template #default="{ row }">
-              <span class="sub">{{ row.note ?? (row.editable ? '可在下方切换' : '') }}</span>
+              <span class="sub">{{
+                row.note ?? (row.editable ? t('models.routes.editableBelow') : '')
+              }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="90" fixed="right">
+          <el-table-column :label="t('common.actions')" width="90" fixed="right">
             <template #default="{ row }">
               <el-button
                 v-if="row.model_id"
@@ -408,22 +443,22 @@ onMounted(async () => {
                 :loading="checking[row.model_id]"
                 @click="runCheck(row.model_id, row.model)"
               >
-                检测
+                {{ t('models.check.run') }}
               </el-button>
-              <el-tooltip v-else-if="row.model" content="该模型不在模型列表中，请先同步或添加">
-                <el-text type="info" size="small">无法检测</el-text>
+              <el-tooltip v-else-if="row.model" :content="t('models.check.notInList')">
+                <el-text type="info" size="small">{{ t('models.check.unavailable') }}</el-text>
               </el-tooltip>
             </template>
           </el-table-column>
         </el-table>
 
-        <el-card shadow="never" header="切换对话模型" class="route-form">
+        <el-card shadow="never" :header="t('models.routes.formTitle')" class="route-form">
           <el-form label-width="110px" @submit.prevent="saveRoutes">
-            <el-form-item label="对话模型" required>
+            <el-form-item :label="t('models.routes.chatModel')" required>
               <el-select
                 v-model="routeForm.chat"
                 filterable
-                placeholder="选择类型为「对话」的模型"
+                :placeholder="t('models.routes.chatPlaceholder')"
                 style="width: 420px"
               >
                 <el-option
@@ -434,12 +469,12 @@ onMounted(async () => {
                 />
               </el-select>
             </el-form-item>
-            <el-form-item label="备用对话模型">
+            <el-form-item :label="t('models.routes.fallbackModel')">
               <el-select
                 v-model="routeForm.fallback"
                 filterable
                 clearable
-                placeholder="可选：主模型失败时自动改用"
+                :placeholder="t('models.routes.fallbackPlaceholder')"
                 style="width: 420px"
               >
                 <el-option
@@ -452,29 +487,27 @@ onMounted(async () => {
             </el-form-item>
             <el-form-item>
               <el-button type="primary" native-type="submit" :loading="savingRoutes">
-                检测并切换
+                {{ t('models.routes.checkAndSwitch') }}
               </el-button>
               <el-button v-if="pageRouting" :disabled="savingRoutes" @click="resetRoutes">
-                恢复为部署配置
+                {{ t('models.routes.resetToConfig') }}
               </el-button>
             </el-form-item>
           </el-form>
           <div class="sub">
-            保存前会自动检测所选模型，检测通过才会切换；切换后当前服务立即生效，其他服务在
-            {{ overview?.refresh_seconds ?? 5 }}
-            秒内生效，无需重启。向量与重排模型关系到已建索引和检索质量，此处只读。
+            {{ t('models.routes.help', { seconds: overview?.refresh_seconds ?? 5 }) }}
           </div>
         </el-card>
       </el-tab-pane>
 
-      <el-tab-pane :label="`模型 (${modelTotal})`" name="models">
+      <el-tab-pane :label="t('models.list.tab', { count: modelTotal })" name="models">
         <div class="toolbar">
           <el-form :inline="true" @submit.prevent="searchModels">
             <el-form-item>
               <el-select
                 v-model="modelFilters.provider_id"
                 clearable
-                placeholder="全部提供方"
+                :placeholder="t('models.list.allProviders')"
                 style="width: 180px"
                 @change="searchModels"
               >
@@ -485,12 +518,12 @@ onMounted(async () => {
               <el-select
                 v-model="modelFilters.kind"
                 clearable
-                placeholder="全部类型"
+                :placeholder="t('models.list.allKinds')"
                 style="width: 120px"
                 @change="searchModels"
               >
                 <el-option
-                  v-for="(label, kind) in KIND_LABELS"
+                  v-for="(label, kind) in kindLabels"
                   :key="kind"
                   :label="label"
                   :value="kind"
@@ -501,13 +534,13 @@ onMounted(async () => {
               <el-input
                 v-model="modelFilters.keyword"
                 clearable
-                placeholder="模型名称"
+                :placeholder="t('models.list.namePlaceholder')"
                 style="width: 200px"
                 @clear="searchModels"
               />
             </el-form-item>
             <el-form-item>
-              <el-button native-type="submit">查询</el-button>
+              <el-button native-type="submit">{{ t('models.list.query') }}</el-button>
             </el-form-item>
           </el-form>
           <el-button
@@ -516,31 +549,43 @@ onMounted(async () => {
             :disabled="!providers.length"
             @click="openModelEditor()"
           >
-            添加模型
+            {{ t('models.list.add') }}
           </el-button>
         </div>
-        <el-table v-loading="loadingModels" :data="models" size="small" empty-text="暂无模型">
-          <el-table-column label="模型" min-width="200" show-overflow-tooltip>
+        <el-table
+          v-loading="loadingModels"
+          :data="models"
+          size="small"
+          :empty-text="t('models.list.empty')"
+        >
+          <el-table-column :label="t('models.list.model')" min-width="200" show-overflow-tooltip>
             <template #default="{ row }">
               <span class="mono">{{ row.name }}</span>
               <el-tag v-for="s in row.scenes" :key="s" size="small" type="success" class="tag">
-                {{ SCENE_LABELS[s as ModelScene] }}
+                {{ sceneLabel(s as ModelScene) }}
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="类型" width="80">
-            <template #default="{ row }">{{ KIND_LABELS[row.kind as ModelKind] }}</template>
+          <el-table-column :label="t('models.list.kind')" width="80">
+            <template #default="{ row }">{{ kindLabels[row.kind as ModelKind] }}</template>
           </el-table-column>
-          <el-table-column prop="provider_name" label="提供方" width="160" show-overflow-tooltip />
-          <el-table-column label="接口地址" min-width="240" show-overflow-tooltip>
+          <el-table-column
+            prop="provider_name"
+            :label="t('models.list.provider')"
+            width="160"
+            show-overflow-tooltip
+          />
+          <el-table-column :label="t('models.list.baseUrl')" min-width="240" show-overflow-tooltip>
             <template #default="{ row }">
               <span class="mono">{{ row.effective_base_url }}{{ row.path ?? '' }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="来源" width="80">
-            <template #default="{ row }">{{ row.origin === 'synced' ? '同步' : '手动' }}</template>
+          <el-table-column :label="t('models.list.source')" width="80">
+            <template #default="{ row }">{{
+              row.origin === 'synced' ? t('models.list.synced') : t('models.list.manual')
+            }}</template>
           </el-table-column>
-          <el-table-column label="最近检测" width="200">
+          <el-table-column :label="t('models.list.lastCheck')" width="200">
             <template #default="{ row }">
               <el-tooltip
                 :disabled="!row.last_check_message"
@@ -556,7 +601,7 @@ onMounted(async () => {
               </span>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="160" fixed="right">
+          <el-table-column :label="t('common.actions')" width="160" fixed="right">
             <template #default="{ row }">
               <el-button
                 link
@@ -564,18 +609,18 @@ onMounted(async () => {
                 :loading="checking[row.id]"
                 @click="runCheck(row.id, row.name)"
               >
-                检测
+                {{ t('models.check.run') }}
               </el-button>
-              <el-button link type="primary" @click="openModelEditor(row as ModelItem)"
-                >编辑</el-button
-              >
+              <el-button link type="primary" @click="openModelEditor(row as ModelItem)">{{
+                t('common.edit')
+              }}</el-button>
               <el-button
                 link
                 type="danger"
                 :disabled="row.scenes.length > 0"
                 @click="removeModel(row as ModelItem)"
               >
-                删除
+                {{ t('common.delete') }}
               </el-button>
             </template>
           </el-table-column>
@@ -592,42 +637,57 @@ onMounted(async () => {
         />
       </el-tab-pane>
 
-      <el-tab-pane :label="`提供方 (${providers.length})`" name="providers">
+      <el-tab-pane :label="t('models.providers.tab', { count: providers.length })" name="providers">
         <div class="toolbar">
-          <el-button type="primary" :icon="Plus" @click="openProviderEditor()"
-            >添加提供方</el-button
-          >
-          <span class="sub">内部推理服务、阿里云百炼等，统一按 OpenAI 兼容接口访问</span>
+          <el-button type="primary" :icon="Plus" @click="openProviderEditor()">{{
+            t('models.providers.add')
+          }}</el-button>
+          <span class="sub">{{ t('models.providers.hint') }}</span>
         </div>
         <el-table
           v-loading="loadingProviders"
           :data="providers"
           size="small"
-          empty-text="暂无提供方"
+          :empty-text="t('models.providers.empty')"
         >
-          <el-table-column prop="name" label="名称" min-width="160" show-overflow-tooltip />
-          <el-table-column label="接口地址" min-width="280" show-overflow-tooltip>
+          <el-table-column
+            prop="name"
+            :label="t('common.name')"
+            min-width="160"
+            show-overflow-tooltip
+          />
+          <el-table-column
+            :label="t('models.providers.baseUrl')"
+            min-width="280"
+            show-overflow-tooltip
+          >
             <template #default="{ row }"
               ><span class="mono">{{ row.base_url }}</span></template
             >
           </el-table-column>
-          <el-table-column label="密钥" width="130">
+          <el-table-column :label="t('models.providers.apiKey')" width="130">
             <template #default="{ row }">
-              <span class="mono sub">{{ row.has_api_key ? row.api_key_hint : '未设置' }}</span>
+              <span class="mono sub">{{
+                row.has_api_key ? row.api_key_hint : t('models.providers.notSet')
+              }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="model_count" label="模型数" width="80" />
-          <el-table-column label="来源" width="90">
+          <el-table-column
+            prop="model_count"
+            :label="t('models.providers.modelCount')"
+            width="80"
+          />
+          <el-table-column :label="t('models.providers.source')" width="90">
             <template #default="{ row }">{{
-              row.source === 'env' ? '部署配置' : '手动添加'
+              row.source === 'env' ? t('models.providers.fromConfig') : t('models.providers.manual')
             }}</template>
           </el-table-column>
-          <el-table-column label="添加时间" width="160">
+          <el-table-column :label="t('models.providers.addedAt')" width="160">
             <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
           </el-table-column>
-          <el-table-column label="启用" width="80">
+          <el-table-column :label="t('common.enabled')" width="80">
             <template #default="{ row }">
-              <el-tooltip :disabled="!row.in_use" content="正在用于对话，不能停用">
+              <el-tooltip :disabled="!row.in_use" :content="t('models.providers.inUse')">
                 <el-switch
                   :model-value="row.enabled"
                   :disabled="row.in_use && row.enabled"
@@ -639,7 +699,7 @@ onMounted(async () => {
               </el-tooltip>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="200" fixed="right">
+          <el-table-column :label="t('common.actions')" width="200" fixed="right">
             <template #default="{ row }">
               <el-button
                 link
@@ -647,18 +707,18 @@ onMounted(async () => {
                 :loading="syncing[row.id]"
                 @click="syncProvider(row as ModelProvider)"
               >
-                同步模型
+                {{ t('models.providers.syncModels') }}
               </el-button>
-              <el-button link type="primary" @click="openProviderEditor(row as ModelProvider)"
-                >编辑</el-button
-              >
+              <el-button link type="primary" @click="openProviderEditor(row as ModelProvider)">{{
+                t('common.edit')
+              }}</el-button>
               <el-button
                 link
                 type="danger"
                 :disabled="row.in_use"
                 @click="removeProvider(row as ModelProvider)"
               >
-                删除
+                {{ t('common.delete') }}
               </el-button>
             </template>
           </el-table-column>
@@ -668,20 +728,28 @@ onMounted(async () => {
 
     <el-dialog
       v-model="providerEditor.visible"
-      :title="providerEditor.id ? '编辑提供方' : '添加提供方'"
+      :title="
+        providerEditor.id
+          ? t('models.providerEditor.editTitle')
+          : t('models.providerEditor.addTitle')
+      "
       width="560px"
     >
       <el-form label-width="90px" @submit.prevent="saveProvider">
-        <el-form-item label="名称" required>
-          <el-input v-model="providerEditor.name" maxlength="128" placeholder="例如：阿里云百炼" />
+        <el-form-item :label="t('common.name')" required>
+          <el-input
+            v-model="providerEditor.name"
+            maxlength="128"
+            :placeholder="t('models.providerEditor.namePlaceholder')"
+          />
         </el-form-item>
-        <el-form-item label="接口地址" required>
+        <el-form-item :label="t('models.providers.baseUrl')" required>
           <el-input
             v-model="providerEditor.base_url"
             placeholder="https://.../compatible-mode/v1"
           />
         </el-form-item>
-        <el-form-item label="密钥">
+        <el-form-item :label="t('models.providers.apiKey')">
           <el-input
             v-model="providerEditor.api_key"
             type="password"
@@ -689,32 +757,36 @@ onMounted(async () => {
             autocomplete="new-password"
             :placeholder="
               providerEditor.id
-                ? `留空则不修改${providerEditor.hint ? `（当前 ${providerEditor.hint}）` : ''}`
+                ? providerEditor.hint
+                  ? t('models.providerEditor.keepKeyWithHint', { hint: providerEditor.hint })
+                  : t('models.providerEditor.keepKey')
                 : 'sk-...'
             "
             :disabled="providerEditor.clear_api_key"
           />
         </el-form-item>
         <el-form-item v-if="providerEditor.id && providerEditor.hint">
-          <el-checkbox v-model="providerEditor.clear_api_key">清除已保存的密钥</el-checkbox>
+          <el-checkbox v-model="providerEditor.clear_api_key">{{
+            t('models.providerEditor.clearKey')
+          }}</el-checkbox>
         </el-form-item>
-        <div class="sub">密钥加密保存，任何接口都不会返回明文。</div>
+        <div class="sub">{{ t('models.providerEditor.keyNote') }}</div>
       </el-form>
       <template #footer>
-        <el-button @click="providerEditor.visible = false">取消</el-button>
+        <el-button @click="providerEditor.visible = false">{{ t('common.cancel') }}</el-button>
         <el-button type="primary" :loading="providerEditor.saving" @click="saveProvider">
-          保存
+          {{ t('common.save') }}
         </el-button>
       </template>
     </el-dialog>
 
     <el-dialog
       v-model="modelEditor.visible"
-      :title="modelEditor.id ? '编辑模型' : '添加模型'"
+      :title="modelEditor.id ? t('models.modelEditor.editTitle') : t('models.modelEditor.addTitle')"
       width="560px"
     >
       <el-form label-width="90px" @submit.prevent="saveModel">
-        <el-form-item label="提供方" required>
+        <el-form-item :label="t('models.modelEditor.provider')" required>
           <el-select
             v-model="modelEditor.provider_id"
             :disabled="!!modelEditor.id"
@@ -723,30 +795,38 @@ onMounted(async () => {
             <el-option v-for="p in providers" :key="p.id" :label="p.name" :value="p.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="模型名称" required>
+        <el-form-item :label="t('models.modelEditor.name')" required>
           <el-input
             v-model="modelEditor.name"
             :disabled="!!modelEditor.id"
-            placeholder="与接口中的 model 字段一致，例如 qwen3-rerank"
+            :placeholder="t('models.modelEditor.namePlaceholder')"
           />
         </el-form-item>
-        <el-form-item label="类型" required>
+        <el-form-item :label="t('models.modelEditor.kind')" required>
           <el-radio-group v-model="modelEditor.kind" :disabled="modelEditor.inUse">
-            <el-radio-button v-for="(label, kind) in KIND_LABELS" :key="kind" :value="kind">
+            <el-radio-button v-for="(label, kind) in kindLabels" :key="kind" :value="kind">
               {{ label }}
             </el-radio-button>
           </el-radio-group>
         </el-form-item>
-        <el-form-item label="独立地址">
-          <el-input v-model="modelEditor.base_url" placeholder="可选：与提供方地址不同时填写" />
+        <el-form-item :label="t('models.modelEditor.baseUrl')">
+          <el-input
+            v-model="modelEditor.base_url"
+            :placeholder="t('models.modelEditor.baseUrlPlaceholder')"
+          />
         </el-form-item>
-        <el-form-item v-if="modelEditor.kind === 'rerank'" label="接口路径">
-          <el-input v-model="modelEditor.path" placeholder="可选：例如 /reranks（默认 /rerank）" />
+        <el-form-item v-if="modelEditor.kind === 'rerank'" :label="t('models.modelEditor.path')">
+          <el-input
+            v-model="modelEditor.path"
+            :placeholder="t('models.modelEditor.pathPlaceholder')"
+          />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="modelEditor.visible = false">取消</el-button>
-        <el-button type="primary" :loading="modelEditor.saving" @click="saveModel">保存</el-button>
+        <el-button @click="modelEditor.visible = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" :loading="modelEditor.saving" @click="saveModel">{{
+          t('common.save')
+        }}</el-button>
       </template>
     </el-dialog>
   </el-card>

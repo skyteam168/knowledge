@@ -1,13 +1,17 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+
 defineProps<{
   title: string
   description?: string
 }>()
+
+const { t } = useI18n()
 </script>
 
 <template>
   <el-card shadow="never">
-    <el-empty :description="description ?? '功能建设中，敬请期待'">
+    <el-empty :description="description ?? t('layout.placeholder')">
       <template #image>
         <span />
       </template>

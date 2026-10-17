@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import logoColor from '@/assets/brand/logo-color.png'
 import logoWhite from '@/assets/brand/logo-white.png'
 import logoMark from '@/assets/brand/logo-mark.png'
@@ -8,7 +10,8 @@ withDefaults(defineProps<{ size?: number; collapsed?: boolean }>(), {
   collapsed: false,
 })
 
-const appTitle = import.meta.env.VITE_APP_TITLE ?? '企业知识库'
+const { t } = useI18n()
+const appTitle = computed(() => import.meta.env.VITE_APP_TITLE ?? t('layout.appTitle'))
 </script>
 
 <template>
@@ -25,7 +28,7 @@ const appTitle = import.meta.env.VITE_APP_TITLE ?? '企业知识库'
       <img class="app-logo__full app-logo__full--light" :src="logoColor" :alt="appTitle" />
       <img class="app-logo__full app-logo__full--dark" :src="logoWhite" alt="" aria-hidden="true" />
       <span class="app-logo__divider" />
-      <span class="app-logo__product">知识库</span>
+      <span class="app-logo__product">{{ t('layout.product') }}</span>
     </template>
   </div>
 </template>

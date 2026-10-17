@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { searchPrincipals } from '@/api/knowledge'
 import type { PrincipalOption, UserRef } from '@/api/types'
 
 const props = withDefaults(defineProps<{ initial?: UserRef | null; placeholder?: string }>(), {
   initial: null,
-  placeholder: '搜索用户',
+  placeholder: '',
 })
+const { t } = useI18n()
 const model = defineModel<string | null>({ required: true })
 
 const options = ref<PrincipalOption[]>([])
@@ -43,7 +45,7 @@ watch(
     clearable
     :remote-method="search"
     :loading="loading"
-    :placeholder="placeholder"
+    :placeholder="placeholder || t('curation.userPicker.placeholder')"
     style="width: 100%"
     @focus="options.length <= 1 && search()"
   >

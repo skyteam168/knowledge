@@ -1,22 +1,24 @@
 import type { SearchHit } from '@/api/types'
+import { t } from '@/i18n'
 
-export const DOC_TYPE_LABELS: Record<string, string> = {
+/** Format names are not translated; `text` / `other` go through i18n. */
+const DOC_TYPE_LABELS: Record<string, string> = {
   pdf: 'PDF',
   word: 'Word',
   excel: 'Excel',
   csv: 'CSV',
   ppt: 'PPT',
-  text: '文本',
   markdown: 'Markdown',
   html: 'HTML',
-  other: '其他',
 }
+const TRANSLATED_DOC_TYPES = new Set(['text', 'other'])
 
 export function docTypeLabel(type: string): string {
+  if (TRANSLATED_DOC_TYPES.has(type)) return t(`search.docTypes.${type}`)
   return DOC_TYPE_LABELS[type] ?? type
 }
 
-/** "第 3 页" / "第 3-5 页" / "工作表 库存" / "第 2 张幻灯片", joined with " · ". */
+/** "Page 3" / "Pages 3-5" / "Sheet Stock" / "Slide 2" (localized), joined with " · ". */
 export function hitLocation(
   hit: Pick<SearchHit, 'page_start' | 'page_end' | 'sheet_name' | 'slide_number'>,
 ): string {
@@ -24,12 +26,12 @@ export function hitLocation(
   if (hit.page_start != null) {
     parts.push(
       hit.page_end != null && hit.page_end !== hit.page_start
-        ? `第 ${hit.page_start}-${hit.page_end} 页`
-        : `第 ${hit.page_start} 页`,
+        ? t('search.location.pages', { start: hit.page_start, end: hit.page_end })
+        : t('search.location.page', { page: hit.page_start }),
     )
   }
-  if (hit.sheet_name) parts.push(`工作表 ${hit.sheet_name}`)
-  if (hit.slide_number != null) parts.push(`第 ${hit.slide_number} 张幻灯片`)
+  if (hit.sheet_name) parts.push(t('search.location.sheet', { name: hit.sheet_name }))
+  if (hit.slide_number != null) parts.push(t('search.location.slide', { n: hit.slide_number }))
   return parts.join(' · ')
 }
 

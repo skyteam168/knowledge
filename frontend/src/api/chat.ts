@@ -1,4 +1,5 @@
 import { getValidToken, login } from '@/auth/client'
+import { currentLocale, t } from '@/i18n'
 import { SseParser, type SseEvent } from '@/utils/sse'
 import { HttpError, del, get, isApiErrorBody, post, put } from './http'
 import type {
@@ -83,7 +84,7 @@ async function responseError(resp: Response): Promise<HttpError> {
   if (isApiErrorBody(data)) return new HttpError(resp.status, data)
   return new HttpError(resp.status, {
     code: `HTTP_${resp.status}`,
-    message: `请求失败（${resp.status}）`,
+    message: t('layout.http.failed', { status: resp.status }),
     detail: data,
     trace_id: resp.headers.get('x-trace-id'),
   })
@@ -103,6 +104,7 @@ export async function askQuestion(
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     Accept: 'text/event-stream',
+    'Accept-Language': currentLocale(),
   }
   if (token) headers.Authorization = `Bearer ${token}`
   const resp = await fetch(`${BASE}/chat/conversations/${conversationId}/messages`, {

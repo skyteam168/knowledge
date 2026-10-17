@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onActivated, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter, type LocationQuery } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { Search } from '@element-plus/icons-vue'
 import { listKnowledgeBases } from '@/api/knowledge'
 import { getSearchOptions, listRetrievalProfiles, search } from '@/api/search'
@@ -25,6 +26,7 @@ import {
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const { t } = useI18n()
 
 const form = reactive({
   q: '',
@@ -177,29 +179,41 @@ const stageSummary = computed(() => {
   if (!debug) return []
   const stages = debug.stages as Stages
   const routes = (stages.routes ?? {}) as Record<string, Record<string, unknown>>
-  const rows = Object.entries(routes).map(([name, info]) => ({
-    stage: name === 'sparse' ? 'BM25' : 'Dense',
-    status: String(info.status ?? '-'),
-    detail:
-      `${(info.hits as unknown[] | undefined)?.length ?? 0} 条候选` +
-      (info.took_ms != null ? ` · ${String(info.took_ms)} ms` : ''),
-  }))
+  const rows = Object.entries(routes).map(([name, info]) => {
+    const n = (info.hits as unknown[] | undefined)?.length ?? 0
+    return {
+      stage: name === 'sparse' ? 'BM25' : 'Dense',
+      status: String(info.status ?? '-'),
+      detail:
+        info.took_ms != null
+          ? t('search.candidatesTook', { n, ms: String(info.took_ms) })
+          : t('search.candidates', { n }),
+    }
+  })
   const fusion = stages.fusion ?? {}
   const hydration = stages.hydration ?? {}
   const rerank = stages.rerank ?? {}
   const dropped = Object.entries((hydration.dropped ?? {}) as Record<string, number>)
     .map(([reason, n]) => `${reason} ${n}`)
-    .join('，')
+    .join(t('search.sep.comma'))
+  const requested = String(hydration.requested)
+  const kept = String(hydration.kept)
   rows.push(
     {
-      stage: 'RRF 融合',
+      stage: t('search.rrfFusion'),
       status: 'ok',
-      detail: `k=${String(fusion.k)} · 权重 ${JSON.stringify(fusion.weights)} · 共 ${String(fusion.total)} 条`,
+      detail: t('search.fusionDetail', {
+        k: String(fusion.k),
+        weights: JSON.stringify(fusion.weights),
+        total: String(fusion.total),
+      }),
     },
     {
-      stage: 'PG 权限复核',
+      stage: t('search.aclRecheck'),
       status: 'ok',
-      detail: `请求 ${String(hydration.requested)} · 保留 ${String(hydration.kept)}${dropped ? ` · 剔除 ${dropped}` : ''}`,
+      detail: dropped
+        ? t('search.hydrationDetailDropped', { requested, kept, dropped })
+        : t('search.hydrationDetail', { requested, kept }),
     },
     {
       stage: 'Rerank',
@@ -249,13 +263,13 @@ onActivated(() => {
           v-model="form.q"
           size="large"
           clearable
-          placeholder="输入关键词、编号或问题，例如：差旅报销标准 / HR-2024-001 / 新员工入职需要哪些材料"
+          :placeholder="t('search.placeholder')"
           :prefix-icon="Search"
           @keyup.enter="runSearch"
           @clear="runSearch"
         />
         <el-button type="primary" size="large" :loading="loading" @click="runSearch">
-          搜索
+          {{ t('common.search') }}
         </el-button>
       </div>
       <div class="filters" data-guide="search-filters">
@@ -269,7 +283,7 @@ onActivated(() => {
           clearable
           :remote-method="loadKbs"
           :loading="kbLoading"
-          placeholder="知识库"
+          :placeholder="t('search.knowledgeBase')"
           class="filter"
           @change="runSearch"
         >
@@ -280,11 +294,16 @@ onActivated(() => {
           multiple
           collapse-tags
           clearable
-          placeholder="文档类型"
+          :placeholder="t('search.docType')"
           class="filter"
           @change="runSearch"
         >
-          <el-option v-for="t in options.doc_types" :key="t" :label="docTypeLabel(t)" :value="t" />
+          <el-option
+            v-for="dt in options.doc_types"
+            :key="dt"
+            :label="docTypeLabel(dt)"
+            :value="dt"
+          />
         </el-select>
         <el-select
           v-model="form.tags"
@@ -294,68 +313,76 @@ onActivated(() => {
           default-first-option
           collapse-tags
           clearable
-          placeholder="标签"
+          :placeholder="t('search.tags')"
           class="filter"
           @change="runSearch"
         >
-          <el-option v-for="t in options.tags" :key="t" :label="t" :value="t" />
+          <el-option v-for="tag in options.tags" :key="tag" :label="tag" :value="tag" />
         </el-select>
         <el-date-picker
           v-model="form.days"
           type="daterange"
           value-format="YYYY-MM-DD"
-          start-placeholder="入库开始"
-          end-placeholder="入库结束"
+          :start-placeholder="t('search.ingestStart')"
+          :end-placeholder="t('search.ingestEnd')"
           unlink-panels
           class="date-filter"
           @change="runSearch"
         />
-        <el-button v-if="hasFilters" link type="primary" @click="resetFilters">清除筛选</el-button>
+        <el-button v-if="hasFilters" link type="primary" @click="resetFilters">{{
+          t('search.clearFilters')
+        }}</el-button>
         <div class="spacer" />
         <template v-if="options.can_debug">
           <el-select
             v-if="debugOn"
             v-model="form.profileId"
             clearable
-            placeholder="当前生效策略"
+            :placeholder="t('search.activeProfile')"
             class="profile-filter"
             @change="runSearch"
           >
             <el-option
               v-for="p in profiles"
               :key="p.id ?? 'builtin'"
-              :label="p.is_active ? `${p.name}（生效中）` : p.name"
+              :label="p.is_active ? t('search.profileActive', { name: p.name }) : p.name"
               :value="p.id ?? 'builtin'"
             />
           </el-select>
           <el-switch
             v-model="form.debug"
-            active-text="调试模式"
+            :active-text="t('search.debugMode')"
             @change="(v: string | number | boolean) => toggleDebug(Boolean(v))"
           />
         </template>
       </div>
-      <div class="hint" data-guide="search-syntax">
-        支持行内筛选：<code>kb:知识库名</code> <code>tag:标签</code> <code>type:pdf</code>
-        <code>date:2026-03</code> <code>after:2026-01-01</code>，引号内为精确短语
-      </div>
+      <i18n-t keypath="search.syntaxHint" tag="div" class="hint" data-guide="search-syntax">
+        <template #operators>
+          <code>kb:{{ t('search.syntaxKbName') }}</code>
+          <code>tag:{{ t('search.syntaxTag') }}</code> <code>type:pdf</code>
+          <code>date:2026-03</code> <code>after:2026-01-01</code>
+        </template>
+      </i18n-t>
     </el-card>
 
     <el-card v-if="result" v-loading="loading" shadow="never">
       <div class="summary">
-        <span>
-          找到 <b>{{ result.total }}</b> 条结果，用时 {{ result.took_ms.toFixed(0) }} ms
-        </span>
-        <el-tag v-if="result.cache_hit" size="small" type="info">缓存</el-tag>
-        <el-tag v-for="t in result.exact_terms" :key="t" size="small" effect="plain">
-          精确：{{ t }}
+        <i18n-t keypath="search.summary" tag="span">
+          <template #total>
+            <b>{{ result.total }}</b>
+          </template>
+          <template #ms>{{ result.took_ms.toFixed(0) }}</template>
+        </i18n-t>
+        <el-tag v-if="result.cache_hit" size="small" type="info">{{ t('search.cached') }}</el-tag>
+        <el-tag v-for="term in result.exact_terms" :key="term" size="small" effect="plain">
+          {{ t('search.exactTerm', { term }) }}
         </el-tag>
         <el-tag v-for="kb in result.filters.kbs" :key="kb.id" size="small" type="success">
-          知识库：{{ kb.name }}
+          {{ t('search.kbFilter', { name: kb.name }) }}
         </el-tag>
         <div class="spacer" />
         <el-button v-if="result.debug" size="small" @click="debugPanel = true">
-          检索链路
+          {{ t('search.pipeline') }}
         </el-button>
       </div>
       <el-alert
@@ -364,7 +391,7 @@ onActivated(() => {
         show-icon
         :closable="false"
         class="notice"
-        :title="`部分检索通道不可用，结果可能不完整（${result.degraded.join('；')}）`"
+        :title="t('search.degraded', { channels: result.degraded.join(t('search.sep.semicolon')) })"
       />
       <el-alert
         v-if="result.ignored_operators.length"
@@ -372,7 +399,7 @@ onActivated(() => {
         show-icon
         :closable="false"
         class="notice"
-        :title="`以下筛选条件无法识别，已忽略：${result.ignored_operators.join('  ')}`"
+        :title="t('search.ignoredOperators', { operators: result.ignored_operators.join('  ') })"
       />
       <el-alert
         v-if="result.filters.unresolved_kbs.length"
@@ -380,10 +407,14 @@ onActivated(() => {
         show-icon
         :closable="false"
         class="notice"
-        :title="`未找到或无权访问的知识库：${result.filters.unresolved_kbs.join('、')}`"
+        :title="
+          t('search.unresolvedKbs', {
+            kbs: result.filters.unresolved_kbs.join(t('search.sep.enum')),
+          })
+        "
       />
 
-      <el-empty v-if="!result.items.length" description="没有找到相关内容，换个关键词试试" />
+      <el-empty v-if="!result.items.length" :description="t('search.empty')" />
       <div v-for="hit in result.items" :key="hit.chunk_id" class="hit">
         <div
           class="hit-main"
@@ -395,11 +426,15 @@ onActivated(() => {
           <div class="hit-title">
             <!-- eslint-disable-next-line vue/no-v-html -- server-escaped, only <em> marks -->
             <span class="title" v-html="hit.title_html" />
-            <el-tag v-if="hit.is_ko" size="small" type="success">知识条目</el-tag>
+            <el-tag v-if="hit.is_ko" size="small" type="success">{{
+              t('search.knowledgeObject')
+            }}</el-tag>
             <el-tag v-else size="small" effect="plain">
               {{ docTypeLabel(hit.document.doc_type) }}
             </el-tag>
-            <el-tag v-if="hit.chunk_type === 'table'" size="small" type="warning">表格</el-tag>
+            <el-tag v-if="hit.chunk_type === 'table'" size="small" type="warning">{{
+              t('search.table')
+            }}</el-tag>
           </div>
           <el-breadcrumb separator="›" class="crumbs">
             <el-breadcrumb-item v-for="(h, i) in breadcrumb(hit)" :key="i">{{
@@ -412,52 +447,56 @@ onActivated(() => {
             <span>{{ hit.document.kb_name }}</span>
             <span>{{ hit.document.filename }}</span>
             <span v-if="hitLocation(hit)">{{ hitLocation(hit) }}</span>
-            <span>更新于 {{ formatDateTime(hit.document.updated_at) }}</span>
-            <span v-for="t in hit.document.tags" :key="t" class="tag">#{{ t }}</span>
+            <span>{{
+              t('search.updatedAt', { time: formatDateTime(hit.document.updated_at) })
+            }}</span>
+            <span v-for="tag in hit.document.tags" :key="tag" class="tag">#{{ tag }}</span>
           </div>
         </div>
         <div v-if="result.debug" class="hit-debug">
           <div class="debug-rank">#{{ hit.rank }}</div>
           <el-table :data="scoreRows(hit)" size="small" class="score-table">
-            <el-table-column prop="stage" label="阶段" width="70" />
-            <el-table-column prop="rank" label="排名" width="60" />
-            <el-table-column prop="score" label="分数" />
+            <el-table-column prop="stage" :label="t('search.stage')" width="70" />
+            <el-table-column prop="rank" :label="t('search.rank')" width="60" />
+            <el-table-column prop="score" :label="t('search.score')" />
           </el-table>
         </div>
       </div>
     </el-card>
 
-    <el-drawer v-model="debugPanel" title="检索链路" size="50%">
+    <el-drawer v-model="debugPanel" :title="t('search.pipeline')" size="50%">
       <template v-if="result?.debug">
         <el-descriptions :column="2" border size="small">
-          <el-descriptions-item label="策略">{{ result.profile.name }}</el-descriptions-item>
+          <el-descriptions-item :label="t('search.profile')">{{
+            result.profile.name
+          }}</el-descriptions-item>
           <el-descriptions-item label="Trace">
             <span class="mono">{{ result.trace_id }}</span>
           </el-descriptions-item>
-          <el-descriptions-item label="规范化查询" :span="2">
+          <el-descriptions-item :label="t('search.normalizedQuery')" :span="2">
             {{ result.normalized_query }}
           </el-descriptions-item>
-          <el-descriptions-item label="耗时" :span="2">
+          <el-descriptions-item :label="t('search.timings')" :span="2">
             <span v-for="(ms, key) in result.debug.timings" :key="key" class="timing">
               {{ key }}: {{ ms }}
             </span>
           </el-descriptions-item>
         </el-descriptions>
-        <h4>各阶段</h4>
+        <h4>{{ t('search.stages') }}</h4>
         <el-table :data="stageSummary" size="small">
-          <el-table-column prop="stage" label="阶段" width="120" />
-          <el-table-column label="状态" width="160">
+          <el-table-column prop="stage" :label="t('search.stage')" width="120" />
+          <el-table-column :label="t('common.status')" width="160">
             <template #default="{ row }">
               <el-tag size="small" :type="statusType(row.status)">{{ row.status }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="detail" label="详情" />
+          <el-table-column prop="detail" :label="t('common.detail')" />
         </el-table>
         <el-collapse class="raw">
-          <el-collapse-item title="策略配置" name="config">
+          <el-collapse-item :title="t('search.profileConfig')" name="config">
             <pre class="json">{{ JSON.stringify(result.debug.config, null, 2) }}</pre>
           </el-collapse-item>
-          <el-collapse-item title="完整阶段数据" name="stages">
+          <el-collapse-item :title="t('search.rawStages')" name="stages">
             <pre class="json">{{ JSON.stringify(result.debug.stages, null, 2) }}</pre>
           </el-collapse-item>
         </el-collapse>

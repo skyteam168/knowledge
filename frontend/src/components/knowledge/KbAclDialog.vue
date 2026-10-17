@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { getKnowledgeBaseAcl, setKnowledgeBaseAcl } from '@/api/knowledge'
 import type { AclEntryOut, KbVisibility, KnowledgeBase } from '@/api/types'
@@ -8,6 +9,7 @@ import AclEditor from './AclEditor.vue'
 const props = defineProps<{ kb: KnowledgeBase | null }>()
 const visible = defineModel<boolean>({ required: true })
 const emit = defineEmits<{ saved: [] }>()
+const { t } = useI18n()
 
 const loading = ref(false)
 const saving = ref(false)
@@ -38,7 +40,7 @@ async function submit(): Promise<void> {
         permission,
       })),
     })
-    ElMessage.success('权限已更新')
+    ElMessage.success(t('knowledge.acl.updated'))
     visible.value = false
     emit('saved')
   } finally {
@@ -48,13 +50,17 @@ async function submit(): Promise<void> {
 </script>
 
 <template>
-  <el-dialog v-model="visible" :title="`权限设置：${kb?.name ?? ''}`" width="720px">
+  <el-dialog
+    v-model="visible"
+    :title="t('knowledge.acl.kbTitle', { name: kb?.name ?? '' })"
+    width="720px"
+  >
     <div v-loading="loading">
       <el-form label-width="88px">
-        <el-form-item label="可见范围">
+        <el-form-item :label="t('knowledge.visibility.label')">
           <el-radio-group v-model="visibility">
-            <el-radio value="restricted">仅授权成员</el-radio>
-            <el-radio value="org">组织内所有人可读</el-radio>
+            <el-radio value="restricted">{{ t('knowledge.visibility.restricted') }}</el-radio>
+            <el-radio value="org">{{ t('knowledge.visibility.orgAll') }}</el-radio>
           </el-radio-group>
         </el-form-item>
       </el-form>
@@ -62,14 +68,14 @@ async function submit(): Promise<void> {
         type="info"
         :closable="false"
         show-icon
-        title="此处授权为知识库的默认权限，文档默认继承；授予部门时其下级部门同样生效。"
+        :title="t('knowledge.acl.kbTip')"
         class="tip"
       />
       <AclEditor v-if="visible" v-model="entries" />
     </div>
     <template #footer>
-      <el-button @click="visible = false">取消</el-button>
-      <el-button type="primary" :loading="saving" @click="submit">保存</el-button>
+      <el-button @click="visible = false">{{ t('common.cancel') }}</el-button>
+      <el-button type="primary" :loading="saving" @click="submit">{{ t('common.save') }}</el-button>
     </template>
   </el-dialog>
 </template>

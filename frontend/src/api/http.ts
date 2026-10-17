@@ -6,6 +6,7 @@ import axios, {
 } from 'axios'
 import { ElMessage } from 'element-plus'
 import { getValidToken, login } from '@/auth/client'
+import { currentLocale, t } from '@/i18n'
 import type { ApiErrorBody } from './types'
 
 declare module 'axios' {
@@ -50,12 +51,12 @@ export function toHttpError(error: unknown): HttpError {
     const traceId = (error.response?.headers?.['x-trace-id'] as string | undefined) ?? null
     if (!error.response) {
       const code = error.code === AxiosError.ECONNABORTED ? 'TIMEOUT' : 'NETWORK_ERROR'
-      const message = code === 'TIMEOUT' ? '请求超时，请稍后重试' : '网络异常，请检查网络连接'
+      const message = code === 'TIMEOUT' ? t('layout.http.timeout') : t('layout.http.network')
       return new HttpError(0, { code, message, detail: null, trace_id: null })
     }
     return new HttpError(status, {
       code: `HTTP_${status}`,
-      message: error.message || `请求失败（${status}）`,
+      message: error.message || t('layout.http.failed', { status }),
       detail: data ?? null,
       trace_id: traceId,
     })
@@ -65,7 +66,7 @@ export function toHttpError(error: unknown): HttpError {
 }
 
 function notify(err: HttpError): void {
-  const suffix = err.traceId ? `（trace: ${err.traceId}）` : ''
+  const suffix = err.traceId ? t('layout.http.trace', { id: err.traceId }) : ''
   ElMessage.error({ message: `${err.message}${suffix}`, grouping: true })
 }
 
@@ -76,6 +77,7 @@ export async function attachAuthHeader(
   if (token) {
     config.headers.set('Authorization', `Bearer ${token}`)
   }
+  config.headers.set('Accept-Language', currentLocale())
   return config
 }
 

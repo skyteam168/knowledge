@@ -1,63 +1,80 @@
 import type { DirectorySourceType, RecordSource, SyncStatus } from '@/api/types'
+import { t } from '@/i18n'
 
-export const SOURCE_LABEL: Record<RecordSource, string> = {
-  local: '本地',
-  keycloak: 'Keycloak',
-  wecom: '企业微信',
-  dingtalk: '钉钉',
-  weaver: '泛微OA',
-  excel: 'Excel',
+const RECORD_SOURCES: RecordSource[] = ['local', 'keycloak', 'wecom', 'dingtalk', 'weaver', 'excel']
+
+export function sourceLabel(source: RecordSource): string {
+  return t(`directory.source.${source}`)
 }
 
-export const SOURCE_TYPES: { value: DirectorySourceType; label: string; desc: string }[] = [
-  { value: 'wecom', label: '企业微信', desc: '通讯录 API 同步，支持扫码登录' },
-  { value: 'dingtalk', label: '钉钉', desc: '通讯录 API 同步，支持扫码登录' },
-  {
-    value: 'weaver',
-    label: '泛微 e-cology 9',
-    desc: '只读数据库直连（SQL Server / Oracle / MySQL）',
-  },
-  { value: 'excel', label: 'Excel 导入', desc: '按模板上传，适合没有对接系统的组织' },
-]
+/** Each read translates with the current locale; unknown keys stay `undefined`. */
+export const SOURCE_LABEL = Object.defineProperties(
+  {} as Record<RecordSource, string>,
+  Object.fromEntries(
+    RECORD_SOURCES.map((s) => [s, { enumerable: true, get: () => sourceLabel(s) }]),
+  ),
+)
 
-export const STATUS_INFO: Record<
-  SyncStatus,
-  { label: string; type: 'success' | 'danger' | 'warning' | 'info' }
-> = {
-  running: { label: '进行中', type: 'info' },
-  succeeded: { label: '成功', type: 'success' },
-  failed: { label: '失败', type: 'danger' },
-  aborted: { label: '已中止', type: 'warning' },
+const SOURCE_TYPE_VALUES: DirectorySourceType[] = ['wecom', 'dingtalk', 'weaver', 'excel']
+
+export interface SourceTypeOption {
+  value: DirectorySourceType
+  label: string
+  desc: string
 }
 
-export const ACTION_LABEL: Record<string, string> = {
-  create: '新增',
-  adopt: '接管本地',
-  rename: '改名',
-  move: '移动',
-  order: '排序',
-  restore: '恢复',
-  archive: '归档',
-  update: '更新',
-  disable: '停用',
-  bind: '绑定身份',
-  remove: '解绑',
-  departments: '部门',
-  title: '职务',
-  display_name: '姓名',
-  email: '邮箱',
-  mobile: '手机',
-  employee_no: '工号',
-  job_title: '职务',
-  source: '来源',
-  username: '账号',
+export function sourceTypes(): SourceTypeOption[] {
+  return SOURCE_TYPE_VALUES.map((value) => ({
+    value,
+    label: t(`directory.type.${value}.label`),
+    desc: t(`directory.type.${value}.desc`),
+  }))
 }
 
-export const MATCH_LABEL: Record<string, string> = {
-  employee_no: '工号',
-  mobile: '手机',
-  email: '邮箱',
-  username: '账号',
+type StatusTagType = 'success' | 'danger' | 'warning' | 'info'
+
+const STATUS_TYPE: Record<SyncStatus, StatusTagType> = {
+  running: 'info',
+  succeeded: 'success',
+  failed: 'danger',
+  aborted: 'warning',
+}
+
+export function statusInfo(status: SyncStatus): { label: string; type: StatusTagType } {
+  return { label: t(`directory.status.${status}`), type: STATUS_TYPE[status] }
+}
+
+const ACTIONS = new Set([
+  'create',
+  'adopt',
+  'rename',
+  'move',
+  'order',
+  'restore',
+  'archive',
+  'update',
+  'disable',
+  'bind',
+  'remove',
+  'departments',
+  'title',
+  'display_name',
+  'email',
+  'mobile',
+  'employee_no',
+  'job_title',
+  'source',
+  'username',
+])
+
+export function actionLabel(action: string): string {
+  return ACTIONS.has(action) ? t(`directory.action.${action}`) : action
+}
+
+const MATCHES = new Set(['employee_no', 'mobile', 'email', 'username'])
+
+export function matchLabel(match: string): string {
+  return MATCHES.has(match) ? t(`directory.match.${match}`) : match
 }
 
 export interface ConfigField {
@@ -71,45 +88,33 @@ export interface ConfigField {
   group?: string
 }
 
-export const CONFIG_FIELDS: Record<DirectorySourceType, ConfigField[]> = {
+/** WeCom custom attribute name holding the employee number; a config value, not UI text. */
+export const WECOM_EMPLOYEE_NO_ATTR = '工号'
+
+type FieldDef = Omit<ConfigField, 'label' | 'help' | 'placeholder' | 'group'> & {
+  help?: true
+  /** `true` = translated `directory.field.<key>.placeholder`; a string is shown verbatim. */
+  placeholder?: string | true
+  group?: 'login' | 'advancedSql'
+}
+
+const FIELD_DEFS: Record<DirectorySourceType, FieldDef[]> = {
   wecom: [
-    {
-      key: 'corp_id',
-      label: '企业 ID (CorpID)',
-      required: true,
-      help: '管理后台 → 我的企业 → 企业信息',
-    },
-    {
-      key: 'contacts_secret',
-      label: '通讯录同步 Secret',
-      type: 'password',
-      required: true,
-      help: '管理工具 → 通讯录同步 → 查看 Secret；服务器出口 IP 需加入企业可信 IP',
-    },
-    { key: 'root_department_id', label: '根部门 ID', type: 'number', placeholder: '1' },
-    {
-      key: 'employee_no_attr',
-      label: '工号字段名',
-      placeholder: '工号',
-      help: '成员自定义字段中保存工号的字段名称',
-    },
-    { key: 'agent_id', label: '扫码登录应用 AgentId', group: '扫码登录（可选）' },
-    {
-      key: 'agent_secret',
-      label: '扫码登录应用 Secret',
-      type: 'password',
-      group: '扫码登录（可选）',
-    },
+    { key: 'corp_id', required: true, help: true },
+    { key: 'contacts_secret', type: 'password', required: true, help: true },
+    { key: 'root_department_id', type: 'number', placeholder: '1' },
+    { key: 'employee_no_attr', placeholder: WECOM_EMPLOYEE_NO_ATTR, help: true },
+    { key: 'agent_id', group: 'login' },
+    { key: 'agent_secret', type: 'password', group: 'login' },
   ],
   dingtalk: [
-    { key: 'app_key', label: 'AppKey (Client ID)', required: true },
-    { key: 'app_secret', label: 'AppSecret (Client Secret)', type: 'password', required: true },
-    { key: 'root_dept_id', label: '根部门 ID', type: 'number', placeholder: '1' },
+    { key: 'app_key', required: true },
+    { key: 'app_secret', type: 'password', required: true },
+    { key: 'root_dept_id', type: 'number', placeholder: '1' },
   ],
   weaver: [
     {
       key: 'db_type',
-      label: '数据库类型',
       type: 'select',
       required: true,
       options: [
@@ -118,33 +123,30 @@ export const CONFIG_FIELDS: Record<DirectorySourceType, ConfigField[]> = {
         { label: 'MySQL', value: 'mysql' },
       ],
     },
-    { key: 'host', label: '主机', required: true },
-    { key: 'port', label: '端口', type: 'number', placeholder: '默认 1433 / 1521 / 3306' },
-    { key: 'database', label: '数据库名 / Oracle 服务名', required: true, placeholder: 'ecology' },
-    { key: 'username', label: '只读账号', required: true },
-    { key: 'password', label: '密码', type: 'password', required: true },
-    { key: 'include_subcompanies', label: '同步分部层级', type: 'switch' },
+    { key: 'host', required: true },
+    { key: 'port', type: 'number', placeholder: true },
+    { key: 'database', required: true, placeholder: 'ecology' },
+    { key: 'username', required: true },
+    { key: 'password', type: 'password', required: true },
+    { key: 'include_subcompanies', type: 'switch' },
     {
       key: 'sql_subcompanies',
-      label: '分部 SQL',
       type: 'textarea',
-      group: '高级：覆盖默认 SQL（二开改过表结构时使用，列名需保持一致）',
+      group: 'advancedSql',
       placeholder:
         'SELECT id, subcompanyname AS name, supsubcomid AS parent_id, showorder AS sort_order, canceled FROM HrmSubCompany',
     },
     {
       key: 'sql_departments',
-      label: '部门 SQL',
       type: 'textarea',
-      group: '高级：覆盖默认 SQL（二开改过表结构时使用，列名需保持一致）',
+      group: 'advancedSql',
       placeholder:
         'SELECT id, departmentname AS name, supdepid AS parent_id, subcompanyid1 AS subcompany_id, showorder AS sort_order, canceled FROM HrmDepartment',
     },
     {
       key: 'sql_users',
-      label: '人员 SQL',
       type: 'textarea',
-      group: '高级：覆盖默认 SQL（二开改过表结构时使用，列名需保持一致）',
+      group: 'advancedSql',
       placeholder:
         'SELECT r.id, r.loginid, r.workcode, r.lastname AS name, r.email, r.mobile, r.departmentid, r.status, r.accounttype, r.belongto, j.jobtitlename AS title FROM HrmResource r LEFT JOIN HrmJobTitles j ON j.id = r.jobtitle',
     },
@@ -152,34 +154,39 @@ export const CONFIG_FIELDS: Record<DirectorySourceType, ConfigField[]> = {
   excel: [],
 }
 
+export function configFields(type: DirectorySourceType): ConfigField[] {
+  return FIELD_DEFS[type].map(({ help, placeholder, group, ...def }) => ({
+    ...def,
+    label: t(`directory.field.${def.key}.label`),
+    help: help ? t(`directory.field.${def.key}.help`) : undefined,
+    placeholder: placeholder === true ? t(`directory.field.${def.key}.placeholder`) : placeholder,
+    group: group ? t(`directory.fieldGroup.${group}`) : undefined,
+  }))
+}
+
 export function statLine(
   stats: Record<string, number> | undefined,
-  keys: [string, string][],
+  keys: readonly string[],
 ): string {
   if (!stats) return '—'
   const parts = keys
-    .filter(([k]) => (stats[k] ?? 0) > 0)
-    .map(([k, label]) => `${label} ${stats[k]}`)
-  return parts.length ? parts.join('，') : '无变化'
+    .filter((k) => (stats[k] ?? 0) > 0)
+    .map((k) => t('directory.stat.item', { label: t(`directory.stat.${k}`), count: stats[k] }))
+  return parts.length ? parts.join(t('directory.stat.separator')) : t('directory.stat.noChange')
 }
 
-export const DEPT_STAT_KEYS: [string, string][] = [
-  ['created', '新增'],
-  ['updated', '更新'],
-  ['adopted', '接管'],
-  ['restored', '恢复'],
-  ['archived', '归档'],
+export const DEPT_STAT_KEYS: readonly string[] = [
+  'created',
+  'updated',
+  'adopted',
+  'restored',
+  'archived',
 ]
-export const USER_STAT_KEYS: [string, string][] = [
-  ['created', '新增'],
-  ['updated', '更新'],
-  ['adopted', '接管'],
-  ['restored', '恢复'],
-  ['disabled', '停用'],
+export const USER_STAT_KEYS: readonly string[] = [
+  'created',
+  'updated',
+  'adopted',
+  'restored',
+  'disabled',
 ]
-export const IDENTITY_STAT_KEYS: [string, string][] = [
-  ['bound', '新绑定'],
-  ['kept', '已绑定'],
-  ['removed', '解绑'],
-  ['unmatched', '未匹配'],
-]
+export const IDENTITY_STAT_KEYS: readonly string[] = ['bound', 'kept', 'removed', 'unmatched']

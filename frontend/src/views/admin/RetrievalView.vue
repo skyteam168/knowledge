@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { HttpError } from '@/api/http'
 import {
@@ -19,6 +20,8 @@ import type {
   RetrievalTraceSummary,
 } from '@/api/types'
 import { formatDateTime } from '@/utils/format'
+
+const { t } = useI18n()
 
 const tab = ref('profiles')
 
@@ -44,8 +47,14 @@ function summary(c: RetrievalConfig): string {
   const weights = Object.entries(c.fusion.weights)
     .map(([r, w]) => `${r}×${w}`)
     .join(' ')
-  const rerank = c.rerank.enabled ? `Rerank top${c.rerank.top_n}` : '无 Rerank'
-  return `${routes.join(' + ')} · RRF k=${c.fusion.k} ${weights} · ${rerank} · 输出 ${c.top_k}`
+  const rerank = c.rerank.enabled ? `Rerank top${c.rerank.top_n}` : t('retrieval.profiles.noRerank')
+  return t('retrieval.profiles.summary', {
+    routes: routes.join(' + '),
+    k: c.fusion.k,
+    weights,
+    rerank,
+    topK: c.top_k,
+  })
 }
 
 const editor = reactive({
@@ -77,7 +86,7 @@ async function saveEditor(): Promise<void> {
   try {
     config = JSON.parse(editor.json) as RetrievalConfig
   } catch (e) {
-    editor.error = `JSON 格式错误：${(e as Error).message}`
+    editor.error = t('retrieval.editor.jsonError', { message: (e as Error).message })
     return
   }
   editor.saving = true
@@ -86,7 +95,7 @@ async function saveEditor(): Promise<void> {
     const body = { name: editor.name.trim(), description: editor.description || null, config }
     if (editor.id) await updateRetrievalProfile(editor.id, body)
     else await createRetrievalProfile(body)
-    ElMessage.success('已保存')
+    ElMessage.success(t('common.saved'))
     editor.visible = false
     await loadProfiles()
   } catch (e) {
@@ -100,15 +109,19 @@ async function saveEditor(): Promise<void> {
 
 async function activate(profile: RetrievalProfile): Promise<void> {
   await activateRetrievalProfile(profile.id ?? 'builtin')
-  ElMessage.success(`已切换为「${profile.name}」`)
+  ElMessage.success(t('retrieval.profiles.activated', { name: profile.name }))
   await loadProfiles()
 }
 
 async function remove(profile: RetrievalProfile): Promise<void> {
   if (!profile.id) return
-  await ElMessageBox.confirm(`确定删除检索策略「${profile.name}」？`, '删除', { type: 'warning' })
+  await ElMessageBox.confirm(
+    t('retrieval.profiles.deleteConfirm', { name: profile.name }),
+    t('common.delete'),
+    { type: 'warning' },
+  )
   await deleteRetrievalProfile(profile.id)
-  ElMessage.success('已删除')
+  ElMessage.success(t('common.deleted'))
   await loadProfiles()
 }
 
@@ -157,31 +170,40 @@ onMounted(loadProfiles)
 <template>
   <el-card shadow="never">
     <el-tabs v-model="tab" @tab-change="onTab">
-      <el-tab-pane label="检索策略" name="profiles">
+      <el-tab-pane :label="t('retrieval.profiles.tab')" name="profiles">
         <div class="toolbar">
-          <span class="hint"
-            >每个组织同一时间只有一个生效策略；搜索页调试模式可临时指定任意策略对比效果。</span
-          >
-          <el-button type="primary" @click="openEditor()">新建策略</el-button>
+          <span class="hint">{{ t('retrieval.profiles.hint') }}</span>
+          <el-button type="primary" @click="openEditor()">{{
+            t('retrieval.profiles.create')
+          }}</el-button>
         </div>
         <el-table v-loading="loadingProfiles" :data="profiles" row-key="name">
-          <el-table-column label="名称" min-width="160">
+          <el-table-column :label="t('common.name')" min-width="160">
             <template #default="{ row }">
               <span class="name">{{ row.name }}</span>
-              <el-tag v-if="row.builtin" size="small" type="info">内置</el-tag>
-              <el-tag v-if="row.is_active" size="small" type="success">生效中</el-tag>
+              <el-tag v-if="row.builtin" size="small" type="info">{{
+                t('retrieval.profiles.builtin')
+              }}</el-tag>
+              <el-tag v-if="row.is_active" size="small" type="success">{{
+                t('retrieval.profiles.active')
+              }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="description" label="说明" min-width="160" show-overflow-tooltip />
-          <el-table-column label="参数" min-width="320">
+          <el-table-column
+            prop="description"
+            :label="t('retrieval.profiles.note')"
+            min-width="160"
+            show-overflow-tooltip
+          />
+          <el-table-column :label="t('retrieval.profiles.params')" min-width="320">
             <template #default="{ row }">
               <span class="summary">{{ summary(row.config) }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="更新时间" width="170">
+          <el-table-column :label="t('common.updatedAt')" width="170">
             <template #default="{ row }">{{ formatDateTime(row.updated_at) }}</template>
           </el-table-column>
-          <el-table-column label="操作" width="220" fixed="right">
+          <el-table-column :label="t('common.actions')" width="220" fixed="right">
             <template #default="{ row }">
               <el-button
                 v-if="!row.is_active"
@@ -189,7 +211,7 @@ onMounted(loadProfiles)
                 type="primary"
                 @click="activate(row as RetrievalProfile)"
               >
-                启用
+                {{ t('retrieval.profiles.activate') }}
               </el-button>
               <el-button
                 v-if="!row.builtin"
@@ -197,10 +219,10 @@ onMounted(loadProfiles)
                 type="primary"
                 @click="openEditor(row as RetrievalProfile)"
               >
-                编辑
+                {{ t('common.edit') }}
               </el-button>
               <el-button link type="primary" @click="openEditor(row as RetrievalProfile, true)">
-                复制
+                {{ t('common.copy') }}
               </el-button>
               <el-button
                 v-if="!row.builtin"
@@ -209,45 +231,54 @@ onMounted(loadProfiles)
                 :disabled="row.is_active"
                 @click="remove(row as RetrievalProfile)"
               >
-                删除
+                {{ t('common.delete') }}
               </el-button>
             </template>
           </el-table-column>
         </el-table>
       </el-tab-pane>
 
-      <el-tab-pane label="检索日志" name="traces">
+      <el-tab-pane :label="t('retrieval.traces.tab')" name="traces">
         <div class="toolbar">
           <el-input
             v-model="traceFilters.keyword"
-            placeholder="查询内容"
+            :placeholder="t('retrieval.traces.keywordPlaceholder')"
             clearable
             class="keyword"
             @keyup.enter="searchTraces"
             @clear="searchTraces"
           />
           <el-checkbox v-model="traceFilters.degraded_only" @change="searchTraces">
-            仅看降级
+            {{ t('retrieval.traces.degradedOnly') }}
           </el-checkbox>
-          <el-button @click="searchTraces">查询</el-button>
+          <el-button @click="searchTraces">{{ t('retrieval.traces.search') }}</el-button>
         </div>
         <el-table v-loading="loadingTraces" :data="traces" @row-click="openTrace">
-          <el-table-column label="时间" width="170">
+          <el-table-column :label="t('retrieval.traces.time')" width="170">
             <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
           </el-table-column>
-          <el-table-column prop="query" label="查询" min-width="200" show-overflow-tooltip />
-          <el-table-column prop="profile_name" label="策略" width="130" />
-          <el-table-column prop="result_count" label="结果" width="70" />
-          <el-table-column label="耗时" width="90">
+          <el-table-column
+            prop="query"
+            :label="t('retrieval.traces.query')"
+            min-width="200"
+            show-overflow-tooltip
+          />
+          <el-table-column prop="profile_name" :label="t('retrieval.traces.profile')" width="130" />
+          <el-table-column prop="result_count" :label="t('retrieval.traces.results')" width="70" />
+          <el-table-column :label="t('retrieval.traces.duration')" width="90">
             <template #default="{ row }">{{ row.total_ms }} ms</template>
           </el-table-column>
-          <el-table-column label="状态" min-width="180">
+          <el-table-column :label="t('common.status')" min-width="180">
             <template #default="{ row }">
-              <el-tag v-if="row.cache_hit" size="small" type="info">缓存</el-tag>
+              <el-tag v-if="row.cache_hit" size="small" type="info">{{
+                t('retrieval.traces.cached')
+              }}</el-tag>
               <el-tag v-for="d in row.degraded" :key="d" size="small" type="warning">{{
                 d
               }}</el-tag>
-              <el-tag v-if="row.truncated" size="small">已截断</el-tag>
+              <el-tag v-if="row.truncated" size="small">{{
+                t('retrieval.traces.truncated')
+              }}</el-tag>
             </template>
           </el-table-column>
         </el-table>
@@ -265,58 +296,70 @@ onMounted(loadProfiles)
 
     <el-dialog
       v-model="editor.visible"
-      :title="editor.id ? '编辑检索策略' : '新建检索策略'"
+      :title="editor.id ? t('retrieval.editor.editTitle') : t('retrieval.editor.createTitle')"
       width="720px"
     >
       <el-form label-width="70px">
-        <el-form-item label="名称" required>
+        <el-form-item :label="t('common.name')" required>
           <el-input v-model="editor.name" maxlength="64" />
         </el-form-item>
-        <el-form-item label="说明">
+        <el-form-item :label="t('retrieval.profiles.note')">
           <el-input v-model="editor.description" maxlength="2000" />
         </el-form-item>
-        <el-form-item label="配置">
+        <el-form-item :label="t('retrieval.editor.config')">
           <el-input v-model="editor.json" type="textarea" :rows="18" class="json-input" />
-          <el-button link type="primary" @click="resetJson">恢复为默认值</el-button>
+          <el-button link type="primary" @click="resetJson">{{
+            t('retrieval.editor.resetDefault')
+          }}</el-button>
         </el-form-item>
       </el-form>
       <pre v-if="editor.error" class="error">{{ editor.error }}</pre>
       <template #footer>
-        <el-button @click="editor.visible = false">取消</el-button>
+        <el-button @click="editor.visible = false">{{ t('common.cancel') }}</el-button>
         <el-button
           type="primary"
           :loading="editor.saving"
           :disabled="!editor.name.trim()"
           @click="saveEditor"
         >
-          保存
+          {{ t('common.save') }}
         </el-button>
       </template>
     </el-dialog>
 
-    <el-drawer v-model="detailVisible" title="检索日志详情" size="50%">
+    <el-drawer v-model="detailVisible" :title="t('retrieval.detail.title')" size="50%">
       <template v-if="detail">
         <el-descriptions :column="2" border size="small">
-          <el-descriptions-item label="查询" :span="2">{{ detail.query }}</el-descriptions-item>
-          <el-descriptions-item label="规范化" :span="2">
+          <el-descriptions-item :label="t('retrieval.detail.query')" :span="2">{{
+            detail.query
+          }}</el-descriptions-item>
+          <el-descriptions-item :label="t('retrieval.detail.normalized')" :span="2">
             {{ detail.normalized_query }}
           </el-descriptions-item>
-          <el-descriptions-item label="策略">{{ detail.profile_name }}</el-descriptions-item>
-          <el-descriptions-item label="索引代">{{ detail.generation ?? '-' }}</el-descriptions-item>
-          <el-descriptions-item label="用户">{{ detail.user_id ?? '-' }}</el-descriptions-item>
-          <el-descriptions-item label="耗时">{{ detail.total_ms }} ms</el-descriptions-item>
+          <el-descriptions-item :label="t('retrieval.detail.profile')">{{
+            detail.profile_name
+          }}</el-descriptions-item>
+          <el-descriptions-item :label="t('retrieval.detail.generation')">{{
+            detail.generation ?? '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item :label="t('retrieval.detail.user')">{{
+            detail.user_id ?? '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item :label="t('retrieval.detail.duration')"
+            >{{ detail.total_ms }} ms</el-descriptions-item
+          >
         </el-descriptions>
         <el-collapse :model-value="['stages']" class="raw">
-          <el-collapse-item title="过滤条件" name="filters">
+          <el-collapse-item :title="t('retrieval.detail.filters')" name="filters">
             <pre class="json">{{ JSON.stringify(detail.filters, null, 2) }}</pre>
           </el-collapse-item>
-          <el-collapse-item title="耗时" name="timings">
+          <el-collapse-item :title="t('retrieval.detail.timings')" name="timings">
             <pre class="json">{{ JSON.stringify(detail.timings, null, 2) }}</pre>
           </el-collapse-item>
-          <el-collapse-item title="各阶段候选与分数" name="stages">
+          <el-collapse-item :title="t('retrieval.detail.stages')" name="stages">
             <pre class="json">{{ JSON.stringify(detail.stages, null, 2) }}</pre>
           </el-collapse-item>
-          <el-collapse-item title="策略配置" name="config">
+          <el-collapse-item :title="t('retrieval.detail.config')" name="config">
             <pre class="json">{{ JSON.stringify(detail.config, null, 2) }}</pre>
           </el-collapse-item>
         </el-collapse>

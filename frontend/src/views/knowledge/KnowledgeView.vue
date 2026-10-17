@@ -1,17 +1,19 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { deleteKnowledgeBase, listKnowledgeBases } from '@/api/knowledge'
 import type { KnowledgeBase } from '@/api/types'
 import KbAclDialog from '@/components/knowledge/KbAclDialog.vue'
 import KbFormDialog from '@/components/knowledge/KbFormDialog.vue'
 import { useAuthStore } from '@/stores/auth'
-import { PERMISSION_LABELS, atLeast } from '@/utils/document'
+import { atLeast, permissionLabel } from '@/utils/document'
 import { formatDateTime } from '@/utils/format'
 
 const router = useRouter()
 const auth = useAuthStore()
+const { t } = useI18n()
 
 const query = reactive({ keyword: '', page: 1, size: 20 })
 const rows = ref<KnowledgeBase[]>([])
@@ -61,9 +63,11 @@ function onSaved(kb: KnowledgeBase): void {
 }
 
 async function remove(kb: KnowledgeBase): Promise<void> {
-  await ElMessageBox.confirm(`确定删除知识库「${kb.name}」吗？`, '提示', { type: 'warning' })
+  await ElMessageBox.confirm(t('knowledge.kb.deleteConfirm', { name: kb.name }), t('common.tip'), {
+    type: 'warning',
+  })
   await deleteKnowledgeBase(kb.id)
-  ElMessage.success('已删除')
+  ElMessage.success(t('common.deleted'))
   await load()
 }
 
@@ -78,17 +82,21 @@ onMounted(load)
   <el-card shadow="never">
     <el-form :inline="true" @submit.prevent="search">
       <el-form-item data-guide="kb-search">
-        <el-input v-model="query.keyword" placeholder="知识库名称 / 描述" clearable />
+        <el-input
+          v-model="query.keyword"
+          :placeholder="t('knowledge.kb.searchPlaceholder')"
+          clearable
+        />
       </el-form-item>
       <el-form-item>
-        <el-button type="primary" native-type="submit">查询</el-button>
+        <el-button type="primary" native-type="submit">{{ t('knowledge.kb.query') }}</el-button>
         <el-button
           v-permission="'kb:create'"
           data-test="kb-create"
           data-guide="kb-create"
           @click="openCreate"
         >
-          新建知识库
+          {{ t('knowledge.kb.create') }}
         </el-button>
       </el-form-item>
     </el-form>
@@ -97,35 +105,44 @@ onMounted(load)
       v-loading="loading"
       :data="rows"
       data-guide="kb-table"
-      empty-text="暂无可访问的知识库"
+      :empty-text="t('knowledge.kb.empty')"
       row-class-name="clickable"
       @row-click="(row: KnowledgeBase) => open(row)"
     >
-      <el-table-column prop="name" label="名称" min-width="160">
+      <el-table-column prop="name" :label="t('common.name')" min-width="160">
         <template #default="{ row }">
           <el-link type="primary" :underline="false">{{ (row as KnowledgeBase).name }}</el-link>
         </template>
       </el-table-column>
-      <el-table-column prop="description" label="描述" min-width="220" show-overflow-tooltip />
-      <el-table-column label="可见范围" width="130">
+      <el-table-column
+        prop="description"
+        :label="t('common.description')"
+        min-width="220"
+        show-overflow-tooltip
+      />
+      <el-table-column :label="t('knowledge.visibility.label')" width="130">
         <template #default="{ row }">
           <el-tag :type="row.visibility === 'org' ? 'success' : 'info'" effect="plain">
-            {{ row.visibility === 'org' ? '组织内可读' : '仅授权成员' }}
+            {{
+              row.visibility === 'org'
+                ? t('knowledge.visibility.org')
+                : t('knowledge.visibility.restricted')
+            }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="document_count" label="文档数" width="90" />
-      <el-table-column label="我的权限" width="100">
+      <el-table-column prop="document_count" :label="t('knowledge.kb.documentCount')" width="90" />
+      <el-table-column :label="t('knowledge.kb.myPermission')" width="100">
         <template #default="{ row }">
-          {{ row.my_permission ? PERMISSION_LABELS[(row as KnowledgeBase).my_permission!] : '-' }}
+          {{ row.my_permission ? permissionLabel((row as KnowledgeBase).my_permission!) : '-' }}
         </template>
       </el-table-column>
-      <el-table-column label="更新时间" width="170">
+      <el-table-column :label="t('common.updatedAt')" width="170">
         <template #default="{ row }">{{
           formatDateTime((row as KnowledgeBase).updated_at)
         }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="190" fixed="right">
+      <el-table-column :label="t('common.actions')" width="190" fixed="right">
         <template #default="{ row }">
           <span v-if="atLeast((row as KnowledgeBase).my_permission, 'manage')" @click.stop>
             <el-button
@@ -134,7 +151,7 @@ onMounted(load)
               type="primary"
               @click="openEdit(row as KnowledgeBase)"
             >
-              编辑
+              {{ t('common.edit') }}
             </el-button>
             <el-button
               v-if="auth.can('kb:update')"
@@ -142,7 +159,7 @@ onMounted(load)
               type="primary"
               @click="openAcl(row as KnowledgeBase)"
             >
-              权限
+              {{ t('knowledge.kb.permission') }}
             </el-button>
             <el-button
               v-if="auth.can('kb:delete')"
@@ -150,7 +167,7 @@ onMounted(load)
               type="danger"
               @click="remove(row as KnowledgeBase)"
             >
-              删除
+              {{ t('common.delete') }}
             </el-button>
           </span>
         </template>

@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { del, get, http, post, put } from './http'
 import type {
   DirectorySource,
@@ -52,7 +53,7 @@ export async function downloadExcelTemplate(): Promise<void> {
   const url = URL.createObjectURL(resp.data)
   const a = document.createElement('a')
   a.href = url
-  a.download = '组织架构导入模板.xlsx'
+  a.download = t('directory.templateFilename')
   a.click()
   URL.revokeObjectURL(url)
 }

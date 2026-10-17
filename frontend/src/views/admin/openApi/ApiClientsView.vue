@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { onActivated, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { deleteApiClient, listApiClients, updateApiClient } from '@/api/openApi'
 import type { ApiClient, ApiClientStatus } from '@/api/types'
 import { formatDateTime } from '@/utils/format'
 import ApiClientEditor from './ApiClientEditor.vue'
-import { PRINCIPAL_LABEL, SCOPE_INFO } from './meta'
+import { principalLabel, scopeLabel } from './meta'
 
 const router = useRouter()
+const { t } = useI18n()
 const query = reactive({
   keyword: '',
   status: '' as ApiClientStatus | '',
@@ -65,24 +67,28 @@ async function toggle(row: ApiClient): Promise<void> {
   const disable = row.status === 'active'
   if (disable) {
     await ElMessageBox.confirm(
-      `停用后「${row.name}」的所有密钥将立即无法调用，确定停用吗？`,
-      '停用应用',
+      t('openApi.list.disableConfirm', { name: row.name }),
+      t('openApi.disableDialog.title'),
       { type: 'warning' },
     )
   }
   await updateApiClient(row.id, { status: disable ? 'disabled' : 'active' })
-  ElMessage.success(disable ? '已停用' : '已启用')
+  ElMessage.success(disable ? t('openApi.toast.disabled') : t('openApi.toast.enabled'))
   await load()
 }
 
 async function remove(row: ApiClient): Promise<void> {
   await ElMessageBox.confirm(
-    `删除「${row.name}」将同时删除其全部密钥，调用日志保留。此操作不可恢复。`,
-    '删除应用',
-    { type: 'warning', confirmButtonText: '删除', confirmButtonClass: 'el-button--danger' },
+    t('openApi.list.deleteConfirm', { name: row.name }),
+    t('openApi.list.deleteTitle'),
+    {
+      type: 'warning',
+      confirmButtonText: t('common.delete'),
+      confirmButtonClass: 'el-button--danger',
+    },
   )
   await deleteApiClient(row.id)
-  ElMessage.success('已删除')
+  ElMessage.success(t('common.deleted'))
   await load()
 }
 
@@ -112,35 +118,46 @@ onActivated(() => {
   <div class="page">
     <div class="page-header">
       <div>
-        <h2 class="page-header__title">开放平台</h2>
-        <p class="page-header__desc">
-          为集团内其他 Agent / 系统签发 API 密钥：按知识库授权上限 +
-          绑定身份的文档权限双重限定可见内容，所有调用均有日志与审计。
-        </p>
+        <h2 class="page-header__title">{{ t('openApi.list.title') }}</h2>
+        <p class="page-header__desc">{{ t('openApi.list.desc') }}</p>
       </div>
       <el-button type="primary" :icon="Plus" data-test="new-client" @click="openCreate">
-        新建接入应用
+        {{ t('openApi.list.newClient') }}
       </el-button>
     </div>
 
     <el-card shadow="never">
       <el-form :inline="true" @submit.prevent="search">
         <el-form-item>
-          <el-input v-model="query.keyword" placeholder="应用名称 / 联系人" clearable />
+          <el-input
+            v-model="query.keyword"
+            :placeholder="t('openApi.list.keywordPlaceholder')"
+            clearable
+          />
         </el-form-item>
         <el-form-item>
-          <el-select v-model="query.status" placeholder="全部状态" clearable style="width: 120px">
-            <el-option label="启用" value="active" />
-            <el-option label="停用" value="disabled" />
+          <el-select
+            v-model="query.status"
+            :placeholder="t('openApi.list.statusPlaceholder')"
+            clearable
+            style="width: 120px"
+          >
+            <el-option :label="t('common.enabled')" value="active" />
+            <el-option :label="t('common.disabled')" value="disabled" />
           </el-select>
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" native-type="submit">查询</el-button>
+          <el-button type="primary" native-type="submit">{{ t('openApi.list.query') }}</el-button>
         </el-form-item>
       </el-form>
 
-      <el-table v-loading="loading" :data="rows" empty-text="暂无接入应用" data-test="client-table">
-        <el-table-column label="应用" min-width="200">
+      <el-table
+        v-loading="loading"
+        :data="rows"
+        :empty-text="t('openApi.list.empty')"
+        data-test="client-table"
+      >
+        <el-table-column :label="t('openApi.list.colClient')" min-width="200">
           <template #default="{ row }">
             <button type="button" class="name-link" @click="openDetail(row as ApiClient)">
               {{ row.name }}
@@ -150,7 +167,7 @@ onActivated(() => {
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="授权知识库" min-width="180">
+        <el-table-column :label="t('openApi.list.colKbs')" min-width="180">
           <template #default="{ row }">
             <el-tag
               v-for="kb in (row as ApiClient).kbs.slice(0, 2)"
@@ -166,21 +183,24 @@ onActivated(() => {
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="代理身份" min-width="160">
+        <el-table-column :label="t('openApi.list.colPrincipals')" min-width="160">
           <template #default="{ row }">
             <div
               v-for="p in (row as ApiClient).principals.slice(0, 2)"
               :key="p.type + p.id"
               class="small"
             >
-              <span class="muted">{{ PRINCIPAL_LABEL[p.type] }}：</span>{{ p.name ?? p.id }}
+              <span class="muted">{{
+                t('openApi.list.principalItem', { type: principalLabel(p.type) })
+              }}</span
+              >{{ p.name ?? p.id }}
             </div>
             <div v-if="row.principals.length > 2" class="muted small">
-              等 {{ row.principals.length }} 项
+              {{ t('openApi.list.morePrincipals', { n: row.principals.length }) }}
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="能力" width="150">
+        <el-table-column :label="t('openApi.list.colScopes')" width="150">
           <template #default="{ row }">
             <el-tag
               v-for="s in (row as ApiClient).scopes"
@@ -190,42 +210,64 @@ onActivated(() => {
               effect="light"
               class="tag"
             >
-              {{ SCOPE_INFO[s].label }}
+              {{ scopeLabel(s) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="90">
+        <el-table-column :label="t('common.status')" width="90">
           <template #default="{ row }">
-            <span v-if="expired(row as ApiClient)" class="status status--off">已过期</span>
-            <span v-else-if="row.status === 'active'" class="status status--on">启用</span>
-            <span v-else class="status status--off">停用</span>
+            <span v-if="expired(row as ApiClient)" class="status status--off">{{
+              t('openApi.fields.expired')
+            }}</span>
+            <span v-else-if="row.status === 'active'" class="status status--on">{{
+              t('common.enabled')
+            }}</span>
+            <span v-else class="status status--off">{{ t('common.disabled') }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="密钥" width="70" align="center" prop="active_keys" />
-        <el-table-column label="今日调用" width="90" align="right" prop="calls_today" />
-        <el-table-column label="最近调用" width="160">
+        <el-table-column
+          :label="t('openApi.list.colKeys')"
+          width="70"
+          align="center"
+          prop="active_keys"
+        />
+        <el-table-column
+          :label="t('openApi.list.colCallsToday')"
+          width="90"
+          align="right"
+          prop="calls_today"
+        />
+        <el-table-column :label="t('openApi.list.colLastCall')" width="160">
           <template #default="{ row }">
             <span class="small">{{
               row.last_used_at ? formatDateTime(row.last_used_at) : '—'
             }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="130" fixed="right">
+        <el-table-column :label="t('common.actions')" width="130" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" @click="openDetail(row as ApiClient)">详情</el-button>
+            <el-button link type="primary" @click="openDetail(row as ApiClient)">{{
+              t('common.detail')
+            }}</el-button>
             <el-dropdown
               trigger="click"
               @command="(cmd: string) => onCommand(row as ApiClient, cmd)"
             >
-              <el-button link type="primary">更多</el-button>
+              <el-button link type="primary">{{ t('openApi.list.more') }}</el-button>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item command="edit">编辑授权</el-dropdown-item>
+                  <el-dropdown-item command="edit">{{
+                    t('openApi.actions.editAccess')
+                  }}</el-dropdown-item>
                   <el-dropdown-item command="toggle">
-                    {{ row.status === 'active' ? '停用' : '启用' }}
+                    {{
+                      row.status === 'active'
+                        ? t('openApi.actions.disable')
+                        : t('openApi.actions.enable')
+                    }}
                   </el-dropdown-item>
                   <el-dropdown-item command="delete" divided>
-                    <span class="danger">删除</span>
+                    <span class="danger">{{ t('common.delete') }}</span>
                   </el-dropdown-item>
                 </el-dropdown-menu>
               </template>

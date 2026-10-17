@@ -2,10 +2,14 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import type { TreeInstance } from 'element-plus'
+import { useI18n } from 'vue-i18n'
 import { createDepartment, deleteDepartment, listUsers, updateDepartment } from '@/api/admin'
 import type { DepartmentNode, User } from '@/api/types'
 import { useDepartmentTree } from '@/composables/useDepartmentTree'
-import { SOURCE_LABEL } from './directory/meta'
+
+const { t, te } = useI18n()
+const sourceLabel = (source: string): string =>
+  te(`users.source.${source}`) ? t(`users.source.${source}`) : source
 
 const { tree, loading, reload } = useDepartmentTree()
 const selected = ref<DepartmentNode | null>(null)
@@ -37,7 +41,9 @@ const dialog = reactive({
   form: { name: '', parent_id: null as string | null, sort_order: 0 },
 })
 const formRef = ref<FormInstance>()
-const rules: FormRules = { name: [{ required: true, message: '请输入部门名称', trigger: 'blur' }] }
+const rules = computed<FormRules>(() => ({
+  name: [{ required: true, message: t('departments.rules.nameRequired'), trigger: 'blur' }],
+}))
 
 function isManaged(node: DepartmentNode): boolean {
   return node.source !== 'local'
@@ -67,15 +73,17 @@ async function submit(): Promise<void> {
   } else {
     await createDepartment(dialog.form)
   }
-  ElMessage.success('保存成功')
+  ElMessage.success(t('departments.saveSuccess'))
   dialog.visible = false
   await reload()
 }
 
 async function remove(node: DepartmentNode): Promise<void> {
-  await ElMessageBox.confirm(`确定删除部门「${node.name}」吗？`, '提示', { type: 'warning' })
+  await ElMessageBox.confirm(t('departments.deleteConfirm', { name: node.name }), t('common.tip'), {
+    type: 'warning',
+  })
   await deleteDepartment(node.id)
-  ElMessage.success('已删除')
+  ElMessage.success(t('common.deleted'))
   if (selected.value?.id === node.id) selected.value = null
   await reload()
 }
@@ -112,26 +120,26 @@ onMounted(reload)
       <el-card shadow="never">
         <template #header>
           <div class="card-header">
-            <span>部门树</span>
+            <span>{{ t('departments.tree.title') }}</span>
             <el-button
               v-permission="'admin:dept'"
               type="primary"
               size="small"
               @click="openCreate(null)"
             >
-              新增根部门
+              {{ t('departments.tree.addRoot') }}
             </el-button>
           </div>
         </template>
         <div class="toolbar">
           <el-input
             v-model="keyword"
-            placeholder="搜索部门（支持完整路径）"
+            :placeholder="t('departments.tree.searchPlaceholder')"
             clearable
             size="small"
           />
           <el-checkbox v-if="archivedCount" v-model="showArchived" size="small">
-            显示已归档（{{ archivedCount }}）
+            {{ t('departments.tree.showArchived', { count: archivedCount }) }}
           </el-checkbox>
         </div>
         <el-tree
@@ -144,7 +152,7 @@ onMounted(reload)
           :filter-node-method="filterNode"
           highlight-current
           :expand-on-click-node="false"
-          empty-text="暂无部门"
+          :empty-text="t('departments.tree.empty')"
           data-test="department-tree"
           @current-change="(d: DepartmentNode) => (selected = d)"
         >
@@ -158,7 +166,7 @@ onMounted(reload)
                   effect="plain"
                   class="tree-node__tag"
                 >
-                  {{ SOURCE_LABEL[(data as DepartmentNode).source] ?? data.source }}
+                  {{ sourceLabel((data as DepartmentNode).source) }}
                 </el-tag>
                 <el-tag
                   v-if="data.status === 'archived'"
@@ -166,15 +174,15 @@ onMounted(reload)
                   type="info"
                   class="tree-node__tag"
                 >
-                  已归档
+                  {{ t('departments.tree.archived') }}
                 </el-tag>
               </span>
               <span v-permission="'admin:dept'" class="tree-node__actions">
                 <el-button link type="primary" size="small" @click.stop="openCreate(data)">
-                  添加子部门
+                  {{ t('departments.tree.addChild') }}
                 </el-button>
                 <el-button link type="primary" size="small" @click.stop="openEdit(data)">
-                  编辑
+                  {{ t('common.edit') }}
                 </el-button>
                 <el-button
                   v-if="!isManaged(data as DepartmentNode)"
@@ -182,7 +190,7 @@ onMounted(reload)
                   type="danger"
                   size="small"
                   @click.stop="remove(data)"
-                  >删除</el-button
+                  >{{ t('common.delete') }}</el-button
                 >
               </span>
             </div>
@@ -194,21 +202,27 @@ onMounted(reload)
       <el-card shadow="never">
         <template #header>
           <template v-if="selected">
-            <div>「{{ selected.name }}」成员（含下级，共 {{ membersTotal }} 人）</div>
+            <div>
+              {{ t('departments.members.title', { name: selected.name, total: membersTotal }) }}
+            </div>
             <div class="muted small">{{ selected.path_name }}</div>
           </template>
-          <template v-else>请选择部门</template>
+          <template v-else>{{ t('departments.members.selectDepartment') }}</template>
         </template>
-        <el-table v-loading="membersLoading" :data="members" empty-text="暂无成员">
-          <el-table-column prop="username" label="用户名" />
-          <el-table-column prop="display_name" label="姓名" />
-          <el-table-column label="职务">
+        <el-table
+          v-loading="membersLoading"
+          :data="members"
+          :empty-text="t('departments.members.empty')"
+        >
+          <el-table-column prop="username" :label="t('departments.members.username')" />
+          <el-table-column prop="display_name" :label="t('departments.members.displayName')" />
+          <el-table-column :label="t('departments.members.jobTitle')">
             <template #default="{ row }">{{ row.job_title || '-' }}</template>
           </el-table-column>
-          <el-table-column label="状态" width="80">
+          <el-table-column :label="t('common.status')" width="80">
             <template #default="{ row }">
               <el-tag size="small" :type="row.is_active ? 'success' : 'info'">
-                {{ row.is_active ? '启用' : '停用' }}
+                {{ row.is_active ? t('common.enabled') : t('common.disabled') }}
               </el-tag>
             </template>
           </el-table-column>
@@ -219,7 +233,9 @@ onMounted(reload)
 
   <el-dialog
     v-model="dialog.visible"
-    :title="dialog.editingId ? '编辑部门' : '新增部门'"
+    :title="
+      dialog.editingId ? t('departments.editor.editTitle') : t('departments.editor.createTitle')
+    "
     width="480px"
   >
     <el-alert
@@ -227,14 +243,14 @@ onMounted(reload)
       type="info"
       :closable="false"
       show-icon
-      title="该部门由组织同步维护，名称和上级只读，请在源系统中修改。"
+      :title="t('departments.editor.managedHint')"
       style="margin-bottom: 16px"
     />
     <el-form ref="formRef" :model="dialog.form" :rules="rules" label-width="88px">
-      <el-form-item label="部门名称" prop="name">
+      <el-form-item :label="t('departments.editor.name')" prop="name">
         <el-input v-model="dialog.form.name" maxlength="128" :disabled="dialog.managed" />
       </el-form-item>
-      <el-form-item label="上级部门">
+      <el-form-item :label="t('departments.editor.parent')">
         <el-tree-select
           v-model="dialog.form.parent_id"
           :data="visibleTree"
@@ -244,17 +260,17 @@ onMounted(reload)
           filterable
           clearable
           :disabled="dialog.managed"
-          placeholder="无（根部门）"
+          :placeholder="t('departments.editor.parentPlaceholder')"
           style="width: 100%"
         />
       </el-form-item>
-      <el-form-item label="排序">
+      <el-form-item :label="t('departments.editor.sortOrder')">
         <el-input-number v-model="dialog.form.sort_order" />
       </el-form-item>
     </el-form>
     <template #footer>
-      <el-button @click="dialog.visible = false">取消</el-button>
-      <el-button type="primary" @click="submit">保存</el-button>
+      <el-button @click="dialog.visible = false">{{ t('common.cancel') }}</el-button>
+      <el-button type="primary" @click="submit">{{ t('common.save') }}</el-button>
     </template>
   </el-dialog>
 </template>

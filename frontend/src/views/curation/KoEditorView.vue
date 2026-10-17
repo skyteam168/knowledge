@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   checkKoConflicts,
@@ -29,6 +30,7 @@ import { renderMarkdown } from '@/utils/markdown'
 
 const props = defineProps<{ koId: string }>()
 const router = useRouter()
+const { t } = useI18n()
 
 const ko = ref<KnowledgeObjectDetail | null>(null)
 const loading = ref(false)
@@ -61,6 +63,18 @@ const dirty = computed(() => JSON.stringify(form) !== savedSnapshot.value)
 const warnings = computed(() => (ko.value?.conflicts ?? []).filter((c) => isWarning(c.verdict)))
 const aiDraft = computed(() => ko.value?.ai_draft ?? {})
 const hasAiDraft = computed(() => !!aiDraft.value.method)
+const pendingAlertTitle = computed(() => {
+  const review = ko.value?.pending_review
+  if (!review) return ''
+  const named = {
+    version: review.ko_version,
+    name: review.submitted_by?.name ?? '-',
+    time: formatDateTime(review.created_at),
+  }
+  return review.note
+    ? t('curation.koEditor.pendingAlertNote', { ...named, note: review.note })
+    : t('curation.koEditor.pendingAlert', named)
+})
 
 function toRow(s: KoSource): SourceRow {
   return {
@@ -127,7 +141,7 @@ function addSources(): void {
         document_id: id,
         chunk_id: null,
         quote: null,
-        title: '新增文档（保存后显示标题）',
+        title: t('curation.koEditor.newDocumentTitle'),
         available: true,
         heading_path: [],
       })
@@ -160,10 +174,10 @@ function payload() {
 
 async function save(): Promise<void> {
   if (!form.question.trim()) {
-    ElMessage.warning('标准问题不能为空')
+    ElMessage.warning(t('curation.koEditor.questionRequired'))
     return
   }
-  await run('save', () => updateKo(props.koId, payload()), '已保存')
+  await run('save', () => updateKo(props.koId, payload()), t('common.saved'))
 }
 
 /** Copy the compiler's answer (and its variants / sources) into the form. */
@@ -174,7 +188,7 @@ function adoptAiDraft(): void {
   for (const v of d.variants ?? []) {
     if (v !== form.question && !form.variants.includes(v)) form.variants.push(v)
   }
-  ElMessage.info('已填入 AI 草稿内容，请审阅后保存')
+  ElMessage.info(t('curation.koEditor.aiDraftAdopted'))
 }
 
 // ---- workflow -------------------------------------------------------------------
@@ -182,57 +196,81 @@ function adoptAiDraft(): void {
 async function submit(): Promise<void> {
   if (dirty.value) await save()
   if (!form.answer.trim()) {
-    ElMessage.warning('答案不能为空')
+    ElMessage.warning(t('curation.koEditor.answerRequired'))
     return
   }
-  const { value } = await ElMessageBox.prompt('提交说明（可选）', '提交审核', {
-    inputType: 'textarea',
-    inputValue: '',
-  })
-  await run('submit', () => submitKo(props.koId, value), '已提交审核')
+  const { value } = await ElMessageBox.prompt(
+    t('curation.koEditor.submitNotePrompt'),
+    t('curation.koEditor.submitReview'),
+    {
+      inputType: 'textarea',
+      inputValue: '',
+    },
+  )
+  await run('submit', () => submitKo(props.koId, value), t('curation.koEditor.submitted'))
   if (warnings.value.length) {
     sideTab.value = 'conflicts'
-    ElMessage.warning(`检测到 ${warnings.value.length} 条可能冲突或重复的内容，请审核人重点关注`)
+    ElMessage.warning(t('curation.koEditor.submitWarnings', { count: warnings.value.length }))
   }
 }
 
 async function withdraw(): Promise<void> {
-  await run('withdraw', () => withdrawKo(props.koId), '已撤回')
+  await run('withdraw', () => withdrawKo(props.koId), t('curation.koEditor.withdrawn'))
 }
 
 async function approve(): Promise<void> {
   if (warnings.value.length) {
     await ElMessageBox.confirm(
-      `该条目与已有内容存在 ${warnings.value.length} 处冲突/重复警告，确定发布？`,
-      '发布确认',
+      t('curation.koEditor.approveWarnings', { count: warnings.value.length }),
+      t('curation.koEditor.publishConfirm'),
       { type: 'warning' },
     )
   }
-  const { value } = await ElMessageBox.prompt('审核意见（可选）', '审核通过并发布', {
-    inputType: 'textarea',
-    inputValue: '',
-  })
-  await run('approve', () => reviewKo(props.koId, 'approve', value), '已发布，正在更新索引')
+  const { value } = await ElMessageBox.prompt(
+    t('curation.koEditor.reviewCommentPrompt'),
+    t('curation.koEditor.approveTitle'),
+    {
+      inputType: 'textarea',
+      inputValue: '',
+    },
+  )
+  await run(
+    'approve',
+    () => reviewKo(props.koId, 'approve', value),
+    t('curation.koEditor.approved'),
+  )
 }
 
 async function reject(): Promise<void> {
-  const { value } = await ElMessageBox.prompt('请填写驳回原因', '驳回', {
-    inputType: 'textarea',
-    inputValidator: (v) => (v && v.trim() ? true : '请填写驳回原因'),
-  })
-  await run('reject', () => reviewKo(props.koId, 'reject', value), '已驳回')
+  const { value } = await ElMessageBox.prompt(
+    t('curation.koEditor.rejectPrompt'),
+    t('curation.field.reject'),
+    {
+      inputType: 'textarea',
+      inputValidator: (v) => (v && v.trim() ? true : t('curation.koEditor.rejectPrompt')),
+    },
+  )
+  await run('reject', () => reviewKo(props.koId, 'reject', value), t('curation.field.rejected'))
 }
 
 async function deprecate(): Promise<void> {
-  const { value } = await ElMessageBox.prompt('下线后将从检索中移除。下线原因：', '下线知识条目', {
-    inputType: 'textarea',
-    type: 'warning',
-  })
-  await run('deprecate', () => deprecateKo(props.koId, value), '已下线')
+  const { value } = await ElMessageBox.prompt(
+    t('curation.koEditor.deprecatePrompt'),
+    t('curation.koEditor.deprecateTitle'),
+    {
+      inputType: 'textarea',
+      type: 'warning',
+    },
+  )
+  await run('deprecate', () => deprecateKo(props.koId, value), t('curation.koEditor.deprecated'))
 }
 
 async function recheck(): Promise<void> {
-  await run('conflicts', () => checkKoConflicts(props.koId), '冲突检测完成')
+  await run(
+    'conflicts',
+    () => checkKoConflicts(props.koId),
+    t('curation.koEditor.conflictsChecked'),
+  )
   sideTab.value = 'conflicts'
 }
 
@@ -259,25 +297,32 @@ onMounted(load)
       <el-card shadow="never" class="ko-editor__head">
         <div class="ko-editor__bar">
           <div class="ko-editor__title">
-            <el-button text @click="router.push({ name: 'curation-kos' })">← 返回</el-button>
+            <el-button text @click="router.push({ name: 'curation-kos' })">
+              ← {{ t('common.back') }}
+            </el-button>
             <strong>{{ ko.title }}</strong>
             <el-tag :type="metaOf(KO_STATUS_META, ko.status).type">
               {{ metaOf(KO_STATUS_META, ko.status).label }}
             </el-tag>
             <el-tag v-if="ko.published_version" type="success" effect="plain">
-              在线版本 v{{ ko.published_version }}
+              {{ t('curation.koEditor.liveVersion', { version: ko.published_version }) }}
             </el-tag>
             <span class="muted">
-              工作版本 v{{ ko.version }} · {{ ko.kb_name }} ·
+              {{ t('curation.koEditor.workingVersion', { version: ko.version }) }} ·
+              {{ ko.kb_name }} ·
               {{ ORIGIN_LABEL[ko.origin] ?? ko.origin }}
             </span>
           </div>
           <div class="ko-editor__actions">
-            <el-button @click="historyOpen = true">版本历史</el-button>
+            <el-button @click="historyOpen = true">{{
+              t('curation.koEditor.versionHistory')
+            }}</el-button>
             <template v-if="editable">
-              <el-button :loading="busy === 'conflicts'" @click="recheck">冲突检测</el-button>
+              <el-button :loading="busy === 'conflicts'" @click="recheck">{{
+                t('curation.koEditor.conflictCheck')
+              }}</el-button>
               <el-button :loading="busy === 'save'" :disabled="!dirty" @click="save">
-                保存
+                {{ t('common.save') }}
               </el-button>
               <el-button
                 v-if="ko.status !== 'published' || dirty"
@@ -286,16 +331,16 @@ onMounted(load)
                 data-test="submit-ko"
                 @click="submit"
               >
-                提交审核
+                {{ t('curation.koEditor.submitReview') }}
               </el-button>
             </template>
             <template v-if="ko.status === 'pending_review'">
               <el-button v-if="ko.can_edit" :loading="busy === 'withdraw'" @click="withdraw">
-                撤回
+                {{ t('curation.koEditor.withdraw') }}
               </el-button>
               <template v-if="ko.can_review">
                 <el-button type="danger" plain :loading="busy === 'reject'" @click="reject">
-                  驳回
+                  {{ t('curation.field.reject') }}
                 </el-button>
                 <el-button
                   type="success"
@@ -303,7 +348,7 @@ onMounted(load)
                   data-test="approve-ko"
                   @click="approve"
                 >
-                  通过并发布
+                  {{ t('curation.koEditor.approve') }}
                 </el-button>
               </template>
             </template>
@@ -314,7 +359,7 @@ onMounted(load)
               :loading="busy === 'deprecate'"
               @click="deprecate"
             >
-              下线
+              {{ t('curation.koEditor.deprecate') }}
             </el-button>
           </div>
         </div>
@@ -323,7 +368,7 @@ onMounted(load)
           type="warning"
           :closable="false"
           class="ko-editor__alert"
-          :title="`v${ko.pending_review.ko_version} 待审核：${ko.pending_review.submitted_by?.name ?? '-'} 提交于 ${formatDateTime(ko.pending_review.created_at)}${ko.pending_review.note ? '，说明：' + ko.pending_review.note : ''}`"
+          :title="pendingAlertTitle"
         />
         <el-alert
           v-if="warnings.length"
@@ -331,20 +376,26 @@ onMounted(load)
           :closable="false"
           show-icon
           class="ko-editor__alert"
-          :title="`冲突检测：${warnings.length} 条已有内容可能与本条目矛盾或重复`"
+          :title="t('curation.koEditor.conflictAlert', { count: warnings.length })"
         >
-          <a class="ko-editor__link" @click="sideTab = 'conflicts'">查看详情</a>
+          <a class="ko-editor__link" @click="sideTab = 'conflicts'">{{
+            t('curation.koEditor.viewDetails')
+          }}</a>
         </el-alert>
       </el-card>
 
       <div class="ko-editor__body">
-        <el-card shadow="never" header="条目内容">
+        <el-card shadow="never" :header="t('curation.koEditor.content')">
           <el-form label-position="top" :disabled="!editable">
             <div class="ko-editor__row">
-              <el-form-item label="标题" class="ko-editor__grow">
-                <el-input v-model="form.title" maxlength="512" placeholder="默认使用标准问题" />
+              <el-form-item :label="t('curation.field.title')" class="ko-editor__grow">
+                <el-input
+                  v-model="form.title"
+                  maxlength="512"
+                  :placeholder="t('curation.koEditor.titlePlaceholder')"
+                />
               </el-form-item>
-              <el-form-item label="类型">
+              <el-form-item :label="t('curation.field.type')">
                 <el-select v-model="form.ko_type" style="width: 140px">
                   <el-option
                     v-for="(label, key) in KO_TYPE_LABEL"
@@ -355,10 +406,10 @@ onMounted(load)
                 </el-select>
               </el-form-item>
             </div>
-            <el-form-item label="标准问题" required>
+            <el-form-item :label="t('curation.field.question')" required>
               <el-input v-model="form.question" maxlength="2000" data-test="ko-question" />
             </el-form-item>
-            <el-form-item label="相似问法（同样会被索引）">
+            <el-form-item :label="t('curation.koEditor.variantsLabel')">
               <div class="ko-editor__variants">
                 <el-tag
                   v-for="(v, i) in form.variants"
@@ -372,16 +423,16 @@ onMounted(load)
                   v-if="editable"
                   v-model="newVariant"
                   size="small"
-                  placeholder="输入后回车添加"
+                  :placeholder="t('curation.koEditor.variantPlaceholder')"
                   style="width: 220px"
                   @keyup.enter="addVariant"
                   @blur="addVariant"
                 />
               </div>
             </el-form-item>
-            <el-form-item label="答案（Markdown）" required>
+            <el-form-item :label="t('curation.koEditor.answerLabel')" required>
               <el-tabs v-model="answerTab" class="ko-editor__answer">
-                <el-tab-pane label="编辑" name="edit">
+                <el-tab-pane :label="t('common.edit')" name="edit">
                   <el-input
                     v-model="form.answer"
                     type="textarea"
@@ -391,13 +442,13 @@ onMounted(load)
                     data-test="ko-answer"
                   />
                 </el-tab-pane>
-                <el-tab-pane label="预览" name="preview">
+                <el-tab-pane :label="t('curation.koEditor.preview')" name="preview">
                   <!-- eslint-disable-next-line vue/no-v-html -- markdown-it with html disabled -->
                   <div class="markdown ko-editor__preview" v-html="renderMarkdown(form.answer)" />
                 </el-tab-pane>
               </el-tabs>
             </el-form-item>
-            <el-form-item label="引用来源">
+            <el-form-item :label="t('curation.field.sources')">
               <div class="ko-editor__sources">
                 <div
                   v-for="(s, i) in form.sources"
@@ -413,40 +464,42 @@ onMounted(load)
                     >
                       {{ s.title }}
                     </el-link>
-                    <span v-else class="muted">（文档不可见或已删除）</span>
+                    <span v-else class="muted">{{ t('curation.koEditor.sourceUnavailable') }}</span>
                     <span v-if="s.heading_path.length" class="muted">
                       {{ s.heading_path.join(' > ') }}
                     </span>
                     <el-button v-if="editable" link type="danger" @click="removeSource(i)">
-                      移除
+                      {{ t('common.remove') }}
                     </el-button>
                   </div>
                   <div v-if="s.quote" class="src__quote">{{ s.quote }}</div>
                 </div>
                 <div v-if="editable" class="ko-editor__add-src">
                   <DocumentPicker v-model="pickedDocs" :kb-id="ko.kb_id" />
-                  <el-button :disabled="!pickedDocs.length" @click="addSources">添加</el-button>
+                  <el-button :disabled="!pickedDocs.length" @click="addSources">{{
+                    t('common.add')
+                  }}</el-button>
                 </div>
               </div>
             </el-form-item>
             <div class="ko-editor__row">
-              <el-form-item label="生效时间">
+              <el-form-item :label="t('curation.koEditor.effectiveFrom')">
                 <el-date-picker
                   v-model="form.effective_from"
                   type="datetime"
                   value-format="YYYY-MM-DDTHH:mm:ssZ"
-                  placeholder="立即生效"
+                  :placeholder="t('curation.koEditor.effectiveFromPlaceholder')"
                 />
               </el-form-item>
-              <el-form-item label="失效时间（到期自动下线）">
+              <el-form-item :label="t('curation.koEditor.effectiveTo')">
                 <el-date-picker
                   v-model="form.effective_to"
                   type="datetime"
                   value-format="YYYY-MM-DDTHH:mm:ssZ"
-                  placeholder="长期有效"
+                  :placeholder="t('curation.koEditor.effectiveToPlaceholder')"
                 />
               </el-form-item>
-              <el-form-item label="负责人（接收到期提醒）" class="ko-editor__grow">
+              <el-form-item :label="t('curation.koEditor.ownerLabel')" class="ko-editor__grow">
                 <UserPicker v-model="form.owner_id" :initial="ko.owner" />
               </el-form-item>
             </div>
@@ -455,15 +508,19 @@ onMounted(load)
 
         <el-card shadow="never" class="ko-editor__side">
           <el-tabs v-model="sideTab">
-            <el-tab-pane label="AI 草稿" name="draft">
-              <el-empty v-if="!hasAiDraft" description="该条目不是由 AI 生成的" />
+            <el-tab-pane :label="t('curation.koEditor.aiDraft')" name="draft">
+              <el-empty v-if="!hasAiDraft" :description="t('curation.koEditor.notAiGenerated')" />
               <template v-else>
                 <div class="side__bar">
                   <el-tag :type="aiDraft.method === 'llm' ? 'success' : 'warning'" size="small">
-                    {{ aiDraft.method === 'llm' ? 'AI 生成' : '生成失败（空白草稿）' }}
+                    {{
+                      aiDraft.method === 'llm'
+                        ? t('curation.koEditor.aiGenerated')
+                        : t('curation.koEditor.aiFailed')
+                    }}
                   </el-tag>
                   <el-button v-if="editable && aiDraft.answer" size="small" @click="adoptAiDraft">
-                    采用 AI 答案
+                    {{ t('curation.koEditor.adoptAi') }}
                   </el-button>
                 </div>
                 <el-alert
@@ -472,34 +529,40 @@ onMounted(load)
                   :closable="false"
                   :title="aiDraft.error"
                 />
-                <div v-if="aiDraft.question" class="side__label">标准问题</div>
+                <div v-if="aiDraft.question" class="side__label">
+                  {{ t('curation.field.question') }}
+                </div>
                 <div>{{ aiDraft.question }}</div>
                 <template v-if="aiDraft.variants?.length">
-                  <div class="side__label">相似问法</div>
+                  <div class="side__label">{{ t('curation.field.variants') }}</div>
                   <el-tag v-for="v in aiDraft.variants" :key="v" size="small" class="side__tag">
                     {{ v }}
                   </el-tag>
                 </template>
                 <template v-if="aiDraft.answer">
-                  <div class="side__label">AI 答案</div>
+                  <div class="side__label">{{ t('curation.koEditor.aiAnswer') }}</div>
                   <!-- eslint-disable-next-line vue/no-v-html -- markdown-it with html disabled -->
                   <div class="markdown side__answer" v-html="renderMarkdown(aiDraft.answer)" />
                 </template>
                 <template v-if="aiDraft.similar?.length">
-                  <div class="side__label">用户的同类提问</div>
+                  <div class="side__label">{{ t('curation.koEditor.similarQuestions') }}</div>
                   <ul class="side__list">
                     <li v-for="q in aiDraft.similar" :key="q">{{ q }}</li>
                   </ul>
                 </template>
                 <template v-if="aiDraft.materials?.length">
-                  <div class="side__label">生成依据的资料</div>
+                  <div class="side__label">{{ t('curation.koEditor.materials') }}</div>
                   <div v-for="m in aiDraft.materials" :key="m.n" class="src">
                     <div class="src__head">
                       <el-tag
                         size="small"
                         :type="aiDraft.citations?.includes(m.n) ? 'success' : 'info'"
                       >
-                        [{{ m.n }}]{{ aiDraft.citations?.includes(m.n) ? ' 已引用' : '' }}
+                        {{
+                          aiDraft.citations?.includes(m.n)
+                            ? t('curation.koEditor.cited', { n: m.n })
+                            : `[${m.n}]`
+                        }}
                       </el-tag>
                       <el-link
                         v-if="m.document_id"
@@ -518,15 +581,17 @@ onMounted(load)
 
             <el-tab-pane name="conflicts">
               <template #label>
-                冲突检测
+                {{ t('curation.koEditor.conflictCheck') }}
                 <el-badge v-if="warnings.length" :value="warnings.length" type="danger" />
               </template>
               <div class="side__bar">
                 <span class="muted">
                   {{
                     ko.conflicts_checked_at
-                      ? `检测于 ${formatDateTime(ko.conflicts_checked_at)}`
-                      : '尚未检测'
+                      ? t('curation.koEditor.checkedAt', {
+                          time: formatDateTime(ko.conflicts_checked_at),
+                        })
+                      : t('curation.koEditor.notChecked')
                   }}
                 </span>
                 <el-button
@@ -535,12 +600,12 @@ onMounted(load)
                   :loading="busy === 'conflicts'"
                   @click="recheck"
                 >
-                  重新检测
+                  {{ t('curation.koEditor.recheck') }}
                 </el-button>
               </div>
               <el-empty
                 v-if="ko.conflicts_checked_at && !ko.conflicts.length"
-                description="未发现相似的已发布内容"
+                :description="t('curation.koEditor.noSimilar')"
               />
               <div
                 v-for="c in ko.conflicts"
@@ -553,7 +618,11 @@ onMounted(load)
                     {{ metaOf(VERDICT_META, c.verdict).label }}
                   </el-tag>
                   <el-tag size="small" effect="plain">
-                    {{ c.kind === 'ko' ? '知识条目' : '文档' }}
+                    {{
+                      c.kind === 'ko'
+                        ? t('curation.koEditor.kindKo')
+                        : t('curation.koEditor.kindDocument')
+                    }}
                   </el-tag>
                   <el-link
                     v-if="c.kind === 'ko'"
@@ -563,15 +632,17 @@ onMounted(load)
                     {{ c.title }}
                   </el-link>
                   <el-link v-else type="primary" @click="openDocument(c.id)">{{ c.title }}</el-link>
-                  <span v-if="c.score != null" class="muted">相似度 {{ c.score.toFixed(2) }}</span>
+                  <span v-if="c.score != null" class="muted">
+                    {{ t('curation.koEditor.similarity', { score: c.score.toFixed(2) }) }}
+                  </span>
                 </div>
                 <div v-if="c.reason" class="conflict__reason">{{ c.reason }}</div>
                 <div class="src__quote">{{ c.excerpt }}</div>
               </div>
             </el-tab-pane>
 
-            <el-tab-pane label="审核记录" name="reviews">
-              <el-empty v-if="!ko.reviews.length" description="暂无审核记录" />
+            <el-tab-pane :label="t('curation.koEditor.reviews')" name="reviews">
+              <el-empty v-if="!ko.reviews.length" :description="t('curation.koEditor.noReviews')" />
               <el-timeline>
                 <el-timeline-item
                   v-for="r in ko.reviews"
@@ -585,12 +656,24 @@ onMounted(load)
                     </el-tag>
                   </div>
                   <div class="muted">
-                    提交：{{ r.submitted_by?.name ?? '-' }}
-                    <template v-if="r.note">（{{ r.note }}）</template>
+                    {{
+                      r.note
+                        ? t('curation.koEditor.submittedByNote', {
+                            name: r.submitted_by?.name ?? '-',
+                            note: r.note,
+                          })
+                        : t('curation.koEditor.submittedBy', { name: r.submitted_by?.name ?? '-' })
+                    }}
                   </div>
                   <div v-if="r.reviewer" class="muted">
-                    审核：{{ r.reviewer.name }}
-                    <template v-if="r.comment">（{{ r.comment }}）</template>
+                    {{
+                      r.comment
+                        ? t('curation.koEditor.reviewedByComment', {
+                            name: r.reviewer.name,
+                            comment: r.comment,
+                          })
+                        : t('curation.koEditor.reviewedBy', { name: r.reviewer.name })
+                    }}
                   </div>
                 </el-timeline-item>
               </el-timeline>

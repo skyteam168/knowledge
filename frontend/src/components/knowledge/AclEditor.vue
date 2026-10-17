@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { getDirectoryDepartments, searchPrincipals } from '@/api/knowledge'
 import type {
   AclEntryOut,
@@ -8,10 +9,14 @@ import type {
   PrincipalOption,
   PrincipalType,
 } from '@/api/types'
-import { PERMISSION_LABELS, PRINCIPAL_LABELS } from '@/utils/document'
+import { permissionLabels, principalLabel, principalLabels } from '@/utils/document'
 
 const entries = defineModel<AclEntryOut[]>({ required: true })
 const props = defineProps<{ disabled?: boolean }>()
+const { t } = useI18n()
+
+const permissionOptions = computed(() => permissionLabels())
+const principalOptions = computed(() => principalLabels())
 
 const departments = ref<DirectoryDepartment[]>([])
 const departmentNames = computed(() => {
@@ -94,7 +99,7 @@ onMounted(async () => {
     <div v-if="!disabled" class="add-row">
       <el-select v-model="draft.type" style="width: 110px" @change="changeType">
         <el-option
-          v-for="(label, key) in PRINCIPAL_LABELS"
+          v-for="(label, key) in principalOptions"
           :key="key"
           :label="label"
           :value="key"
@@ -110,7 +115,7 @@ onMounted(async () => {
         check-strictly
         filterable
         :filter-node-method="filterDepartment"
-        placeholder="选择部门（含下级部门）"
+        :placeholder="t('knowledge.acl.deptPlaceholder')"
         class="picker"
       >
         <template #label="{ value }">{{ departmentNames.get(value) ?? value }}</template>
@@ -123,7 +128,7 @@ onMounted(async () => {
         remote
         :remote-method="search"
         :loading="searching"
-        :placeholder="`搜索${PRINCIPAL_LABELS[draft.type]}`"
+        :placeholder="t(`knowledge.acl.searchPlaceholder.${draft.type}`)"
         class="picker"
       >
         <el-option v-for="o in options" :key="o.id" :label="o.name" :value="o.id">
@@ -133,33 +138,35 @@ onMounted(async () => {
       </el-select>
       <el-select v-model="draft.permission" style="width: 96px">
         <el-option
-          v-for="(label, key) in PERMISSION_LABELS"
+          v-for="(label, key) in permissionOptions"
           :key="key"
           :label="label"
           :value="key"
         />
       </el-select>
-      <el-button type="primary" :disabled="!draft.ids.length" @click="add">添加</el-button>
+      <el-button type="primary" :disabled="!draft.ids.length" @click="add">{{
+        t('common.add')
+      }}</el-button>
     </div>
 
-    <el-table :data="entries" size="small" empty-text="暂无授权" max-height="320">
-      <el-table-column label="类型" width="90">
+    <el-table :data="entries" size="small" :empty-text="t('knowledge.acl.empty')" max-height="320">
+      <el-table-column :label="t('knowledge.acl.type')" width="90">
         <template #default="{ row }">
           <el-tag effect="plain" size="small">
-            {{ PRINCIPAL_LABELS[(row as AclEntryOut).principal_type] }}
+            {{ principalLabel((row as AclEntryOut).principal_type) }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="名称" min-width="200" show-overflow-tooltip>
+      <el-table-column :label="t('common.name')" min-width="200" show-overflow-tooltip>
         <template #default="{ row }">
           {{ (row as AclEntryOut).principal_name ?? (row as AclEntryOut).principal_id }}
         </template>
       </el-table-column>
-      <el-table-column label="权限" width="120">
+      <el-table-column :label="t('knowledge.acl.permission')" width="120">
         <template #default="{ row }">
           <el-select v-model="(row as AclEntryOut).permission" size="small" :disabled="disabled">
             <el-option
-              v-for="(label, key) in PERMISSION_LABELS"
+              v-for="(label, key) in permissionOptions"
               :key="key"
               :label="label"
               :value="key"
@@ -167,9 +174,9 @@ onMounted(async () => {
           </el-select>
         </template>
       </el-table-column>
-      <el-table-column v-if="!disabled" label="操作" width="70">
+      <el-table-column v-if="!disabled" :label="t('common.actions')" width="70">
         <template #default="{ $index }">
-          <el-button link type="danger" @click="remove($index)">移除</el-button>
+          <el-button link type="danger" @click="remove($index)">{{ t('common.remove') }}</el-button>
         </template>
       </el-table-column>
     </el-table>

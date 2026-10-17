@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import type { EChartsCoreOption } from 'echarts/core'
 import EChart from '@/components/charts/EChart.vue'
 import { compareEvalRuns } from '@/api/evaluation'
@@ -18,6 +19,7 @@ const CASE_METRICS = ['recall@5', 'recall@10', 'mrr', 'ndcg@10', 'faithfulness',
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 
 const data = ref<EvalCompare | null>(null)
 const loading = ref(false)
@@ -103,16 +105,18 @@ watch(runIds, load, { immediate: true })
       <template #header>
         <div class="card-header">
           <div>
-            <el-button link @click="router.push('/admin/eval-runs')">评测任务</el-button>
+            <el-button link @click="router.push('/admin/eval-runs')">{{
+              t('evaluation.shared.runs')
+            }}</el-button>
             <span class="sep">/</span>
-            <span class="title">策略对比</span>
+            <span class="title">{{ t('evaluation.compare.title') }}</span>
           </div>
         </div>
       </template>
-      <el-empty v-if="runIds.length < 2" description="请在评测任务列表中勾选 2~4 个已完成的任务" />
+      <el-empty v-if="runIds.length < 2" :description="t('evaluation.compare.emptyHint')" />
       <template v-else-if="data">
         <el-table :data="metricRows" size="small" border>
-          <el-table-column label="指标" width="180" fixed>
+          <el-table-column :label="t('evaluation.compare.metric')" width="180" fixed>
             <template #default="{ row }">{{ metricLabel(row.key) }}</template>
           </el-table-column>
           <el-table-column v-for="run in runs" :key="run.id" min-width="180">
@@ -131,13 +135,18 @@ watch(runIds, load, { immediate: true })
     </el-card>
 
     <template v-if="data">
-      <el-card shadow="never" header="指标对比">
+      <el-card shadow="never" :header="t('evaluation.compare.metricComparison')">
         <EChart :option="chartOption" height="360px" />
       </el-card>
 
-      <el-card shadow="never" header="配置差异">
-        <el-table :data="data.config_diff" size="small" border empty-text="所选任务配置完全相同">
-          <el-table-column prop="key" label="参数" min-width="220" />
+      <el-card shadow="never" :header="t('evaluation.compare.configDiff')">
+        <el-table
+          :data="data.config_diff"
+          size="small"
+          border
+          :empty-text="t('evaluation.compare.configSame')"
+        >
+          <el-table-column prop="key" :label="t('evaluation.shared.param')" min-width="220" />
           <el-table-column v-for="run in runs" :key="run.id" :label="runLabel(run)" min-width="160">
             <template #default="{ row }">
               <code class="mono">{{ formatConfigValue(row.values[run.id]) }}</code>
@@ -149,7 +158,7 @@ watch(runIds, load, { immediate: true })
       <el-card shadow="never">
         <template #header>
           <div class="card-header">
-            <span>逐用例对比</span>
+            <span>{{ t('evaluation.compare.perCase') }}</span>
             <div class="case-tools">
               <el-select v-model="caseMetric" style="width: 160px">
                 <el-option
@@ -159,12 +168,22 @@ watch(runIds, load, { immediate: true })
                   :value="key"
                 />
               </el-select>
-              <el-checkbox v-model="onlyDiff">只看有差异的用例</el-checkbox>
+              <el-checkbox v-model="onlyDiff">{{ t('evaluation.compare.onlyDiff') }}</el-checkbox>
             </div>
           </div>
         </template>
-        <el-table :data="caseRows" size="small" max-height="520" empty-text="没有差异">
-          <el-table-column prop="question" label="问题" min-width="260" show-overflow-tooltip />
+        <el-table
+          :data="caseRows"
+          size="small"
+          max-height="520"
+          :empty-text="t('evaluation.compare.noDiff')"
+        >
+          <el-table-column
+            prop="question"
+            :label="t('evaluation.shared.question')"
+            min-width="260"
+            show-overflow-tooltip
+          />
           <el-table-column
             v-for="(run, i) in runs"
             :key="run.id"
@@ -173,7 +192,7 @@ watch(runIds, load, { immediate: true })
           >
             <template #default="{ row }">{{ formatMetric(caseMetric, row.values[i]) }}</template>
           </el-table-column>
-          <el-table-column label="差值" width="100">
+          <el-table-column :label="t('evaluation.compare.spread')" width="100">
             <template #default="{ row }">{{ formatMetric(caseMetric, row.spread) }}</template>
           </el-table-column>
         </el-table>

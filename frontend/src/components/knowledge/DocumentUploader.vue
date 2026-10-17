@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { toRef } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { UploadRawFile } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
 import {
@@ -11,19 +12,14 @@ import { ACCEPTED_EXTENSIONS, formatBytes } from '@/utils/file'
 
 const props = defineProps<{ kbId: string }>()
 const emit = defineEmits<{ uploaded: [task: UploadTask] }>()
+const { t } = useI18n()
 
 const { tasks, add, retry, clearSettled } = useDocumentUpload(toRef(props, 'kbId'), (task) => {
   if (task.state === 'done' || task.state === 'duplicate') emit('uploaded', task)
 })
 
-const STATE_LABELS: Record<UploadState, string> = {
-  pending: '等待中',
-  hashing: '计算校验和',
-  uploading: '上传中',
-  completing: '登记中',
-  done: '完成',
-  duplicate: '已存在',
-  error: '失败',
+function stateLabel(state: UploadState): string {
+  return t(`knowledge.upload.${state}`)
 }
 
 function onSelect(raw: UploadRawFile): boolean {
@@ -50,18 +46,24 @@ function progressStatus(state: UploadState): '' | 'success' | 'exception' | 'war
       data-test="doc-upload"
     >
       <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
-      <div class="el-upload__text">拖拽文件到此处，或 <em>点击选择</em>（支持多选）</div>
+      <i18n-t keypath="knowledge.upload.dropHint" tag="div" class="el-upload__text">
+        <template #action>
+          <em>{{ t('knowledge.upload.clickToSelect') }}</em>
+        </template>
+      </i18n-t>
       <template #tip>
         <div class="el-upload__tip">
-          支持 PDF、Word、Excel、PPT、TXT、Markdown、HTML；相同内容自动去重，同名文件生成新版本
+          {{ t('knowledge.upload.tip') }}
         </div>
       </template>
     </el-upload>
 
     <div v-if="tasks.length" class="tasks">
       <div class="tasks-header">
-        <span>上传队列</span>
-        <el-button link type="primary" @click="clearSettled">清除已完成</el-button>
+        <span>{{ t('knowledge.upload.queue') }}</span>
+        <el-button link type="primary" @click="clearSettled">{{
+          t('knowledge.upload.clearDone')
+        }}</el-button>
       </div>
       <div v-for="task in tasks" :key="task.uid" class="task">
         <div class="task-line">
@@ -71,10 +73,10 @@ function progressStatus(state: UploadState): '' | 'success' | 'exception' | 'war
             size="small"
             :type="progressStatus(task.state) === 'exception' ? 'danger' : 'info'"
           >
-            {{ STATE_LABELS[task.state] }}
+            {{ stateLabel(task.state) }}
           </el-tag>
           <el-button v-if="task.state === 'error'" link type="primary" @click="retry(task.uid)">
-            重试
+            {{ t('knowledge.upload.retry') }}
           </el-button>
         </div>
         <el-progress

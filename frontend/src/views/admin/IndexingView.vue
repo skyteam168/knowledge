@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   checkKbConsistency,
@@ -27,18 +28,34 @@ import { formatDateTime } from '@/utils/format'
 
 type TagType = 'success' | 'warning' | 'danger' | 'info' | 'primary'
 
-const STATUS_META: Record<OutboxStatus, { label: string; type: TagType }> = {
-  pending: { label: '待处理', type: 'warning' },
-  processing: { label: '处理中', type: 'primary' },
-  done: { label: '已完成', type: 'success' },
-  dead: { label: '死信', type: 'danger' },
+const STATUS_TYPES: Record<OutboxStatus, TagType> = {
+  pending: 'warning',
+  processing: 'primary',
+  done: 'success',
+  dead: 'danger',
 }
 
-const GENERATION_META: Record<GenerationStatus, { label: string; type: TagType }> = {
-  building: { label: '构建中', type: 'warning' },
-  active: { label: '使用中', type: 'success' },
-  retired: { label: '已下线', type: 'info' },
-  failed: { label: '失败', type: 'danger' },
+const GENERATION_TYPES: Record<GenerationStatus, TagType> = {
+  building: 'warning',
+  active: 'success',
+  retired: 'info',
+  failed: 'danger',
+}
+
+const { t } = useI18n()
+
+const STATUS_META = computed(
+  () =>
+    Object.fromEntries(
+      (Object.keys(STATUS_TYPES) as OutboxStatus[]).map((s) => [
+        s,
+        { label: t(`indexing.outboxStatus.${s}`), type: STATUS_TYPES[s] },
+      ]),
+    ) as Record<OutboxStatus, { label: string; type: TagType }>,
+)
+
+function generationMeta(status: GenerationStatus): { label: string; type: TagType } {
+  return { label: t(`indexing.generationStatus.${status}`), type: GENERATION_TYPES[status] }
 }
 
 const auth = useAuthStore()
@@ -91,7 +108,7 @@ async function retry(event: OutboxEvent): Promise<void> {
   retrying.value = event.id
   try {
     await retryOutboxEvent(event.id)
-    ElMessage.success('已重新排队')
+    ElMessage.success(t('indexing.outbox.requeued'))
     await refresh()
   } finally {
     retrying.value = null
@@ -99,11 +116,13 @@ async function retry(event: OutboxEvent): Promise<void> {
 }
 
 async function retryAllDead(): Promise<void> {
-  await ElMessageBox.confirm(`确定将 ${stats.value.dead} 条死信事件全部重新排队？`, '重试死信', {
-    type: 'warning',
-  })
+  await ElMessageBox.confirm(
+    t('indexing.outbox.retryDeadConfirm', { count: stats.value.dead }),
+    t('indexing.outbox.retryDeadTitle'),
+    { type: 'warning' },
+  )
   const { count } = await retryDeadEvents()
-  ElMessage.success(`已重新排队 ${count} 条事件`)
+  ElMessage.success(t('indexing.outbox.requeuedCount', { count }))
   await refresh()
 }
 
@@ -117,7 +136,7 @@ async function loadGenerations(): Promise<void> {
 
 async function onReloadSynonyms(): Promise<void> {
   await reloadSynonyms()
-  ElMessage.success('同义词词典已重新加载')
+  ElMessage.success(t('indexing.generations.synonymsReloaded'))
 }
 
 // ---- consistency --------------------------------------------------------------
@@ -153,7 +172,7 @@ async function repair(): Promise<void> {
   repairing.value = true
   try {
     await repairKbIndex(report.value.kb_id)
-    ElMessage.success('修复任务已提交，完成后可重新校验')
+    ElMessage.success(t('indexing.consistency.repairSubmitted'))
   } finally {
     repairing.value = false
   }
@@ -182,12 +201,12 @@ onMounted(() => {
     <el-card shadow="never">
       <template #header>
         <div class="card-header">
-          <span>Outbox 事件</span>
+          <span>{{ t('indexing.outbox.title') }}</span>
           <div>
             <el-button :disabled="!stats.dead" type="danger" plain @click="retryAllDead">
-              重试全部死信
+              {{ t('indexing.outbox.retryAllDead') }}
             </el-button>
-            <el-button @click="refresh">刷新</el-button>
+            <el-button @click="refresh">{{ t('common.refresh') }}</el-button>
           </div>
         </div>
       </template>
@@ -205,8 +224,13 @@ onMounted(() => {
       </el-row>
 
       <el-form :inline="true" @submit.prevent="search">
-        <el-form-item label="状态">
-          <el-select v-model="filters.status" clearable placeholder="全部" style="width: 120px">
+        <el-form-item :label="t('common.status')">
+          <el-select
+            v-model="filters.status"
+            clearable
+            :placeholder="t('common.all')"
+            style="width: 120px"
+          >
             <el-option
               v-for="(meta, key) in STATUS_META"
               :key="key"
@@ -215,60 +239,81 @@ onMounted(() => {
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="事件类型">
-          <el-input v-model="filters.event_type" placeholder="如 document.chunks_ready" clearable />
+        <el-form-item :label="t('indexing.outbox.eventType')">
+          <el-input
+            v-model="filters.event_type"
+            :placeholder="t('indexing.outbox.eventTypePlaceholder')"
+            clearable
+          />
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" native-type="submit">查询</el-button>
+          <el-button type="primary" native-type="submit">{{
+            t('indexing.outbox.query')
+          }}</el-button>
         </el-form-item>
       </el-form>
 
-      <el-table v-loading="loading" :data="events" row-key="id" empty-text="暂无事件">
+      <el-table
+        v-loading="loading"
+        :data="events"
+        row-key="id"
+        :empty-text="t('indexing.outbox.empty')"
+      >
         <el-table-column type="expand">
           <template #default="{ row }">
             <div class="detail">
               <el-descriptions :column="2" size="small" border>
-                <el-descriptions-item label="事件 ID">{{ row.id }}</el-descriptions-item>
-                <el-descriptions-item label="完成时间">
+                <el-descriptions-item :label="t('indexing.outbox.eventId')">{{
+                  row.id
+                }}</el-descriptions-item>
+                <el-descriptions-item :label="t('indexing.outbox.processedAt')">
                   {{ formatDateTime(row.processed_at) }}
                 </el-descriptions-item>
-                <el-descriptions-item label="租约到期">
+                <el-descriptions-item :label="t('indexing.outbox.lockedUntil')">
                   {{ formatDateTime(row.locked_until) }}
                 </el-descriptions-item>
-                <el-descriptions-item label="下次重试">
+                <el-descriptions-item :label="t('indexing.outbox.nextAttempt')">
                   {{ formatDateTime(row.next_attempt_at) }}
                 </el-descriptions-item>
                 <el-descriptions-item label="Payload" :span="2">
                   <code class="mono">{{ JSON.stringify(row.payload) }}</code>
                 </el-descriptions-item>
-                <el-descriptions-item label="错误" :span="2">
+                <el-descriptions-item :label="t('indexing.outbox.error')" :span="2">
                   <span class="error">{{ row.last_error ?? '—' }}</span>
                 </el-descriptions-item>
               </el-descriptions>
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="创建时间" width="170">
+        <el-table-column :label="t('common.createdAt')" width="170">
           <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
         </el-table-column>
-        <el-table-column prop="event_type" label="事件类型" min-width="180" />
-        <el-table-column label="聚合" min-width="220">
+        <el-table-column
+          prop="event_type"
+          :label="t('indexing.outbox.eventType')"
+          min-width="180"
+        />
+        <el-table-column :label="t('indexing.outbox.aggregate')" min-width="220">
           <template #default="{ row }">
             {{ row.aggregate_type }} / <span class="mono">{{ row.aggregate_id }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="90">
+        <el-table-column :label="t('common.status')" width="90">
           <template #default="{ row }">
             <el-tag :type="STATUS_META[row.status as OutboxStatus].type" size="small">
               {{ STATUS_META[row.status as OutboxStatus].label }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="retry_count" label="重试次数" width="90" />
-        <el-table-column label="最近错误" min-width="200" show-overflow-tooltip>
+        <el-table-column prop="retry_count" :label="t('indexing.outbox.retryCount')" width="90" />
+        <el-table-column
+          :label="t('indexing.outbox.lastError')"
+          min-width="200"
+          show-overflow-tooltip
+        >
           <template #default="{ row }">{{ row.last_error ?? '' }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="90" fixed="right">
+        <el-table-column :label="t('common.actions')" width="90" fixed="right">
           <template #default="{ row }">
             <el-button
               v-if="row.status === 'dead' || row.status === 'pending'"
@@ -277,7 +322,7 @@ onMounted(() => {
               :loading="retrying === row.id"
               @click="retry(row as OutboxEvent)"
             >
-              重试
+              {{ t('indexing.outbox.retry') }}
             </el-button>
           </template>
         </el-table-column>
@@ -297,18 +342,18 @@ onMounted(() => {
     <el-card shadow="never">
       <template #header>
         <div class="card-header">
-          <span>一致性校验</span>
+          <span>{{ t('indexing.consistency.title') }}</span>
         </div>
       </template>
       <el-form :inline="true" @submit.prevent="check">
-        <el-form-item label="知识库">
+        <el-form-item :label="t('indexing.consistency.kb')">
           <el-select
             v-model="selectedKb"
             filterable
             remote
             :remote-method="searchKbs"
             :loading="kbLoading"
-            placeholder="选择知识库"
+            :placeholder="t('indexing.consistency.kbPlaceholder')"
             style="width: 260px"
           >
             <el-option v-for="kb in kbOptions" :key="kb.id" :label="kb.name" :value="kb.id" />
@@ -321,7 +366,7 @@ onMounted(() => {
             :disabled="!selectedKb"
             :loading="checking"
           >
-            校验
+            {{ t('indexing.consistency.check') }}
           </el-button>
         </el-form-item>
       </el-form>
@@ -334,33 +379,51 @@ onMounted(() => {
           class="report-alert"
         >
           <template #title>
-            {{ kbName(report.kb_id) }}（索引代 v{{ report.generation }}）：
             {{
               report.consistent
-                ? '数据一致'
-                : `发现差异，需重建 ${report.reindex_documents.length} 个文档`
+                ? t('indexing.consistency.reportConsistent', {
+                    kb: kbName(report.kb_id),
+                    generation: report.generation,
+                  })
+                : t('indexing.consistency.reportInconsistent', {
+                    kb: kbName(report.kb_id),
+                    generation: report.generation,
+                    count: report.reindex_documents.length,
+                  })
             }}
           </template>
           <div>
-            校验时间 {{ formatDateTime(report.checked_at) }}；PostgreSQL chunk 数
-            {{ report.pg_count }}
+            {{
+              t('indexing.consistency.reportMeta', {
+                time: formatDateTime(report.checked_at),
+                count: report.pg_count,
+              })
+            }}
             <span v-if="report.skipped_documents">
-              ；{{ report.skipped_documents }} 个文档正在处理中，已跳过
+              {{ t('indexing.consistency.skipped', { count: report.skipped_documents }) }}
             </span>
           </div>
         </el-alert>
 
         <el-table :data="diffRows" size="small">
-          <el-table-column prop="name" label="索引" width="120" />
-          <el-table-column prop="count" label="条数" width="100" />
-          <el-table-column prop="missing_count" label="缺失" width="100" />
-          <el-table-column prop="extra_count" label="多余" width="100" />
-          <el-table-column label="缺失样例" min-width="200">
+          <el-table-column prop="name" :label="t('indexing.consistency.index')" width="120" />
+          <el-table-column prop="count" :label="t('indexing.consistency.count')" width="100" />
+          <el-table-column
+            prop="missing_count"
+            :label="t('indexing.consistency.missing')"
+            width="100"
+          />
+          <el-table-column
+            prop="extra_count"
+            :label="t('indexing.consistency.extra')"
+            width="100"
+          />
+          <el-table-column :label="t('indexing.consistency.missingSamples')" min-width="200">
             <template #default="{ row }">
               <code v-for="id in row.missing" :key="id" class="mono id">{{ id }}</code>
             </template>
           </el-table-column>
-          <el-table-column label="多余样例" min-width="200">
+          <el-table-column :label="t('indexing.consistency.extraSamples')" min-width="200">
             <template #default="{ row }">
               <code v-for="id in row.extra" :key="id" class="mono id">{{ id }}</code>
             </template>
@@ -374,7 +437,7 @@ onMounted(() => {
             :loading="repairing"
             @click="repair"
           >
-            一键修复
+            {{ t('indexing.consistency.repair') }}
           </el-button>
         </div>
       </template>
@@ -383,38 +446,47 @@ onMounted(() => {
     <el-card shadow="never">
       <template #header>
         <div class="card-header">
-          <span>索引代（蓝绿切换）</span>
+          <span>{{ t('indexing.generations.title') }}</span>
           <div>
-            <el-button v-if="isPlatformAdmin" @click="onReloadSynonyms">重新加载同义词</el-button>
-            <el-button @click="loadGenerations">刷新</el-button>
+            <el-button v-if="isPlatformAdmin" @click="onReloadSynonyms">{{
+              t('indexing.generations.reloadSynonyms')
+            }}</el-button>
+            <el-button @click="loadGenerations">{{ t('common.refresh') }}</el-button>
           </div>
         </div>
       </template>
-      <el-table :data="generations" row-key="version" empty-text="尚未创建索引">
-        <el-table-column label="版本" width="80">
+      <el-table :data="generations" row-key="version" :empty-text="t('indexing.generations.empty')">
+        <el-table-column :label="t('indexing.generations.version')" width="80">
           <template #default="{ row }">v{{ row.version }}</template>
         </el-table-column>
-        <el-table-column label="状态" width="100">
+        <el-table-column :label="t('common.status')" width="100">
           <template #default="{ row }">
-            <el-tag :type="GENERATION_META[row.status as GenerationStatus].type" size="small">
-              {{ GENERATION_META[row.status as GenerationStatus].label }}
+            <el-tag :type="generationMeta(row.status as GenerationStatus).type" size="small">
+              {{ generationMeta(row.status as GenerationStatus).label }}
             </el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="qdrant_collection" label="Qdrant collection" min-width="150" />
         <el-table-column prop="opensearch_index" label="OpenSearch index" min-width="150" />
         <el-table-column label="Embedding" min-width="180">
-          <template #default="{ row }"
-            >{{ row.embedding_model }}（{{ row.embedding_dim }} 维）</template
-          >
+          <template #default="{ row }">{{
+            t('indexing.generations.embeddingValue', {
+              model: row.embedding_model,
+              dim: row.embedding_dim,
+            })
+          }}</template>
         </el-table-column>
-        <el-table-column label="创建时间" width="170">
+        <el-table-column :label="t('common.createdAt')" width="170">
           <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
         </el-table-column>
-        <el-table-column label="启用时间" width="170">
+        <el-table-column :label="t('indexing.generations.activatedAt')" width="170">
           <template #default="{ row }">{{ formatDateTime(row.activated_at) }}</template>
         </el-table-column>
-        <el-table-column label="错误" min-width="160" show-overflow-tooltip>
+        <el-table-column
+          :label="t('indexing.generations.error')"
+          min-width="160"
+          show-overflow-tooltip
+        >
           <template #default="{ row }">{{ row.error ?? '' }}</template>
         </el-table-column>
       </el-table>

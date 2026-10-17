@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, CopyDocument, Key, Search, WarningFilled } from '@element-plus/icons-vue'
 import type { EChartsCoreOption } from 'echarts/core'
@@ -25,10 +26,11 @@ import type {
 import EChart from '@/components/charts/EChart.vue'
 import { formatDateTime } from '@/utils/format'
 import ApiClientEditor from './ApiClientEditor.vue'
-import { PRINCIPAL_LABEL, SCOPE_INFO, openApiBase } from './meta'
+import { openApiBase, principalLabel, scopeLabel } from './meta'
 
 const props = defineProps<{ clientId: string }>()
 const router = useRouter()
+const { t } = useI18n()
 
 const client = ref<ApiClient | null>(null)
 const loading = ref(false)
@@ -47,12 +49,12 @@ const expired = computed(
   () => !!client.value?.expires_at && new Date(client.value.expires_at).getTime() <= Date.now(),
 )
 
-async function copy(text: string, label = '已复制'): Promise<void> {
+async function copy(text: string, label?: string): Promise<void> {
   try {
     await navigator.clipboard.writeText(text)
-    ElMessage.success(label)
+    ElMessage.success(label ?? t('common.copied'))
   } catch {
-    ElMessage.warning('复制失败，请手动选择文本')
+    ElMessage.warning(t('openApi.detail.copyFailed'))
   }
 }
 
@@ -65,12 +67,14 @@ async function toggle(): Promise<void> {
   if (!c) return
   const disable = c.status === 'active'
   if (disable) {
-    await ElMessageBox.confirm('停用后该应用的所有密钥将立即无法调用，确定停用吗？', '停用应用', {
-      type: 'warning',
-    }).catch(() => Promise.reject(new Error('cancelled')))
+    await ElMessageBox.confirm(
+      t('openApi.detail.disableConfirm'),
+      t('openApi.disableDialog.title'),
+      { type: 'warning' },
+    ).catch(() => Promise.reject(new Error('cancelled')))
   }
   client.value = await updateApiClient(c.id, { status: disable ? 'disabled' : 'active' })
-  ElMessage.success(disable ? '已停用' : '已启用')
+  ElMessage.success(disable ? t('openApi.toast.disabled') : t('openApi.toast.enabled'))
 }
 
 // ---- usage ------------------------------------------------------------------------
@@ -99,22 +103,24 @@ const usageStats = computed(() => {
 
 const usageOption = computed<EChartsCoreOption>(() => {
   const days = usage.value?.days ?? []
+  const callsName = t('openApi.usage.seriesCalls')
+  const errorsName = t('openApi.usage.seriesErrors')
   return {
     tooltip: { trigger: 'axis' },
-    legend: { data: ['调用', '失败'], top: 0, right: 0 },
+    legend: { data: [callsName, errorsName], top: 0, right: 0 },
     grid: { left: 40, right: 16, top: 32, bottom: 24 },
     xAxis: { type: 'category', data: days.map((d) => d.day.slice(5)) },
     yAxis: { type: 'value', minInterval: 1 },
     series: [
       {
-        name: '调用',
+        name: callsName,
         type: 'bar',
         barMaxWidth: 18,
         itemStyle: { color: '#3370ff', borderRadius: [3, 3, 0, 0] },
         data: days.map((d) => d.calls),
       },
       {
-        name: '失败',
+        name: errorsName,
         type: 'line',
         smooth: true,
         itemStyle: { color: '#f53f3f' },
@@ -155,7 +161,7 @@ function openIssue(): void {
 
 async function issueKey(): Promise<void> {
   if (!keyDialog.name.trim()) {
-    ElMessage.warning('请输入密钥名称')
+    ElMessage.warning(t('openApi.keys.nameRequired'))
     return
   }
   issuing.value = true
@@ -173,12 +179,16 @@ async function issueKey(): Promise<void> {
 
 async function revoke(key: ApiKey): Promise<void> {
   await ElMessageBox.confirm(
-    `吊销后使用「${key.name}」（${key.prefix}…）的调用将立即被拒绝，且不可恢复。`,
-    '吊销密钥',
-    { type: 'warning', confirmButtonText: '吊销', confirmButtonClass: 'el-button--danger' },
+    t('openApi.keys.revokeConfirm', { name: key.name, prefix: key.prefix }),
+    t('openApi.keys.revokeTitle'),
+    {
+      type: 'warning',
+      confirmButtonText: t('openApi.keys.revoke'),
+      confirmButtonClass: 'el-button--danger',
+    },
   )
   await revokeApiKey(props.clientId, key.id)
-  ElMessage.success('已吊销')
+  ElMessage.success(t('openApi.keys.revoked'))
   await Promise.all([loadKeys(), loadClient()])
 }
 
@@ -238,18 +248,20 @@ async function runPreview(): Promise<void> {
 const base = openApiBase()
 const guide = computed(() => {
   const kb = client.value?.kbs[0]?.id ?? '<KB_ID>'
+  const query = JSON.stringify(t('openApi.guide.sampleRetrieveQuery'))
+  const question = JSON.stringify(t('openApi.guide.sampleChatQuestion'))
   return {
     retrieve: [
       `curl -X POST '${base}/retrieve' \\`,
       `  -H 'X-API-Key: <YOUR_API_KEY>' \\`,
       `  -H 'Content-Type: application/json' \\`,
-      `  -d '{"query": "差旅住宿标准是多少？", "kb_ids": ["${kb}"], "top_k": 5}'`,
+      `  -d '{"query": ${query}, "kb_ids": ["${kb}"], "top_k": 5}'`,
     ].join('\n'),
     chat: [
       `curl -N -X POST '${base}/chat' \\`,
       `  -H 'Authorization: Bearer <YOUR_API_KEY>' \\`,
       `  -H 'Content-Type: application/json' \\`,
-      `  -d '{"question": "年假怎么申请？", "stream": true}'`,
+      `  -d '{"question": ${question}, "stream": true}'`,
     ].join('\n'),
     mcp: JSON.stringify(
       {
@@ -301,32 +313,42 @@ onMounted(async () => {
         <div class="hero__main">
           <div class="hero__title">
             {{ client.name }}
-            <span v-if="expired" class="badge badge--off">已过期</span>
-            <span v-else-if="client.status === 'active'" class="badge badge--on">启用中</span>
-            <span v-else class="badge badge--off">已停用</span>
+            <span v-if="expired" class="badge badge--off">{{ t('openApi.fields.expired') }}</span>
+            <span v-else-if="client.status === 'active'" class="badge badge--on">{{
+              t('openApi.detail.active')
+            }}</span>
+            <span v-else class="badge badge--off">{{ t('openApi.detail.disabled') }}</span>
           </div>
           <div class="hero__meta">
-            <span>{{ client.owner_department_name ?? '未指定部门' }}</span>
-            <span v-if="client.contact">联系人：{{ client.contact }}</span>
-            <span class="mono">ID：{{ client.id }}</span>
-            <span>创建于 {{ formatDateTime(client.created_at) }}</span>
+            <span>{{ client.owner_department_name ?? t('openApi.detail.noDepartment') }}</span>
+            <span v-if="client.contact">{{
+              t('openApi.detail.contact', { contact: client.contact })
+            }}</span>
+            <span class="mono">{{ t('openApi.detail.id', { id: client.id }) }}</span>
+            <span>{{
+              t('openApi.detail.createdAt', { time: formatDateTime(client.created_at) })
+            }}</span>
           </div>
         </div>
         <div class="hero__actions">
-          <el-button @click="editorVisible = true">编辑授权</el-button>
+          <el-button @click="editorVisible = true">{{ t('openApi.actions.editAccess') }}</el-button>
           <el-button
             :type="client.status === 'active' ? 'danger' : 'primary'"
             plain
             @click="toggle().catch(() => undefined)"
           >
-            {{ client.status === 'active' ? '停用' : '启用' }}
+            {{
+              client.status === 'active'
+                ? t('openApi.actions.disable')
+                : t('openApi.actions.enable')
+            }}
           </el-button>
         </div>
       </div>
 
       <div class="grid">
         <div class="panel">
-          <div class="panel__label">授权知识库（上限）</div>
+          <div class="panel__label">{{ t('openApi.fields.kbsLimit') }}</div>
           <div class="panel__value">
             <el-tag v-for="kb in client.kbs" :key="kb.id" effect="plain" class="tag">
               {{ kb.name }}
@@ -334,7 +356,7 @@ onMounted(async () => {
           </div>
         </div>
         <div class="panel">
-          <div class="panel__label">代理身份（文档权限按此过滤）</div>
+          <div class="panel__label">{{ t('openApi.detail.principalsPanel') }}</div>
           <div class="panel__value">
             <el-tag
               v-for="p in client.principals"
@@ -343,68 +365,89 @@ onMounted(async () => {
               effect="plain"
               class="tag"
             >
-              {{ PRINCIPAL_LABEL[p.type] }} · {{ p.name ?? p.id }}
+              {{ principalLabel(p.type) }} · {{ p.name ?? p.id }}
             </el-tag>
           </div>
         </div>
         <div class="panel">
-          <div class="panel__label">开通能力</div>
+          <div class="panel__label">{{ t('openApi.fields.scopes') }}</div>
           <div class="panel__value">
             <el-tag v-for="s in client.scopes" :key="s" type="success" class="tag">
-              {{ SCOPE_INFO[s].label }}
+              {{ scopeLabel(s) }}
             </el-tag>
           </div>
         </div>
         <div class="panel">
-          <div class="panel__label">安全与配额</div>
+          <div class="panel__label">{{ t('openApi.fields.security') }}</div>
           <div class="panel__value small">
             <div>
-              限流 {{ client.effective_rate_per_minute }} 次/分钟
-              <span v-if="!client.rate_limit_per_minute" class="muted">（默认）</span>
+              {{ t('openApi.detail.rateLimit', { n: client.effective_rate_per_minute }) }}
+              <span v-if="!client.rate_limit_per_minute" class="muted">{{
+                t('openApi.detail.rateDefault')
+              }}</span>
             </div>
-            <div>每日配额 {{ client.daily_quota || '不限' }}</div>
             <div>
-              IP 白名单
-              {{ client.ip_allowlist.length ? client.ip_allowlist.join('，') : '不限' }}
+              {{
+                client.daily_quota
+                  ? t('openApi.detail.dailyQuota', { n: client.daily_quota })
+                  : t('openApi.detail.dailyQuotaUnlimited')
+              }}
             </div>
-            <div>有效期至 {{ client.expires_at ? formatDateTime(client.expires_at) : '长期' }}</div>
+            <div>
+              {{
+                client.ip_allowlist.length
+                  ? t('openApi.detail.ipAllowlist', {
+                      ips: client.ip_allowlist.join(t('openApi.detail.ipSeparator')),
+                    })
+                  : t('openApi.detail.ipAllowlistUnlimited')
+              }}
+            </div>
+            <div>
+              {{
+                client.expires_at
+                  ? t('openApi.detail.expiresAt', { time: formatDateTime(client.expires_at) })
+                  : t('openApi.detail.expiresNever')
+              }}
+            </div>
           </div>
         </div>
       </div>
 
       <el-card shadow="never" class="tabs-card">
         <el-tabs v-model="tab">
-          <el-tab-pane label="调用概览" name="usage">
+          <el-tab-pane :label="t('openApi.detail.tabs.usage')" name="usage">
             <div class="usage-toolbar">
               <el-radio-group v-model="usageDays" size="small">
-                <el-radio-button :value="7">近 7 天</el-radio-button>
-                <el-radio-button :value="14">近 14 天</el-radio-button>
-                <el-radio-button :value="30">近 30 天</el-radio-button>
+                <el-radio-button v-for="n in [7, 14, 30]" :key="n" :value="n">{{
+                  t('openApi.usage.lastDays', { n })
+                }}</el-radio-button>
               </el-radio-group>
             </div>
             <div v-if="usageStats" class="stats">
               <div class="stat">
-                <div class="stat__label">调用次数</div>
+                <div class="stat__label">{{ t('openApi.usage.calls') }}</div>
                 <div class="stat__value">{{ usageStats.calls }}</div>
               </div>
               <div class="stat">
-                <div class="stat__label">失败次数</div>
+                <div class="stat__label">{{ t('openApi.usage.errors') }}</div>
                 <div class="stat__value">{{ usageStats.errors }}</div>
               </div>
               <div class="stat">
-                <div class="stat__label">失败率</div>
+                <div class="stat__label">{{ t('openApi.usage.errorRate') }}</div>
                 <div class="stat__value">{{ usageStats.errorRate }}<small>%</small></div>
               </div>
               <div class="stat">
-                <div class="stat__label">平均耗时</div>
+                <div class="stat__label">{{ t('openApi.usage.latency') }}</div>
                 <div class="stat__value">{{ usageStats.latency }}<small>ms</small></div>
               </div>
             </div>
             <div class="usage-body">
               <EChart :option="usageOption" height="260px" class="usage-chart" />
               <div class="usage-side">
-                <div class="panel__label">接口分布</div>
-                <div v-if="!endpointRows.length" class="muted small">暂无调用</div>
+                <div class="panel__label">{{ t('openApi.usage.byEndpoint') }}</div>
+                <div v-if="!endpointRows.length" class="muted small">
+                  {{ t('openApi.usage.noCalls') }}
+                </div>
                 <div v-for="row in endpointRows" :key="row.endpoint" class="endpoint">
                   <span class="mono">{{ row.endpoint }}</span>
                   <span>{{ row.count }}</span>
@@ -413,49 +456,49 @@ onMounted(async () => {
             </div>
           </el-tab-pane>
 
-          <el-tab-pane label="密钥管理" name="keys">
+          <el-tab-pane :label="t('openApi.detail.tabs.keys')" name="keys">
             <div class="tab-toolbar">
-              <span class="muted small">
-                密钥只在签发时显示一次，平台仅保存其哈希；泄露时请立即吊销并重新签发。
-              </span>
+              <span class="muted small">{{ t('openApi.keys.hint') }}</span>
               <el-button type="primary" :icon="Key" data-test="issue-key" @click="openIssue">
-                签发密钥
+                {{ t('openApi.keys.issue') }}
               </el-button>
             </div>
-            <el-table v-loading="keysLoading" :data="keys" empty-text="尚未签发密钥">
-              <el-table-column prop="name" label="名称" min-width="140" />
-              <el-table-column label="密钥" min-width="150">
+            <el-table v-loading="keysLoading" :data="keys" :empty-text="t('openApi.keys.empty')">
+              <el-table-column prop="name" :label="t('common.name')" min-width="140" />
+              <el-table-column :label="t('openApi.keys.colKey')" min-width="150">
                 <template #default="{ row }">
                   <span class="mono">{{ row.prefix }}••••••••</span>
                 </template>
               </el-table-column>
-              <el-table-column label="状态" width="90">
+              <el-table-column :label="t('common.status')" width="90">
                 <template #default="{ row }">
-                  <el-tag v-if="row.status === 'revoked'" type="info" size="small">已吊销</el-tag>
+                  <el-tag v-if="row.status === 'revoked'" type="info" size="small">{{
+                    t('openApi.keys.revoked')
+                  }}</el-tag>
                   <el-tag v-else-if="keyExpired(row as ApiKey)" type="warning" size="small">
-                    已过期
+                    {{ t('openApi.fields.expired') }}
                   </el-tag>
-                  <el-tag v-else type="success" size="small">有效</el-tag>
+                  <el-tag v-else type="success" size="small">{{ t('openApi.keys.valid') }}</el-tag>
                 </template>
               </el-table-column>
-              <el-table-column label="过期时间" width="160">
+              <el-table-column :label="t('openApi.keys.colExpiresAt')" width="160">
                 <template #default="{ row }">
-                  {{ row.expires_at ? formatDateTime(row.expires_at) : '长期' }}
+                  {{ row.expires_at ? formatDateTime(row.expires_at) : t('openApi.keys.never') }}
                 </template>
               </el-table-column>
-              <el-table-column label="最近使用" min-width="190">
+              <el-table-column :label="t('openApi.keys.colLastUsed')" min-width="190">
                 <template #default="{ row }">
                   <template v-if="row.last_used_at">
                     {{ formatDateTime(row.last_used_at) }}
                     <span class="muted small">{{ row.last_used_ip }}</span>
                   </template>
-                  <span v-else class="muted">从未使用</span>
+                  <span v-else class="muted">{{ t('openApi.keys.neverUsed') }}</span>
                 </template>
               </el-table-column>
-              <el-table-column label="签发时间" width="160">
+              <el-table-column :label="t('openApi.keys.colIssuedAt')" width="160">
                 <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
               </el-table-column>
-              <el-table-column label="操作" width="90" fixed="right">
+              <el-table-column :label="t('common.actions')" width="90" fixed="right">
                 <template #default="{ row }">
                   <el-button
                     v-if="row.status === 'active'"
@@ -463,32 +506,32 @@ onMounted(async () => {
                     type="danger"
                     @click="revoke(row as ApiKey).catch(() => undefined)"
                   >
-                    吊销
+                    {{ t('openApi.keys.revoke') }}
                   </el-button>
                 </template>
               </el-table-column>
             </el-table>
           </el-tab-pane>
 
-          <el-tab-pane label="调用日志" name="logs">
+          <el-tab-pane :label="t('openApi.detail.tabs.logs')" name="logs">
             <div class="tab-toolbar">
               <el-radio-group v-model="logQuery.outcome" size="small" @change="filterLogs">
-                <el-radio-button value="">全部</el-radio-button>
-                <el-radio-button value="ok">成功</el-radio-button>
-                <el-radio-button value="error">失败</el-radio-button>
+                <el-radio-button value="">{{ t('common.all') }}</el-radio-button>
+                <el-radio-button value="ok">{{ t('openApi.logs.ok') }}</el-radio-button>
+                <el-radio-button value="error">{{ t('openApi.logs.error') }}</el-radio-button>
               </el-radio-group>
-              <el-button size="small" @click="loadLogs">刷新</el-button>
+              <el-button size="small" @click="loadLogs">{{ t('common.refresh') }}</el-button>
             </div>
-            <el-table v-loading="logsLoading" :data="logs" empty-text="暂无调用记录">
-              <el-table-column label="时间" width="160">
+            <el-table v-loading="logsLoading" :data="logs" :empty-text="t('openApi.logs.empty')">
+              <el-table-column :label="t('openApi.logs.colTime')" width="160">
                 <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
               </el-table-column>
-              <el-table-column label="接口" width="150">
+              <el-table-column :label="t('openApi.logs.colEndpoint')" width="150">
                 <template #default="{ row }"
                   ><span class="mono">{{ row.endpoint }}</span></template
                 >
               </el-table-column>
-              <el-table-column label="状态" width="150">
+              <el-table-column :label="t('common.status')" width="150">
                 <template #default="{ row }">
                   <el-tag :type="row.status_code < 400 ? 'success' : 'danger'" size="small">
                     {{ row.status_code }}
@@ -496,14 +539,23 @@ onMounted(async () => {
                   <span v-if="row.error_code" class="muted small"> {{ row.error_code }}</span>
                 </template>
               </el-table-column>
-              <el-table-column label="查询内容" min-width="220" show-overflow-tooltip>
+              <el-table-column
+                :label="t('openApi.logs.colQuery')"
+                min-width="220"
+                show-overflow-tooltip
+              >
                 <template #default="{ row }">{{ row.query ?? '—' }}</template>
               </el-table-column>
-              <el-table-column label="结果数" width="80" align="right" prop="result_count" />
-              <el-table-column label="耗时" width="90" align="right">
+              <el-table-column
+                :label="t('openApi.logs.colResults')"
+                width="80"
+                align="right"
+                prop="result_count"
+              />
+              <el-table-column :label="t('openApi.logs.colLatency')" width="90" align="right">
                 <template #default="{ row }">{{ row.latency_ms }} ms</template>
               </el-table-column>
-              <el-table-column label="来源 IP" width="130" prop="ip" />
+              <el-table-column :label="t('openApi.logs.colIp')" width="130" prop="ip" />
               <el-table-column label="Trace" width="110">
                 <template #default="{ row }">
                   <el-button
@@ -511,9 +563,9 @@ onMounted(async () => {
                     link
                     type="primary"
                     size="small"
-                    @click="copy(row.trace_id as string, '已复制 trace_id')"
+                    @click="copy(row.trace_id as string, t('openApi.logs.traceCopied'))"
                   >
-                    复制
+                    {{ t('common.copy') }}
                   </el-button>
                 </template>
               </el-table-column>
@@ -529,18 +581,18 @@ onMounted(async () => {
             />
           </el-tab-pane>
 
-          <el-tab-pane label="授权预览" name="preview">
+          <el-tab-pane :label="t('openApi.detail.tabs.preview')" name="preview">
             <el-alert
               type="info"
               show-icon
               :closable="false"
-              title="以该应用的身份与授权执行一次检索（不计入调用量），用于确认它能看到什么、看不到什么。"
+              :title="t('openApi.preview.tip')"
               class="preview-tip"
             />
             <el-form class="preview-form" @submit.prevent="runPreview">
               <el-input
                 v-model="preview.query"
-                placeholder="输入一个问题，例如：差旅住宿标准"
+                :placeholder="t('openApi.preview.queryPlaceholder')"
                 :prefix-icon="Search"
                 clearable
                 data-test="preview-query"
@@ -550,22 +602,29 @@ onMounted(async () => {
                 multiple
                 collapse-tags
                 clearable
-                placeholder="全部授权知识库"
+                :placeholder="t('openApi.preview.kbsPlaceholder')"
                 class="preview-kb"
               >
                 <el-option v-for="kb in client.kbs" :key="kb.id" :label="kb.name" :value="kb.id" />
               </el-select>
               <el-input-number v-model="preview.top_k" :min="1" :max="20" />
-              <el-button type="primary" native-type="submit" :loading="previewing">检索</el-button>
+              <el-button type="primary" native-type="submit" :loading="previewing">{{
+                t('openApi.preview.submit')
+              }}</el-button>
             </el-form>
             <template v-if="previewResult">
               <div class="muted small preview-summary">
-                命中 {{ previewResult.total }} 条 · 耗时 {{ Math.round(previewResult.took_ms) }} ms
+                {{
+                  t('openApi.preview.summary', {
+                    total: previewResult.total,
+                    ms: Math.round(previewResult.took_ms),
+                  })
+                }}
               </div>
               <el-empty
                 v-if="!previewResult.items.length"
                 :image-size="64"
-                description="该应用在授权范围内没有可见的相关内容"
+                :description="t('openApi.preview.empty')"
               />
               <div v-for="item in previewResult.items" :key="item.chunk_id" class="hit">
                 <div class="hit__head">
@@ -573,7 +632,7 @@ onMounted(async () => {
                   <span class="hit__title">{{ item.title }}</span>
                   <el-tag size="small" effect="plain">{{ item.kb_name }}</el-tag>
                   <span v-if="item.score !== null" class="muted small">
-                    相关度 {{ item.score.toFixed(3) }}
+                    {{ t('openApi.preview.score', { score: item.score.toFixed(3) }) }}
                   </span>
                 </div>
                 <div v-if="item.heading_path.length" class="muted small">
@@ -584,31 +643,25 @@ onMounted(async () => {
             </template>
           </el-tab-pane>
 
-          <el-tab-pane label="接入指南" name="guide">
+          <el-tab-pane :label="t('openApi.detail.tabs.guide')" name="guide">
             <div class="guide">
               <div class="guide__row">
-                <span class="panel__label">接口地址</span>
+                <span class="panel__label">{{ t('openApi.guide.baseUrl') }}</span>
                 <code class="mono">{{ base }}</code>
-                <el-button link :icon="CopyDocument" @click="copy(base)">复制</el-button>
+                <el-button link :icon="CopyDocument" @click="copy(base)">{{
+                  t('common.copy')
+                }}</el-button>
               </div>
-              <p class="muted small">
-                认证：请求头 <code>X-API-Key: ekb_sk_…</code> 或
-                <code>Authorization: Bearer ekb_sk_…</code>。调用
-                <code>GET /whoami</code> 可查看当前密钥的授权范围。
-              </p>
+              <i18n-t keypath="openApi.guide.auth" tag="p" class="muted small">
+                <template #apiKey><code>X-API-Key: ekb_sk_…</code></template>
+                <template #bearer><code>Authorization: Bearer ekb_sk_…</code></template>
+                <template #whoami><code>GET /whoami</code></template>
+              </i18n-t>
               <div v-for="(code, name) in guide" :key="name" class="snippet">
                 <div class="snippet__head">
-                  <span>
-                    {{
-                      name === 'retrieve'
-                        ? '检索'
-                        : name === 'chat'
-                          ? '问答（流式 SSE）'
-                          : 'MCP 客户端配置'
-                    }}
-                  </span>
+                  <span>{{ t(`openApi.guide.snippets.${name}`) }}</span>
                   <el-button link size="small" :icon="CopyDocument" @click="copy(code)">
-                    复制
+                    {{ t('common.copy') }}
                   </el-button>
                 </div>
                 <pre class="snippet__code">{{ code }}</pre>
@@ -621,49 +674,53 @@ onMounted(async () => {
       <ApiClientEditor v-model="editorVisible" :client="client" @saved="(c) => (client = c)" />
     </template>
 
-    <el-dialog v-model="keyDialog.visible" title="签发密钥" width="460px">
+    <el-dialog v-model="keyDialog.visible" :title="t('openApi.keys.issue')" width="460px">
       <el-form label-position="top">
-        <el-form-item label="密钥名称">
-          <el-input v-model="keyDialog.name" maxlength="128" placeholder="如：prod / test" />
+        <el-form-item :label="t('openApi.keys.dialogName')">
+          <el-input
+            v-model="keyDialog.name"
+            maxlength="128"
+            :placeholder="t('openApi.keys.dialogNamePlaceholder')"
+          />
         </el-form-item>
-        <el-form-item label="过期时间">
+        <el-form-item :label="t('openApi.keys.colExpiresAt')">
           <el-date-picker
             v-model="keyDialog.expires_at"
             type="datetime"
             value-format="YYYY-MM-DDTHH:mm:ssZ"
-            placeholder="留空表示长期有效"
+            :placeholder="t('openApi.keys.dialogExpiresPlaceholder')"
             clearable
             style="width: 100%"
           />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="keyDialog.visible = false">取消</el-button>
+        <el-button @click="keyDialog.visible = false">{{ t('common.cancel') }}</el-button>
         <el-button type="primary" :loading="issuing" data-test="confirm-issue" @click="issueKey">
-          签发
+          {{ t('openApi.keys.issueSubmit') }}
         </el-button>
       </template>
     </el-dialog>
 
     <el-dialog
       :model-value="!!issued"
-      title="密钥已签发"
+      :title="t('openApi.keys.issuedTitle')"
       width="560px"
       :close-on-click-modal="false"
       @update:model-value="issued = null"
     >
       <div class="secret-warn">
         <el-icon><WarningFilled /></el-icon>
-        请立即复制并妥善保存。关闭此窗口后将无法再次查看完整密钥。
+        {{ t('openApi.keys.issuedWarn') }}
       </div>
       <div class="secret">
         <code class="mono" data-test="issued-secret">{{ issued?.secret }}</code>
         <el-button type="primary" :icon="CopyDocument" @click="copy(issued?.secret ?? '')">
-          复制
+          {{ t('common.copy') }}
         </el-button>
       </div>
       <template #footer>
-        <el-button type="primary" @click="issued = null">我已保存</el-button>
+        <el-button type="primary" @click="issued = null">{{ t('openApi.keys.savedIt') }}</el-button>
       </template>
     </el-dialog>
   </div>

@@ -1,14 +1,20 @@
 import type { EvalMetrics, EvalRunStatus } from '@/api/types'
+import { t } from '@/i18n'
 
 type TagType = 'success' | 'warning' | 'danger' | 'info' | 'primary'
 
-export const RUN_STATUS_META: Record<EvalRunStatus, { label: string; type: TagType }> = {
-  pending: { label: '排队中', type: 'info' },
-  running: { label: '运行中', type: 'primary' },
-  done: { label: '已完成', type: 'success' },
-  failed: { label: '失败', type: 'danger' },
+export const RUN_STATUS_META: Record<EvalRunStatus, { type: TagType }> = {
+  pending: { type: 'info' },
+  running: { type: 'primary' },
+  done: { type: 'success' },
+  failed: { type: 'danger' },
 }
 
+export function runStatusLabel(status: EvalRunStatus): string {
+  return t(`evaluation.runStatus.${status}`)
+}
+
+/** Labels that read the same in every locale (metric names). */
 export const METRIC_LABELS: Record<string, string> = {
   'recall@5': 'Recall@5',
   'recall@10': 'Recall@10',
@@ -18,18 +24,22 @@ export const METRIC_LABELS: Record<string, string> = {
   'chunk_recall@10': 'Chunk Recall@10',
   chunk_mrr: 'Chunk MRR',
   'chunk_ndcg@10': 'Chunk nDCG@10',
-  faithfulness: '忠实度',
-  answer_relevance: '答案相关性',
-  citation_accuracy: '引用正确率（Judge）',
-  citation_precision: '引用命中率',
-  answered: '作答率',
-  grounded: '引用有据率',
-  degraded: '降级率',
-  retrieved: '平均召回数',
-  latency_ms_avg: '平均耗时（ms）',
-  cases: '用例数',
-  errors: '错误数',
 }
+
+/** Metrics whose label lives in `evaluation.metrics.<key>`. */
+const TRANSLATED_METRICS = new Set([
+  'faithfulness',
+  'answer_relevance',
+  'citation_accuracy',
+  'citation_precision',
+  'answered',
+  'grounded',
+  'degraded',
+  'retrieved',
+  'latency_ms_avg',
+  'cases',
+  'errors',
+])
 
 /** Metrics shown first, in this order; the rest follow alphabetically. */
 export const PRIMARY_METRICS = [
@@ -51,6 +61,7 @@ export function isScoreMetric(key: string): boolean {
 }
 
 export function metricLabel(key: string): string {
+  if (TRANSLATED_METRICS.has(key)) return t(`evaluation.metrics.${key}`)
   return METRIC_LABELS[key] ?? key
 }
 

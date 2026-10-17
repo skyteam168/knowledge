@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { EChartsCoreOption } from 'echarts/core'
 import EChart from '@/components/charts/EChart.vue'
 import { tableToBarOption } from '@/utils/answerBlocks'
@@ -9,6 +10,7 @@ const props = defineProps<{
   rows: string[][]
 }>()
 
+const { t } = useI18n()
 const mode = ref<'table' | 'chart'>('table')
 const chartOption = computed(() => tableToBarOption(props.headers, props.rows))
 const wide = computed(() => props.headers.length >= 8)
@@ -29,8 +31,10 @@ function isNumericCol(col: number): boolean {
 <template>
   <div class="answer-table" data-test="answer-table">
     <div class="answer-table__toolbar">
-      <span v-if="wide" class="answer-table__hint">表格较宽，可左右滑动查看</span>
-      <span v-else class="answer-table__hint">{{ rows.length }} 行 · {{ headers.length }} 列</span>
+      <span v-if="wide" class="answer-table__hint">{{ t('assistant.table.wideHint') }}</span>
+      <span v-else class="answer-table__hint">{{
+        t('assistant.table.size', { rows: rows.length, cols: headers.length })
+      }}</span>
       <button
         v-if="canChart"
         type="button"
@@ -38,7 +42,7 @@ function isNumericCol(col: number): boolean {
         data-test="table-chart-toggle"
         @click="mode = mode === 'table' ? 'chart' : 'table'"
       >
-        {{ mode === 'table' ? '切换为图表' : '切换为表格' }}
+        {{ mode === 'table' ? t('assistant.table.toChart') : t('assistant.table.toTable') }}
       </button>
     </div>
     <div v-show="mode === 'table'" class="answer-table__scroll">

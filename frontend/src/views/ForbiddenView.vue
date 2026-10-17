@@ -1,10 +1,14 @@
-<script setup lang="ts"></script>
+<script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
+</script>
 
 <template>
-  <el-result icon="error" title="403" sub-title="您没有访问该页面的权限，如需开通请联系管理员">
+  <el-result icon="error" title="403" :sub-title="t('layout.forbidden')">
     <template #extra>
       <RouterLink to="/">
-        <el-button type="primary">返回首页</el-button>
+        <el-button type="primary">{{ t('layout.backHome') }}</el-button>
       </RouterLink>
     </template>
   </el-result>

@@ -2,15 +2,28 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { listGuideProgress, resetGuideProgress, saveGuideProgress } from '@/api/guides'
 import type { GuideProgress, GuideStatus } from '@/api/types'
-import { findTour, resolveSteps, type ResolvedStep, type TourDef } from '@/guide/tours'
+import {
+  findTour,
+  resolveStepIndexes,
+  stepsAt,
+  type ResolvedStep,
+  type TourDef,
+} from '@/guide/tours'
 import { useAuthStore } from './auth'
 
 export const useGuideStore = defineStore('guide', () => {
   const progress = ref<Record<string, GuideProgress>>({})
   // Tours only auto-play once progress is known, so a failed load never nags the user.
   const loaded = ref(false)
-  const active = ref<TourDef | null>(null)
-  const steps = ref<ResolvedStep[]>([])
+  // Key + step indexes rather than resolved text, so a running tour follows locale switches.
+  const activeKey = ref<string | null>(null)
+  const stepIndexes = ref<number[]>([])
+  const active = computed<TourDef | null>(() =>
+    activeKey.value ? (findTour(activeKey.value) ?? null) : null,
+  )
+  const steps = computed<ResolvedStep[]>(() =>
+    active.value ? stepsAt(active.value, stepIndexes.value) : [],
+  )
   const running = computed(() => active.value !== null)
 
   async function load(): Promise<void> {
@@ -38,17 +51,17 @@ export const useGuideStore = defineStore('guide', () => {
     const tour = findTour(key)
     const auth = useAuthStore()
     if (!tour || running.value || !auth.can(tour.permission)) return false
-    const resolved = resolveSteps(tour, auth.can)
-    if (!resolved.length) return false
-    steps.value = resolved
-    active.value = tour
+    const indexes = resolveStepIndexes(tour, auth.can)
+    if (!indexes.length) return false
+    stepIndexes.value = indexes
+    activeKey.value = tour.key
     return true
   }
 
   async function end(status: GuideStatus): Promise<void> {
     const tour = active.value
-    active.value = null
-    steps.value = []
+    activeKey.value = null
+    stepIndexes.value = []
     if (!tour) return
     const local: GuideProgress = {
       guide_key: tour.key,

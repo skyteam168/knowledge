@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { getEvalRun, listEvalResults } from '@/api/evaluation'
 import type { EvalResult, EvalRun, EvalRunStatus } from '@/api/types'
 import { formatDateTime } from '@/utils/format'
@@ -9,6 +10,7 @@ import {
   formatConfigValue,
   formatMetric,
   metricLabel,
+  runStatusLabel,
   sortMetricKeys,
 } from '@/utils/evaluation'
 
@@ -17,6 +19,7 @@ const CASE_METRICS = ['recall@5', 'recall@10', 'mrr', 'ndcg@10', 'faithfulness',
 
 const props = defineProps<{ runId: string }>()
 const router = useRouter()
+const { t } = useI18n()
 
 const run = ref<EvalRun | null>(null)
 const onlyFailed = ref(false)
@@ -101,7 +104,9 @@ onBeforeUnmount(() => {
       <template #header>
         <div class="card-header">
           <div>
-            <el-button link @click="router.push('/admin/eval-runs')">评测任务</el-button>
+            <el-button link @click="router.push('/admin/eval-runs')">{{
+              t('evaluation.shared.runs')
+            }}</el-button>
             <span class="sep">/</span>
             <span class="title">{{ run.name || run.profile_name }}</span>
             <el-tag
@@ -109,7 +114,7 @@ onBeforeUnmount(() => {
               size="small"
               class="tag"
             >
-              {{ RUN_STATUS_META[run.status as EvalRunStatus].label }}
+              {{ runStatusLabel(run.status as EvalRunStatus) }}
             </el-tag>
           </div>
           <el-button
@@ -117,32 +122,34 @@ onBeforeUnmount(() => {
             type="primary"
             @click="router.push(`/admin/eval-runs?dataset_id=${run.dataset_id}`)"
           >
-            同评测集的其他任务
+            {{ t('evaluation.runDetail.sameDatasetRuns') }}
           </el-button>
         </div>
       </template>
 
       <el-descriptions :column="3" size="small" border>
-        <el-descriptions-item label="评测集">
+        <el-descriptions-item :label="t('evaluation.shared.dataset')">
           <RouterLink :to="`/admin/eval-datasets/${run.dataset_id}`">{{
             run.dataset_name
           }}</RouterLink>
         </el-descriptions-item>
-        <el-descriptions-item label="检索策略">{{ run.profile_name }}</el-descriptions-item>
-        <el-descriptions-item label="LLM 评判">{{
-          run.judge_enabled ? '是' : '否'
+        <el-descriptions-item :label="t('evaluation.shared.profile')">{{
+          run.profile_name
         }}</el-descriptions-item>
-        <el-descriptions-item label="进度">
+        <el-descriptions-item :label="t('evaluation.shared.judge')">{{
+          run.judge_enabled ? t('common.yes') : t('common.no')
+        }}</el-descriptions-item>
+        <el-descriptions-item :label="t('evaluation.runDetail.progress')">
           {{ run.done_count }}/{{ run.case_count }}
           <el-progress v-if="!finished" :percentage="progress" :stroke-width="6" class="progress" />
         </el-descriptions-item>
-        <el-descriptions-item label="开始">{{
+        <el-descriptions-item :label="t('evaluation.runDetail.startedAt')">{{
           formatDateTime(run.started_at)
         }}</el-descriptions-item>
-        <el-descriptions-item label="结束">{{
+        <el-descriptions-item :label="t('evaluation.runDetail.finishedAt')">{{
           formatDateTime(run.finished_at)
         }}</el-descriptions-item>
-        <el-descriptions-item v-if="run.error" label="错误" :span="3">
+        <el-descriptions-item v-if="run.error" :label="t('evaluation.shared.error')" :span="3">
           <span class="error">{{ run.error }}</span>
         </el-descriptions-item>
       </el-descriptions>
@@ -155,18 +162,18 @@ onBeforeUnmount(() => {
       </div>
 
       <el-collapse class="config">
-        <el-collapse-item title="策略配置快照" name="config">
+        <el-collapse-item :title="t('evaluation.runDetail.configSnapshot')" name="config">
           <el-table :data="configRows" size="small" max-height="360">
-            <el-table-column prop="key" label="参数" min-width="200" />
-            <el-table-column label="值" min-width="200">
+            <el-table-column prop="key" :label="t('evaluation.shared.param')" min-width="200" />
+            <el-table-column :label="t('evaluation.runDetail.value')" min-width="200">
               <template #default="{ row }">{{ formatConfigValue(row.value) }}</template>
             </el-table-column>
           </el-table>
         </el-collapse-item>
-        <el-collapse-item title="运行环境（索引代、模型、切分参数）" name="env">
+        <el-collapse-item :title="t('evaluation.runDetail.environment')" name="env">
           <el-table :data="environmentRows" size="small" max-height="360">
-            <el-table-column prop="key" label="项" min-width="200" />
-            <el-table-column label="值" min-width="200">
+            <el-table-column prop="key" :label="t('evaluation.runDetail.item')" min-width="200" />
+            <el-table-column :label="t('evaluation.runDetail.value')" min-width="200">
               <template #default="{ row }">{{ formatConfigValue(row.value) }}</template>
             </el-table-column>
           </el-table>
@@ -177,42 +184,61 @@ onBeforeUnmount(() => {
     <el-card shadow="never">
       <template #header>
         <div class="card-header">
-          <span>用例结果</span>
-          <el-checkbox v-model="onlyFailed" @change="search">只看错误</el-checkbox>
+          <span>{{ t('evaluation.runDetail.caseResults') }}</span>
+          <el-checkbox v-model="onlyFailed" @change="search">{{
+            t('evaluation.runDetail.onlyFailed')
+          }}</el-checkbox>
         </div>
       </template>
-      <el-table v-loading="loading" :data="results" row-key="id" empty-text="暂无结果">
+      <el-table
+        v-loading="loading"
+        :data="results"
+        row-key="id"
+        :empty-text="t('evaluation.runDetail.noResults')"
+      >
         <el-table-column type="expand">
           <template #default="{ row }">
             <div class="result">
-              <h4>召回结果</h4>
+              <h4>{{ t('evaluation.runDetail.retrieved') }}</h4>
               <el-table :data="row.retrieved" size="small" max-height="300">
                 <el-table-column prop="rank" label="#" width="50" />
-                <el-table-column label="文档" min-width="200" show-overflow-tooltip>
+                <el-table-column
+                  :label="t('evaluation.shared.document')"
+                  min-width="200"
+                  show-overflow-tooltip
+                >
                   <template #default="{ row: item }">
                     {{ item.title }}
-                    <el-tag v-if="item.is_ko" size="small" type="warning">知识条目</el-tag>
+                    <el-tag v-if="item.is_ko" size="small" type="warning">{{
+                      t('evaluation.runDetail.ko')
+                    }}</el-tag>
                   </template>
                 </el-table-column>
-                <el-table-column label="分数" width="90">
+                <el-table-column :label="t('evaluation.runDetail.score')" width="90">
                   <template #default="{ row: item }">{{ item.score?.toFixed(4) ?? '—' }}</template>
                 </el-table-column>
-                <el-table-column label="命中" width="70">
+                <el-table-column :label="t('evaluation.runDetail.hit')" width="70">
                   <template #default="{ row: item }">
-                    <el-tag v-if="item.relevant" type="success" size="small">是</el-tag>
+                    <el-tag v-if="item.relevant" type="success" size="small">{{
+                      t('common.yes')
+                    }}</el-tag>
                   </template>
                 </el-table-column>
               </el-table>
               <template v-if="row.answer !== null">
-                <h4>生成答案（{{ row.grounding ?? '—' }}）</h4>
+                <h4>
+                  {{
+                    t('evaluation.runDetail.generatedAnswer', { grounding: row.grounding ?? '—' })
+                  }}
+                </h4>
                 <div class="answer">{{ row.answer }}</div>
               </template>
               <template v-if="row.reference_answer">
-                <h4>标准答案</h4>
+                <h4>{{ t('evaluation.shared.referenceAnswer') }}</h4>
                 <div class="answer">{{ row.reference_answer }}</div>
               </template>
               <template v-if="judgeReasons(row as EvalResult).length">
-                <h4>评判理由</h4>
+                <h4>{{ t('evaluation.runDetail.judgeReasons') }}</h4>
                 <el-descriptions :column="1" size="small" border>
                   <el-descriptions-item
                     v-for="[key, reason] in judgeReasons(row as EvalResult)"
@@ -230,7 +256,12 @@ onBeforeUnmount(() => {
             </div>
           </template>
         </el-table-column>
-        <el-table-column prop="question" label="问题" min-width="240" show-overflow-tooltip />
+        <el-table-column
+          prop="question"
+          :label="t('evaluation.shared.question')"
+          min-width="240"
+          show-overflow-tooltip
+        />
         <el-table-column
           v-for="key in CASE_METRICS"
           :key="key"
@@ -239,13 +270,15 @@ onBeforeUnmount(() => {
         >
           <template #default="{ row }">{{ formatMetric(key, row.metrics[key]) }}</template>
         </el-table-column>
-        <el-table-column label="耗时" width="90">
+        <el-table-column :label="t('evaluation.runDetail.latency')" width="90">
           <template #default="{ row }">{{ row.latency_ms }} ms</template>
         </el-table-column>
-        <el-table-column label="状态" width="80">
+        <el-table-column :label="t('common.status')" width="80">
           <template #default="{ row }">
-            <el-tag v-if="row.error" type="danger" size="small">错误</el-tag>
-            <el-tag v-else type="success" size="small">完成</el-tag>
+            <el-tag v-if="row.error" type="danger" size="small">{{
+              t('evaluation.shared.error')
+            }}</el-tag>
+            <el-tag v-else type="success" size="small">{{ t('evaluation.runDetail.done') }}</el-tag>
           </template>
         </el-table-column>
       </el-table>

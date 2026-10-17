@@ -1,22 +1,24 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import { getSyncRun, listDirectorySources, startDirectorySync } from '@/api/directory'
 import type { DirectorySource, SyncChange, SyncRunDetail } from '@/api/types'
 import { formatDateTime } from '@/utils/format'
 import {
-  ACTION_LABEL,
   DEPT_STAT_KEYS,
   IDENTITY_STAT_KEYS,
-  MATCH_LABEL,
-  SOURCE_LABEL,
-  STATUS_INFO,
   USER_STAT_KEYS,
+  actionLabel,
+  matchLabel,
+  sourceLabel,
   statLine,
+  statusInfo,
 } from './meta'
 
+const { t } = useI18n()
 const props = defineProps<{ runId: string }>()
 const router = useRouter()
 const run = ref<SyncRunDetail | null>(null)
@@ -31,15 +33,23 @@ const changes = computed(() => run.value?.changes ?? {})
 const tabs = computed(() =>
   identityMode.value
     ? [
-        { name: 'identities', label: '身份绑定' },
-        { name: 'unmatched', label: '未匹配人员' },
+        { name: 'identities', label: t('directory.run.tabs.identities') },
+        { name: 'unmatched', label: t('directory.run.tabs.unmatched') },
       ]
     : [
-        { name: 'departments', label: '部门' },
-        { name: 'users', label: '人员' },
-        { name: 'disabled', label: '停用' },
+        { name: 'departments', label: t('directory.run.tabs.departments') },
+        { name: 'users', label: t('directory.run.tabs.users') },
+        { name: 'disabled', label: t('directory.run.tabs.disabled') },
       ],
 )
+const sourceInfo = computed(() => {
+  const s = source.value
+  if (!s) return ''
+  const named = { name: s.name, type: sourceLabel(s.type) }
+  return s.is_primary
+    ? t('directory.run.sourceInfoPrimary', named)
+    : t('directory.run.sourceInfo', named)
+})
 
 async function load(): Promise<void> {
   loading.value = true
@@ -47,7 +57,7 @@ async function load(): Promise<void> {
     run.value = await getSyncRun(props.runId)
     const sources = await listDirectorySources()
     source.value = sources.find((s) => s.id === run.value?.source_id) ?? null
-    if (!tabs.value.some((t) => t.name === tab.value)) tab.value = tabs.value[0].name
+    if (!tabs.value.some((item) => item.name === tab.value)) tab.value = tabs.value[0].name
     if (run.value.status === 'running') timer = setTimeout(load, 2000)
   } finally {
     loading.value = false
@@ -68,7 +78,7 @@ function count(name: string): number {
   if (!s) return rows(name).length
   if (name === 'departments') {
     const d = s.departments ?? {}
-    return DEPT_STAT_KEYS.reduce((n, [k]) => n + (d[k] ?? 0), 0)
+    return DEPT_STAT_KEYS.reduce((n, k) => n + (d[k] ?? 0), 0)
   }
   if (name === 'users') {
     const u = s.users ?? {}
@@ -81,7 +91,7 @@ function count(name: string): number {
 }
 
 function labels(change: SyncChange): string[] {
-  return (change.changes ?? [change.action]).map((c) => ACTION_LABEL[c] ?? c)
+  return (change.changes ?? [change.action]).map(actionLabel)
 }
 
 const canApply = computed(
@@ -97,13 +107,16 @@ async function apply(force: boolean): Promise<void> {
   if (!source.value || !run.value) return
   await ElMessageBox.confirm(
     force
-      ? `本次同步停用人数超过保护阈值。确认这是正常的人员变动（例如批量离职）后再强制应用。`
-      : `将重新读取「${source.value.name}」的最新数据并应用（结果以应用时为准）。确定吗？`,
-    force ? '强制应用' : '应用同步',
-    { type: 'warning', confirmButtonText: force ? '强制应用' : '应用' },
+      ? t('directory.run.forceConfirm')
+      : t('directory.run.applyConfirm', { name: source.value.name }),
+    force ? t('directory.run.forceApply') : t('directory.run.applyTitle'),
+    {
+      type: 'warning',
+      confirmButtonText: force ? t('directory.run.forceApply') : t('directory.run.apply'),
+    },
   )
   const next = await startDirectorySync(source.value.id, 'apply', force)
-  ElMessage.success('已开始同步')
+  ElMessage.success(t('directory.sources.syncStarted'))
   void router.replace({ name: 'admin-directory-run', params: { runId: next.id } })
 }
 </script>
@@ -113,23 +126,26 @@ async function apply(force: boolean): Promise<void> {
     <div class="page-header">
       <div>
         <el-button link :icon="ArrowLeft" @click="router.push({ name: 'admin-directory' })">
-          返回组织同步
+          {{ t('directory.run.back') }}
         </el-button>
         <h2 class="page-header__title">
-          {{ run?.mode === 'preview' ? '同步预览' : '同步结果' }}
-          <el-tag v-if="run" :type="STATUS_INFO[run.status].type">{{
-            STATUS_INFO[run.status].label
+          {{
+            run?.mode === 'preview'
+              ? t('directory.run.previewTitle')
+              : t('directory.run.resultTitle')
+          }}
+          <el-tag v-if="run" :type="statusInfo(run.status).type">{{
+            statusInfo(run.status).label
           }}</el-tag>
         </h2>
         <p v-if="run" class="page-header__desc">
-          {{
-            source
-              ? `${source.name}（${SOURCE_LABEL[source.type]}${source.is_primary ? '，主数据源' : ''}）`
-              : ''
-          }}
+          {{ sourceInfo }}
           · {{ formatDateTime(run.started_at) }} · {{ run.triggered_by ?? '—' }}
           <template v-if="run.finished_at">
-            · 耗时 {{ (run.duration_ms / 1000).toFixed(1) }}s</template
+            ·
+            {{
+              t('directory.run.duration', { seconds: (run.duration_ms / 1000).toFixed(1) })
+            }}</template
           >
         </p>
       </div>
@@ -140,7 +156,7 @@ async function apply(force: boolean): Promise<void> {
           data-test="force-apply"
           @click="apply(true).catch(() => undefined)"
         >
-          强制应用
+          {{ t('directory.run.forceApply') }}
         </el-button>
         <el-button
           v-else-if="run?.status === 'succeeded'"
@@ -148,7 +164,7 @@ async function apply(force: boolean): Promise<void> {
           data-test="apply"
           @click="apply(false).catch(() => undefined)"
         >
-          应用这些变更
+          {{ t('directory.run.applyChanges') }}
         </el-button>
       </div>
     </div>
@@ -159,7 +175,7 @@ async function apply(force: boolean): Promise<void> {
         type="info"
         :closable="false"
         show-icon
-        title="正在读取数据源并计算差异…"
+        :title="t('directory.run.running')"
         class="block"
       />
       <el-alert
@@ -167,7 +183,7 @@ async function apply(force: boolean): Promise<void> {
         type="error"
         :closable="false"
         show-icon
-        :title="run.error ?? '同步失败'"
+        :title="run.error ?? t('directory.run.failed')"
         class="block"
       />
       <el-alert
@@ -175,8 +191,8 @@ async function apply(force: boolean): Promise<void> {
         type="warning"
         :closable="false"
         show-icon
-        :title="`已中止：${run.error}`"
-        description="没有写入任何数据。请核对下方「停用」列表，确认无误后可强制应用。"
+        :title="t('directory.run.aborted', { error: run.error })"
+        :description="t('directory.run.abortedDesc')"
         class="block"
       />
       <el-alert
@@ -184,24 +200,28 @@ async function apply(force: boolean): Promise<void> {
         type="info"
         :closable="false"
         show-icon
-        title="这是预览，未写入数据。确认无误后，在组织同步页用「更多 → 上传并直接应用」上传同一文件。"
+        :title="t('directory.run.excelPreview')"
         class="block"
       />
 
       <div v-if="stats" class="stats block">
         <template v-if="identityMode">
           <el-card shadow="never" class="stat">
-            <div class="stat__label">身份绑定</div>
+            <div class="stat__label">{{ t('directory.run.tabs.identities') }}</div>
             <div class="stat__value">{{ statLine(stats.identities, IDENTITY_STAT_KEYS) }}</div>
           </el-card>
         </template>
         <template v-else>
           <el-card shadow="never" class="stat">
-            <div class="stat__label">部门（共 {{ stats.departments?.total ?? 0 }}）</div>
+            <div class="stat__label">
+              {{ t('directory.run.departmentsTotal', { total: stats.departments?.total ?? 0 }) }}
+            </div>
             <div class="stat__value">{{ statLine(stats.departments, DEPT_STAT_KEYS) }}</div>
           </el-card>
           <el-card shadow="never" class="stat">
-            <div class="stat__label">人员（共 {{ stats.users?.total ?? 0 }}）</div>
+            <div class="stat__label">
+              {{ t('directory.run.usersTotal', { total: stats.users?.total ?? 0 }) }}
+            </div>
             <div class="stat__value">{{ statLine(stats.users, USER_STAT_KEYS) }}</div>
           </el-card>
         </template>
@@ -212,7 +232,7 @@ async function apply(force: boolean): Promise<void> {
         type="warning"
         :closable="false"
         class="block"
-        :title="`数据提示（${run.stats.warnings.length}）`"
+        :title="t('directory.run.warnings', { count: run.stats.warnings.length })"
       >
         <ul class="warnings">
           <li v-for="w in run.stats.warnings.slice(0, 20)" :key="w">{{ w }}</li>
@@ -222,13 +242,18 @@ async function apply(force: boolean): Promise<void> {
       <el-card v-if="run.status !== 'running' && run.status !== 'failed'" shadow="never">
         <el-tabs v-model="tab">
           <el-tab-pane
-            v-for="t in tabs"
-            :key="t.name"
-            :name="t.name"
-            :label="`${t.label} (${count(t.name)})`"
+            v-for="item in tabs"
+            :key="item.name"
+            :name="item.name"
+            :label="`${item.label} (${count(item.name)})`"
           >
-            <el-table :data="rows(t.name)" size="small" max-height="560" empty-text="无变化">
-              <el-table-column label="变化" width="200">
+            <el-table
+              :data="rows(item.name)"
+              size="small"
+              max-height="560"
+              :empty-text="t('directory.stat.noChange')"
+            >
+              <el-table-column :label="t('directory.run.change')" width="200">
                 <template #default="{ row }">
                   <el-tag
                     v-for="l in labels(row as SyncChange)"
@@ -241,45 +266,62 @@ async function apply(force: boolean): Promise<void> {
                   </el-tag>
                 </template>
               </el-table-column>
-              <template v-if="t.name === 'departments'">
-                <el-table-column label="部门" min-width="280">
+              <template v-if="item.name === 'departments'">
+                <el-table-column :label="t('directory.run.department')" min-width="280">
                   <template #default="{ row }">
                     {{ row.path ?? row.name }}
                     <span v-if="row.before && row.before !== row.name" class="muted small">
-                      （原名：{{ row.before }}）
+                      {{ t('directory.run.renamedFrom', { name: row.before }) }}
                     </span>
                   </template>
                 </el-table-column>
-                <el-table-column label="外部 ID" width="160" prop="external_id" />
+                <el-table-column
+                  :label="t('directory.run.externalId')"
+                  width="160"
+                  prop="external_id"
+                />
               </template>
-              <template v-else-if="t.name === 'unmatched'">
-                <el-table-column label="姓名" width="140" prop="name" />
-                <el-table-column label="工号" width="120" prop="employee_no" />
-                <el-table-column label="手机" width="140" prop="mobile" />
-                <el-table-column label="邮箱" min-width="180" prop="email" />
-                <el-table-column label="外部 ID" width="160" prop="external_id" />
+              <template v-else-if="item.name === 'unmatched'">
+                <el-table-column :label="t('directory.run.personName')" width="140" prop="name" />
+                <el-table-column
+                  :label="t('directory.run.employeeNo')"
+                  width="120"
+                  prop="employee_no"
+                />
+                <el-table-column :label="t('directory.run.mobile')" width="140" prop="mobile" />
+                <el-table-column :label="t('directory.run.email')" min-width="180" prop="email" />
+                <el-table-column
+                  :label="t('directory.run.externalId')"
+                  width="160"
+                  prop="external_id"
+                />
               </template>
               <template v-else>
-                <el-table-column label="姓名" width="140" prop="name" />
-                <el-table-column label="账号" width="160" prop="username" />
+                <el-table-column :label="t('directory.run.personName')" width="140" prop="name" />
+                <el-table-column :label="t('directory.run.username')" width="160" prop="username" />
                 <el-table-column
-                  v-if="t.name === 'users'"
-                  label="工号"
+                  v-if="item.name === 'users'"
+                  :label="t('directory.run.employeeNo')"
                   width="110"
                   prop="employee_no"
                 />
-                <el-table-column v-if="t.name === 'users'" label="职务" width="130" prop="title" />
-                <el-table-column label="匹配方式" min-width="120">
+                <el-table-column
+                  v-if="item.name === 'users'"
+                  :label="t('directory.run.jobTitle')"
+                  width="130"
+                  prop="title"
+                />
+                <el-table-column :label="t('directory.run.matchMethod')" min-width="120">
                   <template #default="{ row }">
                     <span class="small">{{
-                      row.match ? `按${MATCH_LABEL[row.match] ?? row.match}匹配` : ''
+                      row.match ? t('directory.run.matchBy', { field: matchLabel(row.match) }) : ''
                     }}</span>
                   </template>
                 </el-table-column>
               </template>
             </el-table>
-            <div v-if="rows(t.name).length < count(t.name)" class="muted small more">
-              仅显示前 {{ rows(t.name).length }} 条明细
+            <div v-if="rows(item.name).length < count(item.name)" class="muted small more">
+              {{ t('directory.run.showingFirst', { n: rows(item.name).length }) }}
             </div>
           </el-tab-pane>
         </el-tabs>

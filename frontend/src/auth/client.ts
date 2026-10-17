@@ -1,4 +1,5 @@
 import Keycloak from 'keycloak-js'
+import { currentLocale } from '@/i18n'
 
 /** Minimum remaining validity (seconds) before a token is refreshed on use. */
 const MIN_VALIDITY = 30
@@ -41,7 +42,12 @@ function cleanRedirectUri(): string {
 }
 
 function redirectToLogin(): Promise<void> {
-  return instance().login({ idpHint: idpHint(), redirectUri: cleanRedirectUri() })
+  return instance().login({
+    idpHint: idpHint(),
+    redirectUri: cleanRedirectUri(),
+    // Keycloak login page language (ui_locales); the realm supports zh-CN and en.
+    locale: currentLocale(),
+  })
 }
 
 /** Authorization Code + PKCE login; redirects to Keycloak when there is no session. */

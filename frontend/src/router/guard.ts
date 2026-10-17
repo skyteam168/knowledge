@@ -1,5 +1,7 @@
 import type { RouteLocationNormalized, RouteLocationRaw, Router } from 'vue-router'
+import { watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import { i18n, t } from '@/i18n'
 import { menuRoutes, type MenuRoute } from './routes'
 
 /** First route (depth-first) the user may open, used for `/` and section roots. */
@@ -37,8 +39,13 @@ export async function authGuard(to: RouteLocationNormalized): Promise<true | Rou
 
 export function installGuards(router: Router): void {
   router.beforeEach(authGuard)
-  router.afterEach((to) => {
-    const appTitle = import.meta.env.VITE_APP_TITLE ?? '企业知识库'
-    document.title = to.meta.title ? `${to.meta.title} - ${appTitle}` : appTitle
-  })
+  const updateTitle = (to: RouteLocationNormalized): void => {
+    const appTitle = import.meta.env.VITE_APP_TITLE ?? t('layout.appTitle')
+    document.title = to.meta.title ? `${t(to.meta.title)} - ${appTitle}` : appTitle
+  }
+  router.afterEach(updateTitle)
+  watch(
+    () => i18n.global.locale.value,
+    () => updateTitle(router.currentRoute.value),
+  )
 }

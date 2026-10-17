@@ -1,15 +1,18 @@
 import type { ApiPrincipalType, ApiScope } from '@/api/types'
+import { t } from '@/i18n'
 
-export const SCOPE_INFO: Record<ApiScope, { label: string; desc: string }> = {
-  retrieve: { label: '检索', desc: 'POST /open/retrieve，返回授权范围内的知识片段' },
-  chat: { label: '问答', desc: 'POST /open/chat，基于授权知识生成带引用的回答（支持流式）' },
-  mcp: { label: 'MCP', desc: 'POST /open/mcp，供支持 MCP 的 Agent 以工具方式调用' },
+export const SCOPES: readonly ApiScope[] = ['retrieve', 'chat', 'mcp']
+
+export function scopeLabel(scope: ApiScope): string {
+  return t(`openApi.scopes.${scope}.label`)
 }
 
-export const PRINCIPAL_LABEL: Record<ApiPrincipalType, string> = {
-  dept: '部门',
-  group: '用户组',
-  role: '角色',
+export function scopeDesc(scope: ApiScope): string {
+  return t(`openApi.scopes.${scope}.desc`)
+}
+
+export function principalLabel(type: ApiPrincipalType): string {
+  return t(`openApi.principals.${type}`)
 }
 
 export function openApiBase(): string {

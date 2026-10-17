@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useGuideStore } from '@/stores/guide'
 import { LAYOUT_TOUR, findTour } from '@/guide/tours'
 import { makeProfile } from '@/test/fixtures'
+import { i18n } from '@/i18n'
 
 vi.mock('@/api/guides', () => ({
   listGuideProgress: vi.fn(),
@@ -91,6 +92,23 @@ describe('guide store', () => {
     expect(guide.start('search')).toBe(false)
     expect(guide.start('nope')).toBe(false)
     expect(guide.running).toBe(false)
+  })
+
+  it('shows a running tour in the newly selected language', async () => {
+    const guide = setup()
+    vi.mocked(listGuideProgress).mockResolvedValue([])
+    await guide.load()
+    expect(guide.start(LAYOUT_TOUR)).toBe(true)
+    const zhTitle = guide.steps[0]!.title
+    const count = guide.steps.length
+    i18n.global.locale.value = 'en'
+    try {
+      expect(guide.steps[0]!.title).not.toBe(zhTitle)
+      expect(guide.steps.length).toBe(count)
+      expect(guide.active?.key).toBe(LAYOUT_TOUR)
+    } finally {
+      i18n.global.locale.value = 'zh-CN'
+    }
   })
 
   it('reset clears progress so every tour plays again', async () => {

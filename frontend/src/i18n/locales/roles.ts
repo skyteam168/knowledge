@@ -1,0 +1,153 @@
+import type { LocaleModule } from '../index'
+
+export default {
+  'zh-CN': {
+    permissionGroups: {
+      super: '超级权限',
+      kb: '知识库',
+      doc: '文档',
+      review: '审核',
+      chat: 'AI 助手',
+      search: '搜索',
+      analytics: '分析',
+      admin: '系统管理',
+    },
+    list: {
+      title: '角色',
+      create: '新建角色',
+      role: '角色',
+      type: '类型',
+      system: '内置',
+      default: '默认',
+      defaultTip: '同步或首次登录新建的用户自动获得此角色',
+    },
+    permissions: {
+      title: '「{name}」的权限',
+      selectRole: '请选择角色',
+      selectRoleHint: '请选择左侧角色',
+      save: '保存权限',
+      saved: '权限已保存，相关用户的权限缓存已刷新',
+    },
+    editor: {
+      createTitle: '新建角色',
+      editTitle: '编辑角色',
+      code: '编码',
+      isDefault: '默认角色',
+      privilegedDefaultHint: '含超级权限或系统管理权限的角色不能设为默认角色',
+      defaultHint:
+        '组织同步或首次登录新建的用户自动获得此角色；已有用户不受影响，可用「批量分配」补授',
+    },
+    rules: {
+      codeRequired: '请输入角色编码',
+      codePattern: '小写字母开头，仅含小写字母、数字、下划线',
+      nameRequired: '请输入角色名称',
+    },
+    saveSuccess: '保存成功',
+    deleteConfirm: '确定删除角色「{name}」吗？',
+    bulk: {
+      open: '批量分配',
+      title: '批量分配「{name}」',
+      titleFallback: '批量分配',
+      action: '操作',
+      grant: '授予',
+      revoke: '撤销',
+      departments: '部门',
+      departmentsPlaceholder: '选择部门（含下级部门），可按完整路径搜索',
+      groups: '用户组',
+      groupsPlaceholder: '选择用户组，如「职务/班组长」',
+      includeInactive: '包含已停用的用户',
+      privilegedBlocked: '含超级权限或系统管理权限的角色不能批量授予，请在用户管理中逐个分配',
+      previewGrant: '匹配 {matched} 人，将授予 {changed} 人（{unchanged} 人已有此角色）',
+      previewRevoke: '匹配 {matched} 人，将撤销 {changed} 人（{unchanged} 人没有此角色）',
+      previewRevokeSkipped:
+        '匹配 {matched} 人，将撤销 {changed} 人（{unchanged} 人没有此角色，{skipped} 人的角色来自 Keycloak 或为本人，不撤销）',
+      preview: '预览人数',
+      run: '执行',
+      confirmTitle: '批量分配角色',
+      confirmGrant: '将为 {changed} 人授予角色「{name}」（匹配 {matched} 人），确定执行？',
+      confirmRevoke: '将为 {changed} 人撤销角色「{name}」（匹配 {matched} 人），确定执行？',
+      grantDone: '已为 {changed} 人授予「{name}」，立即生效',
+      grantDoneSkipped: '已为 {changed} 人授予「{name}」，跳过 {skipped} 人，立即生效',
+      revokeDone: '已为 {changed} 人撤销「{name}」，立即生效',
+      revokeDoneSkipped: '已为 {changed} 人撤销「{name}」，跳过 {skipped} 人，立即生效',
+    },
+  },
+  en: {
+    permissionGroups: {
+      super: 'Super permission',
+      kb: 'Knowledge bases',
+      doc: 'Documents',
+      review: 'Review',
+      chat: 'AI assistant',
+      search: 'Search',
+      analytics: 'Analytics',
+      admin: 'System administration',
+    },
+    list: {
+      title: 'Roles',
+      create: 'New role',
+      role: 'Role',
+      type: 'Type',
+      system: 'Built-in',
+      default: 'Default',
+      defaultTip: 'Users created by sync or at first sign-in get this role automatically',
+    },
+    permissions: {
+      title: 'Permissions of "{name}"',
+      selectRole: 'Select a role',
+      selectRoleHint: 'Select a role on the left',
+      save: 'Save permissions',
+      saved: "Permissions saved; affected users' permission cache has been refreshed",
+    },
+    editor: {
+      createTitle: 'New role',
+      editTitle: 'Edit role',
+      code: 'Code',
+      isDefault: 'Default role',
+      privilegedDefaultHint:
+        'Roles with super or system administration permissions cannot be the default role',
+      defaultHint:
+        'Users created by organization sync or at first sign-in get this role automatically. Existing users are unaffected; use "Bulk assign" to grant it to them.',
+    },
+    rules: {
+      codeRequired: 'Enter a role code',
+      codePattern:
+        'Start with a lowercase letter; use only lowercase letters, digits and underscores',
+      nameRequired: 'Enter a role name',
+    },
+    saveSuccess: 'Saved',
+    deleteConfirm: 'Delete role "{name}"?',
+    bulk: {
+      open: 'Bulk assign',
+      title: 'Bulk assign "{name}"',
+      titleFallback: 'Bulk assign',
+      action: 'Action',
+      grant: 'Grant',
+      revoke: 'Revoke',
+      departments: 'Departments',
+      departmentsPlaceholder: 'Select departments (incl. sub-departments); search by full path',
+      groups: 'User groups',
+      groupsPlaceholder: 'Select user groups, e.g. "Job title/Team lead"',
+      includeInactive: 'Include disabled users',
+      privilegedBlocked:
+        'Roles with super or system administration permissions cannot be granted in bulk; assign them to users one by one',
+      previewGrant:
+        'Matched {matched} users; will grant to {changed} ({unchanged} already have this role)',
+      previewRevoke:
+        'Matched {matched} users; will revoke from {changed} ({unchanged} do not have this role)',
+      previewRevokeSkipped:
+        'Matched {matched} users; will revoke from {changed} ({unchanged} do not have this role; {skipped} kept because the role comes from Keycloak or is your own)',
+      preview: 'Preview count',
+      run: 'Run',
+      confirmTitle: 'Bulk assign role',
+      confirmGrant: 'Grant role "{name}" to {changed} users ({matched} matched)?',
+      confirmRevoke: 'Revoke role "{name}" from {changed} users ({matched} matched)?',
+      grantDone: 'Granted "{name}" to {changed} users; effective immediately',
+      grantDoneSkipped:
+        'Granted "{name}" to {changed} users, skipped {skipped}; effective immediately',
+      revokeDone: 'Revoked "{name}" from {changed} users; effective immediately',
+      revokeDoneSkipped:
+        'Revoked "{name}" from {changed} users, skipped {skipped}; effective immediately',
+    },
+  },
+} satisfies LocaleModule

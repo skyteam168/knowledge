@@ -1,4 +1,5 @@
 /** Split assistant markdown into renderable blocks (text / table / echarts / mermaid). */
+import { t } from '@/i18n'
 
 export type AnswerBlock =
   | { type: 'markdown'; text: string }
@@ -27,7 +28,10 @@ export function parseMarkdownTable(block: string): { headers: string[]; rows: st
   if (lines.length < 2) return null
   const headers = splitRow(lines[0])
   if (!headers.length || !isSeparatorRow(splitRow(lines[1]))) return null
-  const rows = lines.slice(2).map(splitRow).filter((r) => r.some((c) => c.length > 0))
+  const rows = lines
+    .slice(2)
+    .map(splitRow)
+    .filter((r) => r.some((c) => c.length > 0))
   return { headers, rows }
 }
 
@@ -144,7 +148,7 @@ export function tableToBarOption(
     },
     yAxis: { type: 'value' },
     series: numericCols.map((c) => ({
-      name: headers[c] || `列${c}`,
+      name: headers[c] || t('assistant.table.column', { n: c }),
       type: 'bar',
       data: rows.map((r) => {
         const v = r[c]

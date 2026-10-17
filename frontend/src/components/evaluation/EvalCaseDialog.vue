@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { createEvalCase, updateEvalCase } from '@/api/evaluation'
 import { listDocuments, listKnowledgeBases } from '@/api/knowledge'
@@ -8,6 +9,7 @@ import type { EvalCase, EvalCaseFields, KbDocument, KnowledgeBase } from '@/api/
 const props = defineProps<{ datasetId: string; evalCase: EvalCase | null }>()
 const visible = defineModel<boolean>({ required: true })
 const emit = defineEmits<{ saved: [EvalCase] }>()
+const { t } = useI18n()
 
 const formRef = ref<FormInstance>()
 const form = reactive<EvalCaseFields>({
@@ -19,9 +21,11 @@ const form = reactive<EvalCaseFields>({
   tags: [],
 })
 const saving = ref(false)
-const rules: FormRules = {
-  question: [{ required: true, message: '请输入问题', trigger: 'blur' }],
-}
+const rules = computed<FormRules>(() => ({
+  question: [
+    { required: true, message: t('evaluation.caseDialog.questionRequired'), trigger: 'blur' },
+  ],
+}))
 
 const isEdit = computed(() => props.evalCase !== null)
 
@@ -83,7 +87,7 @@ async function submit(): Promise<void> {
     const saved = props.evalCase
       ? await updateEvalCase(props.evalCase.id, body)
       : await createEvalCase(props.datasetId, body)
-    ElMessage.success('已保存')
+    ElMessage.success(t('common.saved'))
     emit('saved', saved)
     visible.value = false
   } finally {
@@ -93,34 +97,38 @@ async function submit(): Promise<void> {
 </script>
 
 <template>
-  <el-dialog v-model="visible" :title="isEdit ? '编辑用例' : '新增用例'" width="720px">
+  <el-dialog
+    v-model="visible"
+    :title="isEdit ? t('evaluation.caseDialog.edit') : t('evaluation.shared.addCase')"
+    width="720px"
+  >
     <el-form ref="formRef" :model="form" :rules="rules" label-width="110px">
-      <el-form-item label="问题" prop="question">
+      <el-form-item :label="t('evaluation.shared.question')" prop="question">
         <el-input v-model="form.question" type="textarea" :rows="2" maxlength="2000" />
       </el-form-item>
-      <el-form-item label="标准答案">
+      <el-form-item :label="t('evaluation.shared.referenceAnswer')">
         <el-input
           v-model="form.reference_answer"
           type="textarea"
           :rows="4"
-          placeholder="可选，用于 LLM 评判答案相关性"
+          :placeholder="t('evaluation.caseDialog.referencePlaceholder')"
         />
       </el-form-item>
-      <el-form-item label="知识库范围">
+      <el-form-item :label="t('evaluation.shared.kbScope')">
         <el-select
           v-model="form.kb_ids"
           multiple
           filterable
           remote
           :remote-method="searchKbs"
-          placeholder="不选则检索全部有权限的知识库"
+          :placeholder="t('evaluation.caseDialog.kbPlaceholder')"
           style="width: 100%"
           @change="searchDocs()"
         >
           <el-option v-for="kb in kbOptions" :key="kb.id" :label="kb.name" :value="kb.id" />
         </el-select>
       </el-form-item>
-      <el-form-item label="期望命中文档">
+      <el-form-item :label="t('evaluation.caseDialog.expectedDocs')">
         <el-select
           v-model="form.expected_document_ids"
           multiple
@@ -130,7 +138,7 @@ async function submit(): Promise<void> {
           default-first-option
           :remote-method="searchDocs"
           :loading="docLoading"
-          placeholder="搜索文档标题，或直接粘贴文档 ID"
+          :placeholder="t('evaluation.caseDialog.docPlaceholder')"
           style="width: 100%"
         >
           <el-option v-for="doc in docOptions" :key="doc.id" :label="doc.title" :value="doc.id">
@@ -152,7 +160,7 @@ async function submit(): Promise<void> {
           </template>
         </el-select>
       </el-form-item>
-      <el-form-item label="期望命中 Chunk">
+      <el-form-item :label="t('evaluation.caseDialog.expectedChunks')">
         <el-select
           v-model="form.expected_chunk_ids"
           multiple
@@ -160,11 +168,11 @@ async function submit(): Promise<void> {
           allow-create
           default-first-option
           :reserve-keyword="false"
-          placeholder="可选，粘贴 chunk ID 后回车"
+          :placeholder="t('evaluation.caseDialog.chunkPlaceholder')"
           style="width: 100%"
         />
       </el-form-item>
-      <el-form-item label="标签">
+      <el-form-item :label="t('evaluation.shared.tags')">
         <el-select
           v-model="form.tags"
           multiple
@@ -172,14 +180,14 @@ async function submit(): Promise<void> {
           allow-create
           default-first-option
           :reserve-keyword="false"
-          placeholder="输入后回车"
+          :placeholder="t('evaluation.caseDialog.tagsPlaceholder')"
           style="width: 100%"
         />
       </el-form-item>
     </el-form>
     <template #footer>
-      <el-button @click="visible = false">取消</el-button>
-      <el-button type="primary" :loading="saving" @click="submit">保存</el-button>
+      <el-button @click="visible = false">{{ t('common.cancel') }}</el-button>
+      <el-button type="primary" :loading="saving" @click="submit">{{ t('common.save') }}</el-button>
     </template>
   </el-dialog>
 </template>

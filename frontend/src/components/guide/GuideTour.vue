@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useGuideStore } from '@/stores/guide'
 import { LAYOUT_TOUR, guideSelector, tourForRoute } from '@/guide/tours'
 
 /** Lazy pages render after navigation; wait before looking for their targets. */
 const props = withDefaults(defineProps<{ settleMs?: number }>(), { settleMs: 600 })
 
+const { t } = useI18n()
 const guide = useGuideStore()
 const route = useRoute()
 const current = ref(0)
@@ -90,7 +92,7 @@ onBeforeUnmount(() => {
             data-test="guide-skip"
             @click="skip"
           >
-            跳过引导
+            {{ t('guide.tour.skip') }}
           </button>
         </div>
       </div>

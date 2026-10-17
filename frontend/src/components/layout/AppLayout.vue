@@ -10,6 +10,7 @@ import {
   type Component,
 } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   ArrowDown,
@@ -57,6 +58,8 @@ import { useTagsStore } from '@/stores/tags'
 import { fetchReadiness } from '@/api/system'
 import { useTheme, type ThemeMode } from '@/composables/useTheme'
 import type { ReadinessResponse } from '@/api/types'
+import { LOCALE_LABELS, SUPPORTED_LOCALES, setLocale, type AppLocale } from '@/i18n'
+import { roleName } from '@/i18n/catalog'
 import AppLogo from './AppLogo.vue'
 import TagsView from './TagsView.vue'
 
@@ -90,6 +93,7 @@ const appStore = useAppStore()
 const auth = useAuthStore()
 const notifications = useNotificationStore()
 const tags = useTagsStore()
+const { t, locale } = useI18n()
 
 function visible(routes: MenuRoute[]): MenuRoute[] {
   return routes
@@ -106,16 +110,16 @@ const breadcrumbs = computed(() => {
   const target = activeMenu.value
   for (const item of menuRoutes as MenuRoute[]) {
     if (item.path === target) {
-      crumbs.push(item.meta.title)
+      crumbs.push(t(item.meta.title))
       break
     }
     const child = item.children?.find((c) => c.path === target)
     if (child) {
-      crumbs.push(item.meta.title, child.meta.title)
+      crumbs.push(t(item.meta.title), t(child.meta.title))
       break
     }
   }
-  const title = route.meta.title
+  const title = route.meta.title ? t(route.meta.title) : ''
   if (title && crumbs[crumbs.length - 1] !== title) crumbs.push(title)
   return crumbs
 })
@@ -124,22 +128,29 @@ const readiness = ref<ReadinessResponse['status'] | 'unknown'>('unknown')
 const readinessTag = computed(() => {
   switch (readiness.value) {
     case 'ready':
-      return { level: 'success', text: '服务正常' }
+      return { level: 'success', text: t('layout.status.ready') }
     case 'degraded':
-      return { level: 'warning', text: '部分降级' }
+      return { level: 'warning', text: t('layout.status.degraded') }
     case 'not_ready':
-      return { level: 'danger', text: '服务异常' }
+      return { level: 'danger', text: t('layout.status.notReady') }
     default:
-      return { level: 'info', text: '状态未知' }
+      return { level: 'info', text: t('layout.status.unknown') }
   }
 })
 
 const theme = useTheme()
-const THEME_OPTIONS: { value: ThemeMode; label: string; icon: Component }[] = [
-  { value: 'light', label: '浅色', icon: Sunny },
-  { value: 'dark', label: '深色', icon: Moon },
-  { value: 'system', label: '跟随系统', icon: Monitor },
-]
+const THEME_OPTIONS = computed<{ value: ThemeMode; label: string; icon: Component }[]>(() => [
+  { value: 'light', label: t('layout.themeLight'), icon: Sunny },
+  { value: 'dark', label: t('layout.themeDark'), icon: Moon },
+  { value: 'system', label: t('layout.themeSystem'), icon: Monitor },
+])
+
+function onLocaleCommand(next: AppLocale): void {
+  if (next === locale.value) return
+  setLocale(next)
+  // Cached tabs keep text computed at setup time; remount them in the new language.
+  for (const key of tags.cachedKeys) tags.refresh(key)
+}
 const themeIcon = computed(() => (theme.isDark.value ? Moon : Sunny))
 
 const avatarText = computed(() => (auth.displayName || '?').trim().slice(0, 1).toUpperCase())
@@ -178,13 +189,13 @@ async function onHelpCommand(command: string): Promise<void> {
     void router.push('/guide')
   } else if (command === 'replay') {
     const tour = tourForRoute(route.name)
-    if (!guide.start(tour?.key ?? LAYOUT_TOUR)) ElMessage.info('当前页面暂无可播放的引导')
+    if (!guide.start(tour?.key ?? LAYOUT_TOUR)) ElMessage.info(t('layout.noTour'))
   } else if (command === 'restart') {
     try {
-      await ElMessageBox.confirm('将清除你的引导记录，并从系统导览重新开始。', '重新开始全部引导', {
+      await ElMessageBox.confirm(t('layout.restartConfirm'), t('layout.restartTours'), {
         type: 'info',
-        confirmButtonText: '重新开始',
-        cancelButtonText: '取消',
+        confirmButtonText: t('layout.restartAction'),
+        cancelButtonText: t('common.cancel'),
       })
     } catch {
       return
@@ -276,16 +287,16 @@ onBeforeUnmount(() => {
             <el-sub-menu v-if="item.children" :index="item.path" :data-guide="`menu-${item.name}`">
               <template #title>
                 <el-icon><component :is="iconMap[item.meta.icon]" /></el-icon>
-                <span>{{ item.meta.title }}</span>
+                <span>{{ t(item.meta.title) }}</span>
               </template>
               <el-menu-item v-for="child in item.children" :key="child.path" :index="child.path">
                 <el-icon><component :is="iconMap[child.meta.icon]" /></el-icon>
-                <template #title>{{ child.meta.title }}</template>
+                <template #title>{{ t(child.meta.title) }}</template>
               </el-menu-item>
             </el-sub-menu>
             <el-menu-item v-else :index="item.path" :data-guide="`menu-${item.name}`">
               <el-icon><component :is="iconMap[item.meta.icon]" /></el-icon>
-              <template #title>{{ item.meta.title }}</template>
+              <template #title>{{ t(item.meta.title) }}</template>
             </el-menu-item>
           </template>
         </el-menu>
@@ -295,7 +306,7 @@ onBeforeUnmount(() => {
           <Expand v-if="appStore.sidebarCollapsed" />
           <Fold v-else />
         </el-icon>
-        <span v-if="!appStore.sidebarCollapsed">收起菜单</span>
+        <span v-if="!appStore.sidebarCollapsed">{{ t('layout.collapseMenu') }}</span>
       </button>
     </aside>
 
@@ -314,7 +325,7 @@ onBeforeUnmount(() => {
             ref="searchInput"
             v-model="keyword"
             class="layout__search"
-            placeholder="搜索知识…"
+            :placeholder="t('layout.searchPlaceholder')"
             :prefix-icon="Search"
             data-test="global-search"
             data-guide="global-search"
@@ -332,7 +343,7 @@ onBeforeUnmount(() => {
             <button
               class="layout__icon-btn"
               type="button"
-              title="帮助"
+              :title="t('layout.help')"
               data-test="help-menu"
               data-guide="help"
             >
@@ -340,10 +351,14 @@ onBeforeUnmount(() => {
             </button>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item command="manual" :icon="Reading">使用说明</el-dropdown-item>
-                <el-dropdown-item command="replay" :icon="Guide">重新播放本页引导</el-dropdown-item>
+                <el-dropdown-item command="manual" :icon="Reading">{{
+                  t('layout.manual')
+                }}</el-dropdown-item>
+                <el-dropdown-item command="replay" :icon="Guide">{{
+                  t('layout.replayTour')
+                }}</el-dropdown-item>
                 <el-dropdown-item command="restart" :icon="RefreshLeft">
-                  重新开始全部引导
+                  {{ t('layout.restartTours') }}
                 </el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -352,7 +367,7 @@ onBeforeUnmount(() => {
             <button
               class="layout__icon-btn"
               type="button"
-              title="切换主题"
+              :title="t('layout.theme')"
               data-test="theme-toggle"
               data-guide="theme"
             >
@@ -372,6 +387,29 @@ onBeforeUnmount(() => {
               </el-dropdown-menu>
             </template>
           </el-dropdown>
+          <el-dropdown trigger="click" @command="onLocaleCommand">
+            <button
+              class="layout__icon-btn layout__lang-btn"
+              type="button"
+              :title="t('layout.language')"
+              data-test="locale-toggle"
+            >
+              {{ locale === 'en' ? 'EN' : '中' }}
+            </button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item
+                  v-for="code in SUPPORTED_LOCALES"
+                  :key="code"
+                  :command="code"
+                  :class="{ 'is-current': locale === code }"
+                  :data-test="`locale-${code}`"
+                >
+                  {{ LOCALE_LABELS[code] }}
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
           <el-badge
             :value="notifications.unread"
             :hidden="!notifications.unread"
@@ -381,7 +419,7 @@ onBeforeUnmount(() => {
             <button
               class="layout__icon-btn"
               type="button"
-              title="消息通知"
+              :title="t('layout.notifications')"
               data-test="notification-bell"
               data-guide="notifications"
               @click="router.push('/notifications')"
@@ -401,14 +439,17 @@ onBeforeUnmount(() => {
                 <div class="layout__user-card-meta">
                   {{ auth.profile?.org.name }}
                   <template v-if="auth.profile?.roles.length">
-                    · {{ auth.profile.roles.map((r) => r.name).join('、') }}
+                    ·
+                    {{ auth.profile.roles.map((r) => roleName(r)).join(t('layout.roleSeparator')) }}
                   </template>
                 </div>
               </div>
               <el-dropdown-menu>
-                <el-dropdown-item command="notifications" :icon="Bell">消息通知</el-dropdown-item>
+                <el-dropdown-item command="notifications" :icon="Bell">{{
+                  t('layout.notifications')
+                }}</el-dropdown-item>
                 <el-dropdown-item command="logout" :icon="SwitchButton" divided>
-                  退出登录
+                  {{ t('layout.logout') }}
                 </el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -632,6 +673,10 @@ onBeforeUnmount(() => {
 .layout__icon-btn:hover {
   background: var(--ekb-bg-hover);
   color: var(--ekb-text-1);
+}
+.layout__lang-btn {
+  font-size: 13px;
+  font-weight: 600;
 }
 .layout__bell :deep(.el-badge__content) {
   top: 6px;

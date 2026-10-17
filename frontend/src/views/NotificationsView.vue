@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { listNotifications, markNotificationsRead } from '@/api/curation'
 import type { Notification } from '@/api/types'
 import { useNotificationStore } from '@/stores/notifications'
@@ -8,6 +9,7 @@ import { formatDateTime } from '@/utils/format'
 
 const router = useRouter()
 const store = useNotificationStore()
+const { t } = useI18n()
 
 const unreadOnly = ref(false)
 const pager = reactive({ page: 1, size: 20 })
@@ -50,10 +52,14 @@ onMounted(load)
 <template>
   <el-card shadow="never">
     <div class="bar">
-      <el-checkbox v-model="unreadOnly" @change="search">只看未读</el-checkbox>
-      <el-button :disabled="!store.unread" @click="markAll">全部标为已读</el-button>
+      <el-checkbox v-model="unreadOnly" @change="search">{{
+        t('layout.notificationsPage.unreadOnly')
+      }}</el-checkbox>
+      <el-button :disabled="!store.unread" @click="markAll">{{
+        t('layout.notificationsPage.markAllRead')
+      }}</el-button>
     </div>
-    <el-empty v-if="!loading && !items.length" description="暂无消息" />
+    <el-empty v-if="!loading && !items.length" :description="t('layout.notificationsPage.empty')" />
     <div v-loading="loading">
       <div
         v-for="n in items"

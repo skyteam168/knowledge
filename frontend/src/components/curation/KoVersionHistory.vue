@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { listKoVersions } from '@/api/curation'
 import type { KoVersion } from '@/api/types'
 import { diffLines, hasChanges, type DiffLine } from '@/utils/diff'
@@ -8,6 +9,7 @@ import { formatDateTime } from '@/utils/format'
 
 const props = defineProps<{ koId: string }>()
 const visible = defineModel<boolean>({ required: true })
+const { t } = useI18n()
 
 const versions = ref<KoVersion[]>([])
 const loading = ref(false)
@@ -54,18 +56,24 @@ const sections = computed<{ name: string; lines: DiffLine[] }[]>(() => {
   const b = targetVersion.value
   return [
     {
-      name: '类型',
+      name: t('curation.field.type'),
       lines: diffLines(a ? KO_TYPE_LABEL[a.ko_type] : '', b ? KO_TYPE_LABEL[b.ko_type] : ''),
     },
-    { name: '标题', lines: diffLines(text(a, 'title'), text(b, 'title')) },
-    { name: '标准问题', lines: diffLines(text(a, 'question'), text(b, 'question')) },
+    { name: t('curation.field.title'), lines: diffLines(text(a, 'title'), text(b, 'title')) },
     {
-      name: '相似问法',
+      name: t('curation.field.question'),
+      lines: diffLines(text(a, 'question'), text(b, 'question')),
+    },
+    {
+      name: t('curation.field.variants'),
       lines: diffLines((a?.variants ?? []).join('\n'), (b?.variants ?? []).join('\n')),
     },
-    { name: '答案', lines: diffLines(text(a, 'answer'), text(b, 'answer')) },
-    { name: '引用来源', lines: diffLines(sourcesText(a), sourcesText(b)) },
-    { name: '生效时间', lines: diffLines(effectiveWindow(a), effectiveWindow(b)) },
+    { name: t('curation.field.answer'), lines: diffLines(text(a, 'answer'), text(b, 'answer')) },
+    { name: t('curation.field.sources'), lines: diffLines(sourcesText(a), sourcesText(b)) },
+    {
+      name: t('curation.versionHistory.effective'),
+      lines: diffLines(effectiveWindow(a), effectiveWindow(b)),
+    },
   ]
 })
 
@@ -73,27 +81,32 @@ const MARK: Record<DiffLine['op'], string> = { equal: ' ', add: '+', remove: '-'
 </script>
 
 <template>
-  <el-drawer v-model="visible" title="版本历史" size="70%">
+  <el-drawer v-model="visible" :title="t('curation.versionHistory.title')" size="70%">
     <div v-loading="loading" class="history">
       <el-table :data="versions" size="small" class="history__table" max-height="260">
-        <el-table-column label="版本" width="70">
+        <el-table-column :label="t('curation.field.version')" width="70">
           <template #default="{ row }">v{{ row.version }}</template>
         </el-table-column>
-        <el-table-column label="状态" width="100">
+        <el-table-column :label="t('common.status')" width="100">
           <template #default="{ row }">
             <el-tag size="small" :type="metaOf(KO_VERSION_STATUS_META, row.status).type">
               {{ metaOf(KO_VERSION_STATUS_META, row.status).label }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="标题" prop="title" min-width="180" show-overflow-tooltip />
-        <el-table-column label="提交人" width="100">
+        <el-table-column
+          :label="t('curation.field.title')"
+          prop="title"
+          min-width="180"
+          show-overflow-tooltip
+        />
+        <el-table-column :label="t('curation.field.submitter')" width="100">
           <template #default="{ row }">{{ row.created_by?.name ?? '-' }}</template>
         </el-table-column>
-        <el-table-column label="提交时间" width="160">
+        <el-table-column :label="t('curation.field.submittedAt')" width="160">
           <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
         </el-table-column>
-        <el-table-column label="发布" width="200">
+        <el-table-column :label="t('curation.versionHistory.published')" width="200">
           <template #default="{ row }">
             <template v-if="row.published_at">
               {{ row.published_by?.name ?? '-' }} · {{ formatDateTime(row.published_at) }}
@@ -101,14 +114,24 @@ const MARK: Record<DiffLine['op'], string> = { equal: ' ', add: '+', remove: '-'
             <span v-else>-</span>
           </template>
         </el-table-column>
-        <el-table-column label="说明" prop="note" min-width="140" show-overflow-tooltip />
+        <el-table-column
+          :label="t('curation.versionHistory.note')"
+          prop="note"
+          min-width="140"
+          show-overflow-tooltip
+        />
       </el-table>
 
-      <el-empty v-if="!versions.length" description="尚未提交过审核，暂无版本" />
+      <el-empty v-if="!versions.length" :description="t('curation.versionHistory.empty')" />
       <template v-else>
         <div class="history__pick">
-          对比
-          <el-select v-model="base" clearable placeholder="（空）" style="width: 120px">
+          {{ t('curation.versionHistory.compare') }}
+          <el-select
+            v-model="base"
+            clearable
+            :placeholder="t('curation.versionHistory.emptyOption')"
+            style="width: 120px"
+          >
             <el-option
               v-for="v in versions"
               :key="v.version"
@@ -129,7 +152,9 @@ const MARK: Record<DiffLine['op'], string> = { equal: ' ', add: '+', remove: '-'
         <div v-for="s in sections" :key="s.name" class="history__section">
           <div class="history__name">
             {{ s.name }}
-            <el-tag v-if="hasChanges(s.lines)" size="small" type="warning">有变更</el-tag>
+            <el-tag v-if="hasChanges(s.lines)" size="small" type="warning">{{
+              t('curation.versionHistory.changed')
+            }}</el-tag>
           </div>
           <pre class="history__diff" data-test="ko-diff"><div
             v-for="(line, i) in s.lines"

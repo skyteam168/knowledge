@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   ArrowDown,
@@ -47,6 +48,7 @@ import { hitLocation } from '@/utils/search'
 type UiMessage = ChatMessage & { key: string }
 
 const STICK_THRESHOLD = 80
+const { t } = useI18n()
 
 const conversations = ref<Conversation[]>([])
 const listLoading = ref(false)
@@ -93,19 +95,19 @@ const groupedConversations = computed(() => {
   startOfToday.setHours(0, 0, 0, 0)
   const day = 86_400_000
   const groups: { label: string; items: Conversation[] }[] = [
-    { label: '今天', items: [] },
-    { label: '昨天', items: [] },
-    { label: '近 7 天', items: [] },
-    { label: '更早', items: [] },
+    { label: t('assistant.groups.today'), items: [] },
+    { label: t('assistant.groups.yesterday'), items: [] },
+    { label: t('assistant.groups.last7Days'), items: [] },
+    { label: t('assistant.groups.earlier'), items: [] },
   ]
   for (const conv of items) {
-    const t = new Date(conv.updated_at).getTime()
+    const ts = new Date(conv.updated_at).getTime()
     const idx =
-      t >= startOfToday.getTime()
+      ts >= startOfToday.getTime()
         ? 0
-        : t >= startOfToday.getTime() - day
+        : ts >= startOfToday.getTime() - day
           ? 1
-          : t >= startOfToday.getTime() - 6 * day
+          : ts >= startOfToday.getTime() - 6 * day
             ? 2
             : 3
     groups[idx].items.push(conv)
@@ -140,16 +142,25 @@ function newConversation(): void {
 }
 
 async function renameConversation(conv: Conversation): Promise<void> {
-  const { value } = await ElMessageBox.prompt('会话名称', '重命名', {
-    inputValue: conv.title,
-    inputValidator: (v) => (!!v.trim() && v.length <= 200) || '请输入 1-200 个字符',
-  })
+  const { value } = await ElMessageBox.prompt(
+    t('assistant.conversationName'),
+    t('assistant.renameTitle'),
+    {
+      inputValue: conv.title,
+      inputValidator: (v) =>
+        (!!v.trim() && v.length <= 200) || t('assistant.conversationNameInvalid'),
+    },
+  )
   const updated = await updateConversation(conv.id, { title: value.trim() })
   conv.title = updated.title
 }
 
 async function removeConversation(conv: Conversation): Promise<void> {
-  await ElMessageBox.confirm(`确定删除会话「${conv.title}」？`, '删除会话', { type: 'warning' })
+  await ElMessageBox.confirm(
+    t('assistant.deleteConversationConfirm', { title: conv.title }),
+    t('assistant.deleteConversationTitle'),
+    { type: 'warning' },
+  )
   await deleteConversation(conv.id)
   conversations.value = conversations.value.filter((c) => c.id !== conv.id)
   if (activeId.value === conv.id) newConversation()
@@ -188,8 +199,10 @@ async function onScopeChange(): Promise<void> {
 }
 
 const suggestions = computed(() => {
-  const named = kbOptions.value.slice(0, 2).map((kb) => `「${kb.name}」里主要有哪些内容？`)
-  return [...named, '帮我总结一下最新的制度变化', '有哪些需要注意的审批流程？'].slice(0, 4)
+  const named = kbOptions.value
+    .slice(0, 2)
+    .map((kb) => t('assistant.suggestionKb', { name: kb.name }))
+  return [...named, t('assistant.suggestionPolicy'), t('assistant.suggestionApproval')].slice(0, 4)
 })
 
 // ---- scrolling ---------------------------------------------------------------------
@@ -303,21 +316,24 @@ async function send(text?: string): Promise<void> {
         onError: (err) => {
           reply.status = 'error'
           reply.error = err.message
-          const suffix = err.trace_id ? `（trace: ${err.trace_id}）` : ''
-          ElMessage.error(`${err.message}${suffix}`)
+          ElMessage.error(
+            err.trace_id
+              ? t('assistant.errorWithTrace', { message: err.message, traceId: err.trace_id })
+              : err.message,
+          )
         },
       },
       controller.signal,
     )
     if (reply.status === 'streaming') {
       reply.status = 'error'
-      reply.error = '回答中断，请重试'
+      reply.error = t('assistant.answerInterrupted')
     }
   } catch (err) {
     if (answer) {
       const aborted = err instanceof DOMException && err.name === 'AbortError'
       answer.status = 'error'
-      answer.error = aborted ? '已停止生成' : '回答失败'
+      answer.error = aborted ? t('assistant.generationStopped') : t('assistant.answerFailed')
       for (const step of answer.steps) if (step.status === 'running') step.status = 'failed'
     }
     if (err instanceof HttpError) ElMessage.error(err.message)
@@ -351,9 +367,9 @@ function onInputKeydown(event: Event | KeyboardEvent): void {
 async function copyAnswer(message: UiMessage): Promise<void> {
   try {
     await navigator.clipboard.writeText(message.content)
-    ElMessage.success('已复制')
+    ElMessage.success(t('common.copied'))
   } catch {
-    ElMessage.warning('复制失败，请手动选择文本')
+    ElMessage.warning(t('assistant.copyFailed'))
   }
 }
 
@@ -378,7 +394,7 @@ const feedbackSaving = ref(false)
 async function rateUp(message: UiMessage): Promise<void> {
   if (message.feedback?.rating === 'up') return
   message.feedback = await sendFeedback(message.id, { rating: 'up' })
-  ElMessage.success('感谢反馈')
+  ElMessage.success(t('assistant.thanksFeedback'))
 }
 
 function rateDown(message: UiMessage): void {
@@ -397,7 +413,7 @@ async function submitFeedback(value: { reasons: FeedbackReason[]; comment: strin
       comment: value.comment || null,
     })
     feedbackDialog.value = false
-    ElMessage.success('感谢反馈，我们会持续改进')
+    ElMessage.success(t('assistant.thanksFeedbackImprove'))
   } finally {
     feedbackSaving.value = false
   }
@@ -407,9 +423,9 @@ async function submitKnowledgeRequest(message: UiMessage): Promise<void> {
   let description = ''
   try {
     const { value } = await ElMessageBox.prompt(
-      '请描述你需要的资料，知识管理员会据此补充（可选）',
-      '提交知识需求',
-      { inputType: 'textarea', inputPlaceholder: '例如：需要最新的差旅报销标准文件' },
+      t('assistant.requestKnowledgePrompt'),
+      t('assistant.requestKnowledge'),
+      { inputType: 'textarea', inputPlaceholder: t('assistant.requestKnowledgePlaceholder') },
     )
     description = value?.trim() ?? ''
   } catch {
@@ -417,7 +433,7 @@ async function submitKnowledgeRequest(message: UiMessage): Promise<void> {
   }
   await requestKnowledge(message.id, description)
   message.knowledge_requested = true
-  ElMessage.success('已提交知识需求')
+  ElMessage.success(t('assistant.knowledgeRequested'))
 }
 
 function needsKnowledge(message: UiMessage): boolean {
@@ -454,12 +470,12 @@ onBeforeUnmount(stop)
           data-guide="assistant-new"
           @click="newConversation"
         >
-          新建对话
+          {{ t('assistant.newConversation') }}
         </el-button>
         <el-input
           v-model="convKeyword"
           :prefix-icon="Search"
-          placeholder="搜索会话"
+          :placeholder="t('assistant.searchConversations')"
           clearable
           class="side__search"
         />
@@ -468,7 +484,9 @@ onBeforeUnmount(stop)
         <el-empty
           v-if="!groupedConversations.length"
           :image-size="56"
-          :description="convKeyword ? '没有匹配的会话' : '暂无会话'"
+          :description="
+            convKeyword ? t('assistant.noMatchedConversations') : t('assistant.noConversations')
+          "
         />
         <div v-for="group in groupedConversations" :key="group.label" class="side__group">
           <div class="side__group-label">{{ group.label }}</div>
@@ -495,8 +513,12 @@ onBeforeUnmount(stop)
               </button>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item command="rename" :icon="EditPen">重命名</el-dropdown-item>
-                  <el-dropdown-item command="delete" :icon="Delete">删除</el-dropdown-item>
+                  <el-dropdown-item command="rename" :icon="EditPen">{{
+                    t('assistant.rename')
+                  }}</el-dropdown-item>
+                  <el-dropdown-item command="delete" :icon="Delete">{{
+                    t('common.delete')
+                  }}</el-dropdown-item>
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
@@ -510,13 +532,15 @@ onBeforeUnmount(stop)
         <button
           type="button"
           class="icon-btn"
-          :title="sidebarCollapsed ? '展开会话列表' : '收起会话列表'"
+          :title="sidebarCollapsed ? t('assistant.expandSidebar') : t('assistant.collapseSidebar')"
           @click="sidebarCollapsed = !sidebarCollapsed"
         >
           <el-icon><Expand v-if="sidebarCollapsed" /><Fold v-else /></el-icon>
         </button>
-        <span class="chat__title">{{ active?.title ?? '新对话' }}</span>
-        <span v-if="kbIds.length" class="chat__scope-tag">已限定 {{ kbIds.length }} 个知识库</span>
+        <span class="chat__title">{{ active?.title ?? t('assistant.untitled') }}</span>
+        <span v-if="kbIds.length" class="chat__scope-tag">{{
+          t('assistant.scopedKbs', { count: kbIds.length })
+        }}</span>
       </header>
 
       <div
@@ -529,9 +553,9 @@ onBeforeUnmount(stop)
         <div class="chat__column">
           <div v-if="!messages.length && !detailLoading" class="welcome">
             <AppLogo :size="56" collapsed />
-            <h2 class="welcome__title">你好，我是知识库 AI 助手</h2>
+            <h2 class="welcome__title">{{ t('assistant.welcomeTitle') }}</h2>
             <p class="welcome__desc">
-              回答只依据你有权访问的知识库资料，并逐句标注引用来源，可点击查看原文。
+              {{ t('assistant.welcomeDesc') }}
             </p>
             <div class="welcome__grid">
               <button
@@ -564,7 +588,7 @@ onBeforeUnmount(stop)
                 <ThinkingSteps :steps="msg.steps" :streaming="msg.status === 'streaming'" />
 
                 <div v-if="msg.grounding === 'no_evidence'" class="notice notice--info">
-                  <div class="notice__title">未找到可靠依据</div>
+                  <div class="notice__title">{{ t('assistant.noEvidence') }}</div>
                   <div class="notice__text">{{ msg.content }}</div>
                 </div>
                 <template v-else>
@@ -583,19 +607,21 @@ onBeforeUnmount(stop)
                     @cite="(n) => openCitation(msg, n)"
                   />
                   <div v-if="msg.grounding === 'uncertain'" class="notice notice--warn">
-                    相关资料有限，回答可能不完整，请结合引用原文核实
+                    {{ t('assistant.uncertain') }}
                   </div>
                   <div v-if="msg.grounding === 'low_grounding'" class="notice notice--warn">
-                    该回答未能关联到可靠的引用来源，请谨慎参考
+                    {{ t('assistant.lowGrounding') }}
                   </div>
                 </template>
 
                 <div v-if="msg.status === 'error'" class="notice notice--error">
-                  {{ msg.error || '回答失败，请重试' }}
+                  {{ msg.error || t('assistant.answerFailedRetry') }}
                 </div>
 
                 <div v-if="msg.status === 'done' && msg.citations.length" class="sources">
-                  <div class="sources__label">引用来源 · {{ msg.citations.length }}</div>
+                  <div class="sources__label">
+                    {{ t('assistant.sources', { count: msg.citations.length }) }}
+                  </div>
                   <div class="sources__list">
                     <button
                       v-for="c in msg.citations"
@@ -609,7 +635,7 @@ onBeforeUnmount(stop)
                       <span class="source__main">
                         <span class="source__title">
                           <el-tag v-if="c.is_ko" size="small" type="success" effect="plain">
-                            知识条目
+                            {{ t('assistant.knowledgeObject') }}
                           </el-tag>
                           {{ c.title }}
                         </span>
@@ -626,7 +652,7 @@ onBeforeUnmount(stop)
                 </div>
 
                 <div v-if="msg.status !== 'streaming'" class="msg__actions">
-                  <el-tooltip content="复制" placement="top">
+                  <el-tooltip :content="t('common.copy')" placement="top">
                     <button
                       v-if="msg.content"
                       type="button"
@@ -638,7 +664,7 @@ onBeforeUnmount(stop)
                   </el-tooltip>
                   <el-tooltip
                     v-if="msg.key === lastAssistant?.key"
-                    content="重新生成"
+                    :content="t('assistant.regenerate')"
                     placement="top"
                   >
                     <button
@@ -659,7 +685,7 @@ onBeforeUnmount(stop)
                       :class="{ 'pill--on': msg.feedback?.rating === 'up' }"
                       @click="rateUp(msg)"
                     >
-                      有帮助
+                      {{ t('assistant.helpful') }}
                     </button>
                     <button
                       type="button"
@@ -667,7 +693,7 @@ onBeforeUnmount(stop)
                       :class="{ 'pill--down': msg.feedback?.rating === 'down' }"
                       @click="rateDown(msg)"
                     >
-                      没帮助
+                      {{ t('assistant.notHelpful') }}
                     </button>
                     <template v-if="needsKnowledge(msg)">
                       <button
@@ -676,9 +702,11 @@ onBeforeUnmount(stop)
                         class="pill pill--primary"
                         @click="submitKnowledgeRequest(msg)"
                       >
-                        提交知识需求
+                        {{ t('assistant.requestKnowledge') }}
                       </button>
-                      <span v-else class="msg__done-tag">已提交知识需求</span>
+                      <span v-else class="msg__done-tag">{{
+                        t('assistant.knowledgeRequested')
+                      }}</span>
                     </template>
                   </template>
                   <span class="msg__time">{{ formatDateTime(msg.created_at) }}</span>
@@ -699,7 +727,7 @@ onBeforeUnmount(stop)
             @click="scrollToBottom(true, true)"
           >
             <el-icon><ArrowDown /></el-icon>
-            回到底部
+            {{ t('assistant.toBottom') }}
           </button>
         </transition>
         <div
@@ -714,7 +742,7 @@ onBeforeUnmount(stop)
             :autosize="{ minRows: 1, maxRows: 8 }"
             maxlength="4000"
             resize="none"
-            placeholder="输入你的问题，Enter 发送，Shift + Enter 换行"
+            :placeholder="t('assistant.composerPlaceholder')"
             class="composer__input"
             data-test="composer"
             @keydown="onInputKeydown"
@@ -731,7 +759,7 @@ onBeforeUnmount(stop)
               :remote-method="loadKbs"
               :loading="kbLoading"
               :disabled="streaming"
-              placeholder="全部可访问的知识库"
+              :placeholder="t('assistant.allKbs')"
               size="small"
               class="composer__scope"
               data-guide="assistant-scope"
@@ -744,7 +772,7 @@ onBeforeUnmount(stop)
               v-if="streaming"
               type="button"
               class="send send--stop"
-              title="停止生成"
+              :title="t('assistant.stop')"
               data-test="stop"
               @click="stop"
             >
@@ -755,7 +783,7 @@ onBeforeUnmount(stop)
               type="button"
               class="send"
               :disabled="!canSend"
-              title="发送"
+              :title="t('assistant.send')"
               data-test="send"
               @click="send()"
             >
@@ -763,7 +791,7 @@ onBeforeUnmount(stop)
             </button>
           </div>
         </div>
-        <div class="chat__disclaimer">内容由 AI 基于知识库生成，请以引用原文为准</div>
+        <div class="chat__disclaimer">{{ t('assistant.disclaimer') }}</div>
       </div>
     </section>
 

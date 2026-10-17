@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { hasAnyPermission, type PermissionRequirement } from '@/utils/permission'
-import { LAYOUT_TOUR, TOURS, findTour, resolveSteps, tourForRoute } from '../tours'
+import { LAYOUT_TOUR, findTour, resolveSteps, tourForRoute, tours } from '../tours'
 
 function canWith(perms: string[]) {
   return (required: PermissionRequirement | undefined) => hasAnyPermission(perms, required)
@@ -8,7 +8,7 @@ function canWith(perms: string[]) {
 
 describe('tours', () => {
   it('has unique keys and maps page routes to their tour', () => {
-    const keys = TOURS.map((t) => t.key)
+    const keys = tours().map((t) => t.key)
     expect(new Set(keys).size).toBe(keys.length)
     expect(tourForRoute('assistant')?.key).toBe('assistant')
     expect(tourForRoute('knowledge-base')?.key).toBe('kb-detail')

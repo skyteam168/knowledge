@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { getDocumentAcl, setDocumentAcl } from '@/api/knowledge'
 import type { AclEntryOut, KbDocument, KbVisibility } from '@/api/types'
@@ -8,6 +9,7 @@ import AclEditor from './AclEditor.vue'
 const props = defineProps<{ document: KbDocument | null }>()
 const visible = defineModel<boolean>({ required: true })
 const emit = defineEmits<{ saved: [] }>()
+const { t } = useI18n()
 
 const loading = ref(false)
 const saving = ref(false)
@@ -44,7 +46,7 @@ async function submit(): Promise<void> {
             permission,
           })),
     })
-    ElMessage.success('权限已更新')
+    ElMessage.success(t('knowledge.acl.updated'))
     visible.value = false
     emit('saved')
   } finally {
@@ -54,11 +56,19 @@ async function submit(): Promise<void> {
 </script>
 
 <template>
-  <el-dialog v-model="visible" :title="`文档权限：${document?.title ?? ''}`" width="720px">
+  <el-dialog
+    v-model="visible"
+    :title="t('knowledge.acl.docTitle', { title: document?.title ?? '' })"
+    width="720px"
+  >
     <div v-loading="loading">
       <el-form label-width="100px">
-        <el-form-item label="继承知识库">
-          <el-switch v-model="inherit" active-text="继承" inactive-text="单独设置" />
+        <el-form-item :label="t('knowledge.acl.inheritKb')">
+          <el-switch
+            v-model="inherit"
+            :active-text="t('knowledge.acl.inherit')"
+            :inactive-text="t('knowledge.acl.custom')"
+          />
         </el-form-item>
       </el-form>
       <template v-if="inherit">
@@ -68,8 +78,8 @@ async function submit(): Promise<void> {
           show-icon
           :title="
             kbVisibility === 'org'
-              ? '继承知识库权限：组织内所有人可读，以及以下授权'
-              : '继承知识库权限：仅以下授权成员可访问'
+              ? t('knowledge.acl.inheritOrgTip')
+              : t('knowledge.acl.inheritRestrictedTip')
           "
           class="tip"
         />
@@ -80,15 +90,15 @@ async function submit(): Promise<void> {
           type="warning"
           :closable="false"
           show-icon
-          title="单独设置后仅以下成员（及知识库管理员）可访问该文档"
+          :title="t('knowledge.acl.customTip')"
           class="tip"
         />
         <AclEditor v-model="entries" />
       </template>
     </div>
     <template #footer>
-      <el-button @click="visible = false">取消</el-button>
-      <el-button type="primary" :loading="saving" @click="submit">保存</el-button>
+      <el-button @click="visible = false">{{ t('common.cancel') }}</el-button>
+      <el-button type="primary" :loading="saving" @click="submit">{{ t('common.save') }}</el-button>
     </template>
   </el-dialog>
 </template>

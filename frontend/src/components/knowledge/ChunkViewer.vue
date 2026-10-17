@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import type { Chunk, ChunkType } from '@/api/types'
+import { useI18n } from 'vue-i18n'
+import type { Chunk } from '@/api/types'
+import { hitLocation } from '@/utils/search'
 
 const props = defineProps<{
   chunks: Chunk[]
@@ -10,6 +12,7 @@ const props = defineProps<{
 }>()
 
 const COLLAPSE_ANIMATION_MS = 350
+const { t } = useI18n()
 
 interface ParentNode {
   parent: Chunk
@@ -19,8 +22,6 @@ interface ParentNode {
 const keyword = ref('')
 const showParentContent = ref(false)
 const expanded = ref<string[]>([])
-
-const TYPE_LABELS: Record<ChunkType, string> = { text: '文本', table: '表格', title: '标题' }
 
 const tree = computed<ParentNode[]>(() => {
   const nodes = new Map<string, ParentNode>()
@@ -53,21 +54,11 @@ const stats = computed(() => {
 })
 
 function location(chunk: Chunk): string {
-  const parts: string[] = []
-  if (chunk.page_start != null) {
-    parts.push(
-      chunk.page_end != null && chunk.page_end !== chunk.page_start
-        ? `第 ${chunk.page_start}-${chunk.page_end} 页`
-        : `第 ${chunk.page_start} 页`,
-    )
-  }
-  if (chunk.sheet_name) parts.push(`工作表 ${chunk.sheet_name}`)
-  if (chunk.slide_number != null) parts.push(`第 ${chunk.slide_number} 张幻灯片`)
-  return parts.join(' · ')
+  return hitLocation(chunk)
 }
 
 function headingText(chunk: Chunk): string {
-  return chunk.heading_path.length ? chunk.heading_path.join(' › ') : '（文档开头）'
+  return chunk.heading_path.length ? chunk.heading_path.join(' › ') : t('knowledge.chunk.docStart')
 }
 
 function expandAll(): void {
@@ -101,26 +92,42 @@ watch(
 <template>
   <div v-loading="loading" class="chunk-viewer">
     <div class="toolbar">
-      <el-input v-model="keyword" placeholder="在分块中搜索" clearable class="search" />
-      <el-checkbox v-model="showParentContent">显示父块全文</el-checkbox>
-      <el-button link type="primary" @click="expandAll">全部展开</el-button>
-      <el-button link type="primary" @click="expanded = []">全部收起</el-button>
+      <el-input
+        v-model="keyword"
+        :placeholder="t('knowledge.chunk.searchPlaceholder')"
+        clearable
+        class="search"
+      />
+      <el-checkbox v-model="showParentContent">{{ t('knowledge.chunk.showParent') }}</el-checkbox>
+      <el-button link type="primary" @click="expandAll">{{
+        t('knowledge.chunk.expandAll')
+      }}</el-button>
+      <el-button link type="primary" @click="expanded = []">{{
+        t('knowledge.chunk.collapseAll')
+      }}</el-button>
     </div>
     <div class="stats">
-      父块 {{ stats.parents }} · 子块 {{ stats.children }} · 表格子块 {{ stats.tables }}
+      {{ t('knowledge.chunk.stats', stats) }}
     </div>
 
-    <el-empty v-if="!filtered.length" description="暂无分块" />
+    <el-empty v-if="!filtered.length" :description="t('knowledge.chunk.empty')" />
     <el-collapse v-else v-model="expanded">
       <el-collapse-item v-for="node in filtered" :key="node.parent.id" :name="node.parent.id">
         <template #title>
           <div class="parent-title">
-            <el-tag size="small" effect="dark">父块 #{{ node.parent.seq }}</el-tag>
+            <el-tag size="small" effect="dark">{{
+              t('knowledge.chunk.parent', { seq: node.parent.seq })
+            }}</el-tag>
             <span class="heading" :title="headingText(node.parent)">
               {{ headingText(node.parent) }}
             </span>
             <span class="meta">
-              {{ node.parent.token_count }} tokens · {{ node.children.length }} 个子块
+              {{
+                t('knowledge.chunk.parentMeta', {
+                  tokens: node.parent.token_count,
+                  count: node.children.length,
+                })
+              }}
               <template v-if="location(node.parent)"> · {{ location(node.parent) }}</template>
             </span>
           </div>
@@ -135,7 +142,7 @@ watch(
         >
           <div class="child-header">
             <el-tag size="small" :type="child.chunk_type === 'table' ? 'warning' : 'info'">
-              {{ TYPE_LABELS[child.chunk_type] }}
+              {{ t(`knowledge.chunk.${child.chunk_type}`) }}
             </el-tag>
             <span class="seq">#{{ child.seq }}</span>
             <span class="heading">{{ headingText(child) }}</span>

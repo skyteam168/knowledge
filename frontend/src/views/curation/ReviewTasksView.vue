@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { listReviewTasks } from '@/api/curation'
 import type { ReviewStatus, ReviewTask } from '@/api/types'
 import { REVIEW_STATUS_META, isWarning, metaOf } from '@/utils/curation'
 import { formatDateTime } from '@/utils/format'
 
 const router = useRouter()
+const { t } = useI18n()
 
 const status = ref<ReviewStatus>('pending')
 const pager = reactive({ page: 1, size: 20 })
@@ -52,13 +54,17 @@ onMounted(load)
       />
     </el-radio-group>
     <el-table v-loading="loading" :data="items" row-key="id" @row-click="open">
-      <el-table-column label="知识条目" min-width="260">
+      <el-table-column :label="t('curation.reviewTasks.ko')" min-width="260">
         <template #default="{ row }">{{ row.ko_title ?? row.ko_id }}</template>
       </el-table-column>
-      <el-table-column label="版本" width="70">
+      <el-table-column :label="t('curation.field.version')" width="70">
         <template #default="{ row }">v{{ row.ko_version }}</template>
       </el-table-column>
-      <el-table-column label="冲突警告" width="100" align="center">
+      <el-table-column
+        :label="t('curation.reviewTasks.conflictWarnings')"
+        width="100"
+        align="center"
+      >
         <template #default="{ row }">
           <el-tag v-if="warningCount(row as ReviewTask)" type="danger" size="small">
             {{ warningCount(row as ReviewTask) }}
@@ -66,24 +72,34 @@ onMounted(load)
           <span v-else>-</span>
         </template>
       </el-table-column>
-      <el-table-column label="提交人" width="110">
+      <el-table-column :label="t('curation.field.submitter')" width="110">
         <template #default="{ row }">{{ row.submitted_by?.name ?? '-' }}</template>
       </el-table-column>
-      <el-table-column label="提交说明" prop="note" min-width="160" show-overflow-tooltip />
-      <el-table-column label="提交时间" width="170">
+      <el-table-column
+        :label="t('curation.reviewTasks.submitNote')"
+        prop="note"
+        min-width="160"
+        show-overflow-tooltip
+      />
+      <el-table-column :label="t('curation.field.submittedAt')" width="170">
         <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
       </el-table-column>
-      <el-table-column label="状态" width="90">
+      <el-table-column :label="t('common.status')" width="90">
         <template #default="{ row }">
           <el-tag size="small" :type="metaOf(REVIEW_STATUS_META, row.status).type">
             {{ metaOf(REVIEW_STATUS_META, row.status).label }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="审核人" width="110">
+      <el-table-column :label="t('curation.reviewTasks.reviewer')" width="110">
         <template #default="{ row }">{{ row.reviewer?.name ?? '-' }}</template>
       </el-table-column>
-      <el-table-column label="审核意见" prop="comment" min-width="160" show-overflow-tooltip />
+      <el-table-column
+        :label="t('curation.reviewTasks.reviewComment')"
+        prop="comment"
+        min-width="160"
+        show-overflow-tooltip
+      />
     </el-table>
     <el-pagination
       v-model:current-page="pager.page"

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
+import { useI18n } from 'vue-i18n'
 import {
   bulkAssignRole,
   createRole,
@@ -20,6 +21,9 @@ import type {
   RoleBulkAssign,
   RoleBulkResult,
 } from '@/api/types'
+import { permissionName, roleName } from '@/i18n/catalog'
+
+const { t } = useI18n()
 
 const roles = ref<Role[]>([])
 const permissions = ref<Permission[]>([])
@@ -30,15 +34,15 @@ const saving = ref(false)
 
 const current = computed(() => roles.value.find((r) => r.id === currentId.value) ?? null)
 
-const GROUP_LABELS: Record<string, string> = {
-  '*': '超级权限',
-  kb: '知识库',
-  doc: '文档',
-  review: '审核',
-  chat: 'AI 助手',
-  search: '搜索',
-  analytics: '分析',
-  admin: '系统管理',
+const GROUP_LABEL_KEYS: Record<string, string> = {
+  '*': 'super',
+  kb: 'kb',
+  doc: 'doc',
+  review: 'review',
+  chat: 'chat',
+  search: 'search',
+  analytics: 'analytics',
+  admin: 'admin',
 }
 
 const permissionGroups = computed(() => {
@@ -47,11 +51,10 @@ const permissionGroups = computed(() => {
     const key = p.code === '*' ? '*' : p.code.split(':')[0]!
     groups.set(key, [...(groups.get(key) ?? []), p])
   }
-  return [...groups.entries()].map(([key, items]) => ({
-    key,
-    label: GROUP_LABELS[key] ?? key,
-    items,
-  }))
+  return [...groups.entries()].map(([key, items]) => {
+    const labelKey = GROUP_LABEL_KEYS[key]
+    return { key, label: labelKey ? t(`roles.permissionGroups.${labelKey}`) : key, items }
+  })
 })
 
 async function load(): Promise<void> {
@@ -77,7 +80,7 @@ async function savePermissions(): Promise<void> {
   saving.value = true
   try {
     await setRolePermissions(current.value.id, checked.value)
-    ElMessage.success('权限已保存，相关用户的权限缓存已刷新')
+    ElMessage.success(t('roles.permissions.saved'))
     await load()
   } finally {
     saving.value = false
@@ -100,13 +103,13 @@ const editingPrivileged = computed(() => {
 function isPrivileged(codes: string[]): boolean {
   return codes.some((c) => c === '*' || c.startsWith('admin:'))
 }
-const rules: FormRules = {
+const rules = computed<FormRules>(() => ({
   code: [
-    { required: true, message: '请输入角色编码', trigger: 'blur' },
-    { pattern: /^[a-z][a-z0-9_]*$/, message: '小写字母开头，仅含小写字母、数字、下划线' },
+    { required: true, message: t('roles.rules.codeRequired'), trigger: 'blur' },
+    { pattern: /^[a-z][a-z0-9_]*$/, message: t('roles.rules.codePattern') },
   ],
-  name: [{ required: true, message: '请输入角色名称', trigger: 'blur' }],
-}
+  name: [{ required: true, message: t('roles.rules.nameRequired'), trigger: 'blur' }],
+}))
 
 function openCreate(): void {
   editor.editingId = null
@@ -136,15 +139,17 @@ async function submitEditor(): Promise<void> {
     if (is_default) await updateRole(role.id, { is_default })
     currentId.value = role.id
   }
-  ElMessage.success('保存成功')
+  ElMessage.success(t('roles.saveSuccess'))
   editor.visible = false
   await load()
 }
 
 async function remove(role: Role): Promise<void> {
-  await ElMessageBox.confirm(`确定删除角色「${role.name}」吗？`, '提示', { type: 'warning' })
+  await ElMessageBox.confirm(t('roles.deleteConfirm', { name: roleName(role) }), t('common.tip'), {
+    type: 'warning',
+  })
   await deleteRole(role.id)
-  ElMessage.success('已删除')
+  ElMessage.success(t('common.deleted'))
   if (currentId.value === role.id) currentId.value = null
   await load()
 }
@@ -181,6 +186,23 @@ const bulkGrantBlocked = computed(
   () => bulk.form.action === 'grant' && !!current.value && isPrivileged(current.value.permissions),
 )
 
+const previewText = computed(() => {
+  const preview = bulk.preview
+  if (!preview) return ''
+  const key =
+    bulk.form.action === 'grant'
+      ? 'roles.bulk.previewGrant'
+      : preview.skipped
+        ? 'roles.bulk.previewRevokeSkipped'
+        : 'roles.bulk.previewRevoke'
+  return t(key, {
+    matched: preview.matched,
+    changed: preview.changed,
+    unchanged: preview.unchanged,
+    skipped: preview.skipped,
+  })
+})
+
 function filterDepartment(keyword: string, node: Record<string, unknown>): boolean {
   const dept = node as unknown as DirectoryDepartment
   return (dept.path_name ?? dept.name).toLowerCase().includes(keyword.toLowerCase())
@@ -212,9 +234,10 @@ async function runBulk(dryRun: boolean): Promise<void> {
       bulk.preview = result
       return
     }
-    const verb = bulk.form.action === 'grant' ? '授予' : '撤销'
-    const skipped = result.skipped ? `，跳过 ${result.skipped} 人` : ''
-    ElMessage.success(`已为 ${result.changed} 人${verb}「${role.name}」${skipped}，立即生效`)
+    const key = `roles.bulk.${bulk.form.action}Done${result.skipped ? 'Skipped' : ''}`
+    ElMessage.success(
+      t(key, { changed: result.changed, skipped: result.skipped, name: roleName(role) }),
+    )
     bulk.visible = false
   } finally {
     bulk.running = false
@@ -227,10 +250,13 @@ async function confirmBulk(): Promise<void> {
   if (!bulk.preview) await runBulk(true)
   const preview = bulk.preview
   if (!preview) return
-  const verb = bulk.form.action === 'grant' ? '授予' : '撤销'
   await ElMessageBox.confirm(
-    `将为 ${preview.changed} 人${verb}角色「${role.name}」（匹配 ${preview.matched} 人），确定执行？`,
-    '批量分配角色',
+    t(bulk.form.action === 'grant' ? 'roles.bulk.confirmGrant' : 'roles.bulk.confirmRevoke', {
+      changed: preview.changed,
+      name: role.name,
+      matched: preview.matched,
+    }),
+    t('roles.bulk.confirmTitle'),
     { type: 'warning' },
   )
   await runBulk(false)
@@ -249,9 +275,9 @@ onMounted(load)
       <el-card shadow="never">
         <template #header>
           <div class="card-header">
-            <span>角色</span>
+            <span>{{ t('roles.list.title') }}</span>
             <el-button v-permission="'admin:role'" type="primary" size="small" @click="openCreate">
-              新建角色
+              {{ t('roles.list.create') }}
             </el-button>
           </div>
         </template>
@@ -263,35 +289,39 @@ onMounted(load)
           row-key="id"
           @row-click="select"
         >
-          <el-table-column label="角色" min-width="140">
+          <el-table-column :label="t('roles.list.role')" min-width="140">
             <template #default="{ row }">
-              <div>{{ row.name }}</div>
+              <div>{{ roleName(row as Role) }}</div>
               <div class="muted">{{ row.code }}</div>
             </template>
           </el-table-column>
-          <el-table-column label="类型" width="110">
+          <el-table-column :label="t('roles.list.type')" width="110">
             <template #default="{ row }">
-              <el-tag v-if="row.is_system" size="small">内置</el-tag>
+              <el-tag v-if="row.is_system" size="small">{{ t('roles.list.system') }}</el-tag>
               <el-tooltip
                 v-if="row.is_default"
-                content="同步或首次登录新建的用户自动获得此角色"
+                :content="t('roles.list.defaultTip')"
                 placement="top"
               >
-                <el-tag size="small" type="success" class="default-tag">默认</el-tag>
+                <el-tag size="small" type="success" class="default-tag">{{
+                  t('roles.list.default')
+                }}</el-tag>
               </el-tooltip>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="110">
+          <el-table-column :label="t('common.actions')" width="110">
             <template #default="{ row }">
               <span v-permission="'admin:role'">
-                <el-button link type="primary" @click.stop="openEdit(row as Role)">编辑</el-button>
+                <el-button link type="primary" @click.stop="openEdit(row as Role)">{{
+                  t('common.edit')
+                }}</el-button>
                 <el-button
                   v-if="!row.is_system"
                   link
                   type="danger"
                   @click.stop="remove(row as Role)"
                 >
-                  删除
+                  {{ t('common.delete') }}
                 </el-button>
               </span>
             </template>
@@ -303,11 +333,15 @@ onMounted(load)
       <el-card shadow="never">
         <template #header>
           <div class="card-header">
-            <span>{{ current ? `「${current.name}」的权限` : '请选择角色' }}</span>
+            <span>{{
+              current
+                ? t('roles.permissions.title', { name: roleName(current) })
+                : t('roles.permissions.selectRole')
+            }}</span>
             <span v-if="current" v-permission="'admin:role'">
-              <el-button size="small" @click="openBulk">批量分配</el-button>
+              <el-button size="small" @click="openBulk">{{ t('roles.bulk.open') }}</el-button>
               <el-button type="primary" size="small" :loading="saving" @click="savePermissions">
-                保存权限
+                {{ t('roles.permissions.save') }}
               </el-button>
             </span>
           </div>
@@ -316,60 +350,62 @@ onMounted(load)
           <div v-for="group in permissionGroups" :key="group.key" class="perm-group">
             <div class="perm-group__title">{{ group.label }}</div>
             <el-checkbox v-for="p in group.items" :key="p.code" :value="p.code">
-              {{ p.name }} <span class="muted">{{ p.code }}</span>
+              {{ permissionName(p.code, p.name) }} <span class="muted">{{ p.code }}</span>
             </el-checkbox>
           </div>
         </el-checkbox-group>
-        <el-empty v-else description="请选择左侧角色" />
+        <el-empty v-else :description="t('roles.permissions.selectRoleHint')" />
       </el-card>
     </el-col>
   </el-row>
 
   <el-dialog
     v-model="editor.visible"
-    :title="editor.editingId ? '编辑角色' : '新建角色'"
+    :title="editor.editingId ? t('roles.editor.editTitle') : t('roles.editor.createTitle')"
     width="480px"
   >
     <el-form ref="formRef" :model="editor.form" :rules="rules" label-width="80px">
-      <el-form-item label="编码" prop="code">
+      <el-form-item :label="t('roles.editor.code')" prop="code">
         <el-input v-model="editor.form.code" :disabled="!!editor.editingId" maxlength="64" />
       </el-form-item>
-      <el-form-item label="名称" prop="name">
+      <el-form-item :label="t('common.name')" prop="name">
         <el-input v-model="editor.form.name" maxlength="128" />
       </el-form-item>
-      <el-form-item label="描述">
+      <el-form-item :label="t('common.description')">
         <el-input v-model="editor.form.description" type="textarea" :rows="3" />
       </el-form-item>
-      <el-form-item label="默认角色">
+      <el-form-item :label="t('roles.editor.isDefault')">
         <el-switch v-model="editor.form.is_default" :disabled="editingPrivileged" />
         <div class="form-help">
           {{
             editingPrivileged
-              ? '含超级权限或系统管理权限的角色不能设为默认角色'
-              : '组织同步或首次登录新建的用户自动获得此角色；已有用户不受影响，可用「批量分配」补授'
+              ? t('roles.editor.privilegedDefaultHint')
+              : t('roles.editor.defaultHint')
           }}
         </div>
       </el-form-item>
     </el-form>
     <template #footer>
-      <el-button @click="editor.visible = false">取消</el-button>
-      <el-button type="primary" @click="submitEditor">保存</el-button>
+      <el-button @click="editor.visible = false">{{ t('common.cancel') }}</el-button>
+      <el-button type="primary" @click="submitEditor">{{ t('common.save') }}</el-button>
     </template>
   </el-dialog>
 
   <el-dialog
     v-model="bulk.visible"
-    :title="current ? `批量分配「${current.name}」` : '批量分配'"
+    :title="
+      current ? t('roles.bulk.title', { name: roleName(current) }) : t('roles.bulk.titleFallback')
+    "
     width="560px"
   >
     <el-form label-width="90px">
-      <el-form-item label="操作">
+      <el-form-item :label="t('roles.bulk.action')">
         <el-radio-group v-model="bulk.form.action" @change="resetPreview">
-          <el-radio value="grant">授予</el-radio>
-          <el-radio value="revoke">撤销</el-radio>
+          <el-radio value="grant">{{ t('roles.bulk.grant') }}</el-radio>
+          <el-radio value="revoke">{{ t('roles.bulk.revoke') }}</el-radio>
         </el-radio-group>
       </el-form-item>
-      <el-form-item label="部门">
+      <el-form-item :label="t('roles.bulk.departments')">
         <el-tree-select
           v-model="bulk.form.department_ids"
           :data="departments"
@@ -379,21 +415,21 @@ onMounted(load)
           check-strictly
           filterable
           :filter-node-method="filterDepartment"
-          placeholder="选择部门（含下级部门），可按完整路径搜索"
+          :placeholder="t('roles.bulk.departmentsPlaceholder')"
           style="width: 100%"
           @change="resetPreview"
         >
           <template #label="{ value }">{{ departmentNames.get(value) ?? value }}</template>
         </el-tree-select>
       </el-form-item>
-      <el-form-item label="用户组">
+      <el-form-item :label="t('roles.bulk.groups')">
         <el-select
           v-model="bulk.form.group_ids"
           multiple
           filterable
           remote
           :remote-method="searchGroups"
-          placeholder="选择用户组，如「职务/班组长」"
+          :placeholder="t('roles.bulk.groupsPlaceholder')"
           style="width: 100%"
           @change="resetPreview"
         >
@@ -402,7 +438,7 @@ onMounted(load)
       </el-form-item>
       <el-form-item label="">
         <el-checkbox v-model="bulk.form.include_inactive" @change="resetPreview">
-          包含已停用的用户
+          {{ t('roles.bulk.includeInactive') }}
         </el-checkbox>
       </el-form-item>
     </el-form>
@@ -410,30 +446,17 @@ onMounted(load)
       v-if="bulkGrantBlocked"
       type="warning"
       :closable="false"
-      title="含超级权限或系统管理权限的角色不能批量授予，请在用户管理中逐个分配"
+      :title="t('roles.bulk.privilegedBlocked')"
     />
-    <el-alert v-else-if="bulk.preview" type="info" :closable="false">
-      <template #title>
-        匹配 {{ bulk.preview.matched }} 人，将{{ bulk.form.action === 'grant' ? '授予' : '撤销' }}
-        {{ bulk.preview.changed }} 人
-        <template v-if="bulk.form.action === 'grant'">
-          （{{ bulk.preview.unchanged }} 人已有此角色）
-        </template>
-        <template v-else>
-          （{{ bulk.preview.unchanged }} 人没有此角色<template v-if="bulk.preview.skipped"
-            >，{{ bulk.preview.skipped }} 人的角色来自 Keycloak 或为本人，不撤销</template
-          >）
-        </template>
-      </template>
-    </el-alert>
+    <el-alert v-else-if="bulk.preview" type="info" :closable="false" :title="previewText" />
     <template #footer>
-      <el-button @click="bulk.visible = false">取消</el-button>
+      <el-button @click="bulk.visible = false">{{ t('common.cancel') }}</el-button>
       <el-button
         :disabled="!bulkHasTarget || bulkGrantBlocked"
         :loading="bulk.running"
         @click="runBulk(true)"
       >
-        预览人数
+        {{ t('roles.bulk.preview') }}
       </el-button>
       <el-button
         type="primary"
@@ -441,7 +464,7 @@ onMounted(load)
         :loading="bulk.running"
         @click="confirmBulk"
       >
-        执行
+        {{ t('roles.bulk.run') }}
       </el-button>
     </template>
   </el-dialog>

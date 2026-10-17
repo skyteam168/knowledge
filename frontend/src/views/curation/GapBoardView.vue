@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { getGapStats, listGapClusters, listGaps, runGapClustering } from '@/api/curation'
 import { listKnowledgeBases } from '@/api/knowledge'
@@ -19,6 +20,7 @@ import { formatDateTime } from '@/utils/format'
 
 const router = useRouter()
 const auth = useAuthStore()
+const { t } = useI18n()
 
 const stats = ref<GapStats | null>(null)
 const activeTab = ref<'gaps' | 'clusters'>('gaps')
@@ -44,10 +46,10 @@ const kbOptions = ref<KnowledgeBase[]>([])
 const clusterFilterLabel = ref('')
 
 const sourceCards = computed(() =>
-  (Object.keys(GAP_TYPE_META) as GapType[]).map((t) => ({
-    type: t,
-    label: GAP_TYPE_META[t].label,
-    count: stats.value?.by_source[t] ?? 0,
+  (Object.keys(GAP_TYPE_META) as GapType[]).map((type) => ({
+    type,
+    label: GAP_TYPE_META[type].label,
+    count: stats.value?.by_source[type] ?? 0,
   })),
 )
 
@@ -96,7 +98,12 @@ async function runClustering(): Promise<void> {
   try {
     const r = await runGapClustering()
     ElMessage.success(
-      `已处理 ${r.processed} 条：归入聚类 ${r.clustered} 条，新建聚类 ${r.new_clusters} 个，合并重复 ${r.folded} 条`,
+      t('curation.gapBoard.clusteringResult', {
+        processed: r.processed,
+        clustered: r.clustered,
+        created: r.new_clusters,
+        folded: r.folded,
+      }),
     )
     await Promise.all([loadStats(), loadGaps(), loadClusters()])
   } finally {
@@ -153,15 +160,15 @@ onMounted(async () => {
     <div class="gap-board__cards">
       <el-card shadow="never" class="stat-card">
         <div class="stat-card__value">{{ stats?.by_status.open ?? 0 }}</div>
-        <div class="stat-card__label">待处理</div>
+        <div class="stat-card__label">{{ t('curation.gapBoard.statOpen') }}</div>
       </el-card>
       <el-card shadow="never" class="stat-card">
         <div class="stat-card__value">{{ stats?.by_status.in_review ?? 0 }}</div>
-        <div class="stat-card__label">处理中</div>
+        <div class="stat-card__label">{{ t('curation.gapBoard.statInReview') }}</div>
       </el-card>
       <el-card shadow="never" class="stat-card">
         <div class="stat-card__value">{{ stats?.clusters_open ?? 0 }}</div>
-        <div class="stat-card__label">未解决聚类</div>
+        <div class="stat-card__label">{{ t('curation.gapBoard.statClusters') }}</div>
       </el-card>
       <el-card
         v-for="card in sourceCards"
@@ -172,21 +179,23 @@ onMounted(async () => {
         @click="filterBySource(card.type)"
       >
         <div class="stat-card__value">{{ card.count }}</div>
-        <div class="stat-card__label">{{ card.label }}（次）</div>
+        <div class="stat-card__label">
+          {{ t('curation.gapBoard.sourceCount', { label: card.label }) }}
+        </div>
       </el-card>
     </div>
 
     <el-card shadow="never">
       <el-tabs v-model="activeTab">
-        <el-tab-pane label="缺口列表" name="gaps">
+        <el-tab-pane :label="t('curation.gapBoard.tabGaps')" name="gaps">
           <el-form inline class="gap-board__filters" @submit.prevent="search">
-            <el-form-item label="状态">
+            <el-form-item :label="t('common.status')">
               <el-select
                 v-model="filters.status"
                 multiple
                 collapse-tags
                 clearable
-                placeholder="全部"
+                :placeholder="t('common.all')"
                 style="width: 200px"
                 @change="search"
               >
@@ -198,11 +207,11 @@ onMounted(async () => {
                 />
               </el-select>
             </el-form-item>
-            <el-form-item label="来源">
+            <el-form-item :label="t('curation.field.source')">
               <el-select
                 v-model="filters.gap_type"
                 clearable
-                placeholder="全部"
+                :placeholder="t('common.all')"
                 style="width: 130px"
                 @change="search"
               >
@@ -214,39 +223,49 @@ onMounted(async () => {
                 />
               </el-select>
             </el-form-item>
-            <el-form-item label="知识库">
+            <el-form-item :label="t('curation.field.kb')">
               <el-select
                 v-model="filters.kb_id"
                 clearable
                 filterable
-                placeholder="全部"
+                :placeholder="t('common.all')"
                 style="width: 180px"
                 @change="search"
               >
                 <el-option v-for="kb in kbOptions" :key="kb.id" :label="kb.name" :value="kb.id" />
               </el-select>
             </el-form-item>
-            <el-form-item label="排序">
+            <el-form-item :label="t('curation.gapBoard.sort')">
               <el-radio-group v-model="filters.sort" @change="search">
-                <el-radio-button value="frequency">按频次</el-radio-button>
-                <el-radio-button value="recent">按最近</el-radio-button>
+                <el-radio-button value="frequency">{{
+                  t('curation.gapBoard.byFrequency')
+                }}</el-radio-button>
+                <el-radio-button value="recent">{{
+                  t('curation.gapBoard.byRecent')
+                }}</el-radio-button>
               </el-radio-group>
             </el-form-item>
             <el-form-item>
               <el-input
                 v-model="filters.keyword"
-                placeholder="搜索问题"
+                :placeholder="t('curation.gapBoard.keywordPlaceholder')"
                 clearable
                 style="width: 200px"
                 @clear="search"
               />
             </el-form-item>
             <el-form-item>
-              <el-checkbox v-model="filters.mine" @change="search">只看我负责的</el-checkbox>
+              <el-checkbox v-model="filters.mine" @change="search">{{
+                t('curation.gapBoard.mine')
+              }}</el-checkbox>
             </el-form-item>
             <el-form-item>
-              <el-button type="primary" native-type="submit">查询</el-button>
-              <el-button :loading="clustering" @click="runClustering">立即聚类</el-button>
+              <el-button type="primary" native-type="submit">{{
+                t('curation.field.query')
+              }}</el-button>
+              <el-button :loading="clustering" @click="runClustering">{{
+                t('curation.gapBoard.runClustering')
+              }}</el-button>
             </el-form-item>
           </el-form>
 
@@ -258,7 +277,7 @@ onMounted(async () => {
             class="gap-board__cluster-alert"
             @close="clearCluster"
           >
-            正在查看聚类：{{ clusterFilterLabel }}
+            {{ t('curation.gapBoard.viewingCluster', { label: clusterFilterLabel }) }}
           </el-alert>
 
           <el-table
@@ -268,43 +287,47 @@ onMounted(async () => {
             data-test="gap-table"
             @row-click="openGap"
           >
-            <el-table-column label="问题" min-width="280">
+            <el-table-column :label="t('curation.gapBoard.colQuestion')" min-width="280">
               <template #default="{ row }">
                 <div class="gap-board__question">{{ row.rewritten_query || row.query }}</div>
                 <div v-if="row.rewritten_query && row.rewritten_query !== row.query" class="muted">
-                  原问：{{ row.query }}
+                  {{ t('curation.gapBoard.originalQuery', { query: row.query }) }}
                 </div>
               </template>
             </el-table-column>
-            <el-table-column label="来源" width="100">
+            <el-table-column :label="t('curation.field.source')" width="100">
               <template #default="{ row }">
                 <el-tag :type="metaOf(GAP_TYPE_META, row.gap_type).type" size="small">
                   {{ metaOf(GAP_TYPE_META, row.gap_type).label }}
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="频次" width="110" align="center">
+            <el-table-column
+              :label="t('curation.gapBoard.colFrequency')"
+              width="110"
+              align="center"
+            >
               <template #default="{ row }">
                 <strong>{{ row.occurrences }}</strong>
                 <span v-if="row.cluster_occurrences && row.cluster_occurrences > row.occurrences">
-                  / 同类 {{ row.cluster_occurrences }}
+                  {{ t('curation.gapBoard.clusterFrequency', { count: row.cluster_occurrences }) }}
                 </span>
               </template>
             </el-table-column>
-            <el-table-column label="知识库" width="140">
+            <el-table-column :label="t('curation.field.kb')" width="140">
               <template #default="{ row }">{{ row.kb_name || kbName(row.kb_id) }}</template>
             </el-table-column>
-            <el-table-column label="状态" width="90">
+            <el-table-column :label="t('common.status')" width="90">
               <template #default="{ row }">
                 <el-tag :type="metaOf(GAP_STATUS_META, row.status).type" size="small">
                   {{ metaOf(GAP_STATUS_META, row.status).label }}
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="负责人" width="110">
+            <el-table-column :label="t('curation.field.assignee')" width="110">
               <template #default="{ row }">{{ row.assignee?.name ?? '-' }}</template>
             </el-table-column>
-            <el-table-column label="最近出现" width="170">
+            <el-table-column :label="t('curation.field.lastSeen')" width="170">
               <template #default="{ row }">{{ formatDateTime(row.last_seen_at) }}</template>
             </el-table-column>
           </el-table>
@@ -319,7 +342,7 @@ onMounted(async () => {
           />
         </el-tab-pane>
 
-        <el-tab-pane label="相似问题聚类" name="clusters">
+        <el-tab-pane :label="t('curation.gapBoard.tabClusters')" name="clusters">
           <div class="gap-board__filters">
             <el-checkbox
               v-model="openOnly"
@@ -330,7 +353,7 @@ onMounted(async () => {
                 }
               "
             >
-              只看未解决
+              {{ t('curation.gapBoard.openOnly') }}
             </el-checkbox>
           </div>
           <el-table
@@ -339,11 +362,30 @@ onMounted(async () => {
             row-key="id"
             @row-click="showCluster"
           >
-            <el-table-column label="代表问题" prop="representative_query" min-width="300" />
-            <el-table-column label="问题数" prop="gap_count" width="90" align="center" />
-            <el-table-column label="总频次" prop="occurrences" width="90" align="center" />
-            <el-table-column label="待处理" prop="open_count" width="90" align="center" />
-            <el-table-column label="来源分布" min-width="200">
+            <el-table-column
+              :label="t('curation.gapBoard.representative')"
+              prop="representative_query"
+              min-width="300"
+            />
+            <el-table-column
+              :label="t('curation.gapBoard.gapCount')"
+              prop="gap_count"
+              width="90"
+              align="center"
+            />
+            <el-table-column
+              :label="t('curation.gapBoard.totalOccurrences')"
+              prop="occurrences"
+              width="90"
+              align="center"
+            />
+            <el-table-column
+              :label="t('curation.gapBoard.openCount')"
+              prop="open_count"
+              width="90"
+              align="center"
+            />
+            <el-table-column :label="t('curation.gapBoard.sourceDistribution')" min-width="200">
               <template #default="{ row }">
                 <el-tag
                   v-for="(count, type) in row.sources"
@@ -356,10 +398,10 @@ onMounted(async () => {
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="知识库" width="140">
+            <el-table-column :label="t('curation.field.kb')" width="140">
               <template #default="{ row }">{{ kbName(row.kb_id) }}</template>
             </el-table-column>
-            <el-table-column label="最近出现" width="170">
+            <el-table-column :label="t('curation.field.lastSeen')" width="170">
               <template #default="{ row }">{{ formatDateTime(row.last_seen_at) }}</template>
             </el-table-column>
           </el-table>

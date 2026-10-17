@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
+import { useI18n } from 'vue-i18n'
 import {
   createUser,
   disableUser,
@@ -16,7 +17,11 @@ import {
 import type { DepartmentNode, Group, Role, User, UserIdentityBrief } from '@/api/types'
 import { useDepartmentTree } from '@/composables/useDepartmentTree'
 import { formatDateTime } from '@/utils/format'
-import { SOURCE_LABEL } from './directory/meta'
+import { roleName } from '@/i18n/catalog'
+
+const { t, te } = useI18n()
+const sourceLabel = (source: string): string =>
+  te(`users.source.${source}`) ? t(`users.source.${source}`) : source
 
 const { tree, reload: reloadTree } = useDepartmentTree()
 const treeProps = {
@@ -77,10 +82,10 @@ const editor = reactive({
 })
 // Profile and departments of synced users are owned by the directory source.
 const managed = computed(() => editor.source !== 'local' && editor.source !== 'keycloak')
-const rules: FormRules = {
-  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
-  email: [{ type: 'email', message: '邮箱格式不正确', trigger: 'blur' }],
-}
+const rules = computed<FormRules>(() => ({
+  username: [{ required: true, message: t('users.rules.usernameRequired'), trigger: 'blur' }],
+  email: [{ type: 'email', message: t('users.rules.emailInvalid'), trigger: 'blur' }],
+}))
 
 function openCreate(): void {
   editor.editingId = null
@@ -142,7 +147,7 @@ async function submitEditor(): Promise<void> {
       department_ids: f.department_ids.filter((d) => d !== f.department_id),
     })
   }
-  ElMessage.success('保存成功')
+  ElMessage.success(t('users.saveSuccess'))
   editor.visible = false
   await load()
 }
@@ -151,9 +156,8 @@ const password = reactive({ visible: false, username: '', value: '', created: fa
 
 async function enablePassword(row: User): Promise<void> {
   await ElMessageBox.confirm(
-    `将为「${row.display_name || row.username}」开通账号密码登录并生成临时密码（首次登录须修改）。` +
-      '已有 Keycloak 账号时会重置为新的临时密码。',
-    '开通密码登录',
+    t('users.passwordConfirm.message', { name: row.display_name || row.username }),
+    t('users.passwordConfirm.title'),
     { type: 'warning' },
   )
   const result = await openPasswordLogin(row.id)
@@ -167,13 +171,15 @@ async function enablePassword(row: User): Promise<void> {
 
 async function copyPassword(): Promise<void> {
   await navigator.clipboard.writeText(password.value)
-  ElMessage.success('已复制')
+  ElMessage.success(t('common.copied'))
 }
 
 async function disable(row: User): Promise<void> {
-  await ElMessageBox.confirm(`确定禁用用户「${row.username}」吗？`, '提示', { type: 'warning' })
+  await ElMessageBox.confirm(t('users.disableConfirm', { name: row.username }), t('common.tip'), {
+    type: 'warning',
+  })
   await disableUser(row.id)
-  ElMessage.success('已禁用')
+  ElMessage.success(t('users.disableSuccess'))
   await load()
 }
 
@@ -211,7 +217,7 @@ async function submitAssign(): Promise<void> {
   } else {
     await setUserGroups(assign.user.id, assign.selected)
   }
-  ElMessage.success('已更新')
+  ElMessage.success(t('users.updated'))
   assign.visible = false
 }
 
@@ -222,7 +228,7 @@ onMounted(() => Promise.all([reloadTree(), load()]))
   <el-card shadow="never">
     <el-form :inline="true" @submit.prevent="search">
       <el-form-item>
-        <el-input v-model="query.keyword" placeholder="用户名 / 姓名 / 邮箱" clearable />
+        <el-input v-model="query.keyword" :placeholder="t('users.filters.keyword')" clearable />
       </el-form-item>
       <el-form-item>
         <el-tree-select
@@ -233,24 +239,36 @@ onMounted(() => Promise.all([reloadTree(), load()]))
           filterable
           check-strictly
           clearable
-          placeholder="部门（含下级）"
+          :placeholder="t('users.filters.department')"
           style="width: 200px"
         />
       </el-form-item>
       <el-form-item>
-        <el-select v-model="query.is_active" placeholder="状态" clearable style="width: 120px">
-          <el-option label="启用" :value="true" />
-          <el-option label="禁用" :value="false" />
+        <el-select
+          v-model="query.is_active"
+          :placeholder="t('common.status')"
+          clearable
+          style="width: 120px"
+        >
+          <el-option :label="t('common.enabled')" :value="true" />
+          <el-option :label="t('users.status.disabled')" :value="false" />
         </el-select>
       </el-form-item>
       <el-form-item>
-        <el-button type="primary" native-type="submit">查询</el-button>
-        <el-button v-permission="'admin:user'" @click="openCreate">预置用户</el-button>
+        <el-button type="primary" native-type="submit">{{ t('users.filters.query') }}</el-button>
+        <el-button v-permission="'admin:user'" @click="openCreate">{{
+          t('users.actions.precreate')
+        }}</el-button>
       </el-form-item>
     </el-form>
 
-    <el-table v-loading="loading" :data="rows" empty-text="暂无用户" data-test="user-table">
-      <el-table-column label="用户" min-width="150">
+    <el-table
+      v-loading="loading"
+      :data="rows"
+      :empty-text="t('users.empty')"
+      data-test="user-table"
+    >
+      <el-table-column :label="t('users.columns.user')" min-width="150">
         <template #default="{ row }">
           <div>{{ row.display_name || row.username }}</div>
           <div class="muted small">
@@ -258,7 +276,7 @@ onMounted(() => Promise.all([reloadTree(), load()]))
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="部门" min-width="220">
+      <el-table-column :label="t('users.columns.department')" min-width="220">
         <template #default="{ row }">
           <div v-if="!(row as User).departments.length" class="muted">-</div>
           <el-tooltip
@@ -270,42 +288,44 @@ onMounted(() => Promise.all([reloadTree(), load()]))
             <div class="dept-line">
               {{ d.name }}
               <el-tag v-if="d.is_primary && row.departments.length > 1" size="small" effect="plain">
-                主
+                {{ t('users.columns.primary') }}
               </el-tag>
             </div>
           </el-tooltip>
         </template>
       </el-table-column>
-      <el-table-column label="职务" min-width="110">
+      <el-table-column :label="t('users.columns.jobTitle')" min-width="110">
         <template #default="{ row }">{{ row.job_title || '-' }}</template>
       </el-table-column>
-      <el-table-column label="来源" width="100">
+      <el-table-column :label="t('users.columns.source')" width="100">
         <template #default="{ row }">
           <el-tag size="small" :type="row.source === 'local' ? 'info' : 'primary'" effect="plain">
-            {{ SOURCE_LABEL[(row as User).source] ?? row.source }}
+            {{ sourceLabel((row as User).source) }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="状态" width="90">
+      <el-table-column :label="t('common.status')" width="90">
         <template #default="{ row }">
           <el-tag :type="row.is_active ? 'success' : 'info'">
-            {{ row.is_active ? '启用' : '禁用' }}
+            {{ row.is_active ? t('common.enabled') : t('users.status.disabled') }}
           </el-tag>
         </template>
       </el-table-column>
       <el-table-column label="Keycloak" width="100">
         <template #default="{ row }">
           <el-tag :type="row.keycloak_bound ? 'primary' : 'warning'" effect="plain">
-            {{ row.keycloak_bound ? '已绑定' : '待登录' }}
+            {{ row.keycloak_bound ? t('users.keycloak.bound') : t('users.keycloak.pending') }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="最近登录" width="170">
+      <el-table-column :label="t('users.columns.lastLogin')" width="170">
         <template #default="{ row }">{{ formatDateTime(row.last_login_at) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="290" fixed="right">
+      <el-table-column :label="t('common.actions')" width="290" fixed="right">
         <template #default="{ row }">
-          <el-button link type="primary" @click="openEdit(row as User)">编辑</el-button>
+          <el-button link type="primary" @click="openEdit(row as User)">{{
+            t('common.edit')
+          }}</el-button>
           <el-button
             v-if="row.is_active"
             v-permission="'admin:user'"
@@ -313,7 +333,7 @@ onMounted(() => Promise.all([reloadTree(), load()]))
             type="primary"
             @click="enablePassword(row as User).catch(() => undefined)"
           >
-            密码登录
+            {{ t('users.actions.passwordLogin') }}
           </el-button>
           <el-button
             v-permission="'admin:role'"
@@ -321,14 +341,14 @@ onMounted(() => Promise.all([reloadTree(), load()]))
             type="primary"
             @click="openAssign(row as User, 'roles')"
           >
-            角色
+            {{ t('users.actions.roles') }}
           </el-button>
-          <el-button link type="primary" @click="openAssign(row as User, 'groups')"
-            >用户组</el-button
-          >
-          <el-button v-if="row.is_active" link type="danger" @click="disable(row as User)"
-            >禁用</el-button
-          >
+          <el-button link type="primary" @click="openAssign(row as User, 'groups')">{{
+            t('users.actions.groups')
+          }}</el-button>
+          <el-button v-if="row.is_active" link type="danger" @click="disable(row as User)">{{
+            t('users.actions.disable')
+          }}</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -346,7 +366,7 @@ onMounted(() => Promise.all([reloadTree(), load()]))
 
   <el-dialog
     v-model="editor.visible"
-    :title="editor.editingId ? '编辑用户' : '预置用户'"
+    :title="editor.editingId ? t('users.editor.editTitle') : t('users.editor.createTitle')"
     width="520px"
   >
     <el-alert
@@ -354,7 +374,7 @@ onMounted(() => Promise.all([reloadTree(), load()]))
       type="info"
       :closable="false"
       show-icon
-      title="用户首次通过 Keycloak 登录时，将按用户名自动绑定该预置账号"
+      :title="t('users.editor.precreateHint')"
       style="margin-bottom: 16px"
     />
     <el-alert
@@ -362,29 +382,29 @@ onMounted(() => Promise.all([reloadTree(), load()]))
       type="info"
       :closable="false"
       show-icon
-      :title="`该用户由「${SOURCE_LABEL[editor.source]}」同步，资料与部门只读，请在源系统中修改；角色和本地用户组仍可在此分配。`"
+      :title="t('users.editor.managedHint', { source: sourceLabel(editor.source) })"
       style="margin-bottom: 16px"
     />
     <el-form ref="formRef" :model="editor.form" :rules="rules" label-width="80px">
-      <el-form-item label="用户名" prop="username">
+      <el-form-item :label="t('users.editor.username')" prop="username">
         <el-input v-model="editor.form.username" :disabled="!!editor.editingId" />
       </el-form-item>
-      <el-form-item label="姓名">
+      <el-form-item :label="t('users.editor.displayName')">
         <el-input v-model="editor.form.display_name" :disabled="managed" />
       </el-form-item>
-      <el-form-item label="工号">
+      <el-form-item :label="t('users.editor.employeeNo')">
         <el-input v-model="editor.form.employee_no" :disabled="managed" />
       </el-form-item>
-      <el-form-item label="邮箱" prop="email">
+      <el-form-item :label="t('users.editor.email')" prop="email">
         <el-input v-model="editor.form.email" :disabled="managed" />
       </el-form-item>
-      <el-form-item label="手机">
+      <el-form-item :label="t('users.editor.mobile')">
         <el-input v-model="editor.form.mobile" :disabled="managed" />
       </el-form-item>
-      <el-form-item label="职务">
+      <el-form-item :label="t('users.editor.jobTitle')">
         <el-input v-model="editor.form.job_title" :disabled="managed" />
       </el-form-item>
-      <el-form-item label="主部门">
+      <el-form-item :label="t('users.editor.primaryDepartment')">
         <el-tree-select
           v-model="editor.form.department_id"
           :data="tree"
@@ -397,7 +417,7 @@ onMounted(() => Promise.all([reloadTree(), load()]))
           style="width: 100%"
         />
       </el-form-item>
-      <el-form-item label="兼职部门">
+      <el-form-item :label="t('users.editor.extraDepartments')">
         <el-tree-select
           v-model="editor.form.department_ids"
           :data="tree"
@@ -408,69 +428,76 @@ onMounted(() => Promise.all([reloadTree(), load()]))
           filterable
           clearable
           :disabled="managed"
-          placeholder="一人多部门时选择（权限按所有部门计算）"
+          :placeholder="t('users.editor.extraDepartmentsPlaceholder')"
           style="width: 100%"
         />
       </el-form-item>
-      <el-form-item v-if="editor.identities.length" label="已绑定">
+      <el-form-item v-if="editor.identities.length" :label="t('users.editor.identities')">
         <el-tag
           v-for="i in editor.identities"
           :key="i.provider"
           class="identity-tag"
           effect="plain"
         >
-          {{ SOURCE_LABEL[i.provider as User['source']] ?? i.provider }}：{{ i.external_id }}
+          {{ t('users.editor.identity', { provider: sourceLabel(i.provider), id: i.external_id }) }}
         </el-tag>
       </el-form-item>
-      <el-form-item v-if="editor.editingId" label="启用">
+      <el-form-item v-if="editor.editingId" :label="t('common.enabled')">
         <el-switch v-model="editor.form.is_active" />
       </el-form-item>
     </el-form>
     <template #footer>
-      <el-button @click="editor.visible = false">取消</el-button>
-      <el-button type="primary" @click="submitEditor">保存</el-button>
+      <el-button @click="editor.visible = false">{{ t('common.cancel') }}</el-button>
+      <el-button type="primary" @click="submitEditor">{{ t('common.save') }}</el-button>
     </template>
   </el-dialog>
 
   <el-dialog
     v-model="assign.visible"
-    :title="`${assign.kind === 'roles' ? '分配角色' : '分配用户组'}：${assign.user?.username ?? ''}`"
+    :title="
+      t(assign.kind === 'roles' ? 'users.assign.rolesTitle' : 'users.assign.groupsTitle', {
+        username: assign.user?.username ?? '',
+      })
+    "
     width="520px"
   >
     <el-alert
       type="info"
       :closable="false"
       show-icon
-      title="此处仅管理本地分配；来自 Keycloak 的角色/组在每次登录时同步"
+      :title="t('users.assign.hint')"
       style="margin-bottom: 16px"
     />
     <el-checkbox-group v-if="assign.kind === 'roles'" v-model="assign.selected">
       <el-checkbox v-for="r in allRoles" :key="r.id" :value="r.id">
-        {{ r.name }}（{{ r.code }}）
+        {{ t('users.assign.roleOption', { name: roleName(r), code: r.code }) }}
       </el-checkbox>
     </el-checkbox-group>
     <el-select v-else v-model="assign.selected" multiple filterable style="width: 100%">
       <el-option v-for="g in allGroups" :key="g.id" :label="g.name" :value="g.id" />
     </el-select>
     <template #footer>
-      <el-button @click="assign.visible = false">取消</el-button>
-      <el-button type="primary" @click="submitAssign">保存</el-button>
+      <el-button @click="assign.visible = false">{{ t('common.cancel') }}</el-button>
+      <el-button type="primary" @click="submitAssign">{{ t('common.save') }}</el-button>
     </template>
   </el-dialog>
 
-  <el-dialog v-model="password.visible" title="密码登录已开通" width="460px">
-    <p>
-      账号 <b>{{ password.username }}</b>
-      {{ password.created ? '已在 Keycloak 中创建' : '已重置密码' }}，临时密码（只显示这一次）：
-    </p>
+  <el-dialog v-model="password.visible" :title="t('users.password.title')" width="460px">
+    <i18n-t :keypath="password.created ? 'users.password.created' : 'users.password.reset'" tag="p">
+      <template #username>
+        <b>{{ password.username }}</b>
+      </template>
+    </i18n-t>
     <el-input :model-value="password.value" readonly data-test="temp-password">
       <template #append>
-        <el-button @click="copyPassword">复制</el-button>
+        <el-button @click="copyPassword">{{ t('common.copy') }}</el-button>
       </template>
     </el-input>
-    <p class="muted small">用户首次登录时必须修改密码。请通过安全渠道转交。</p>
+    <p class="muted small">{{ t('users.password.hint') }}</p>
     <template #footer>
-      <el-button type="primary" @click="password.visible = false">我已记下</el-button>
+      <el-button type="primary" @click="password.visible = false">{{
+        t('users.password.acknowledge')
+      }}</el-button>
     </template>
   </el-dialog>
 </template>

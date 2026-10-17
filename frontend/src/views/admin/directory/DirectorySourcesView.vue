@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onActivated, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Download, Plus } from '@element-plus/icons-vue'
 import {
@@ -18,12 +19,13 @@ import DirectorySourceEditor from './DirectorySourceEditor.vue'
 import {
   DEPT_STAT_KEYS,
   IDENTITY_STAT_KEYS,
-  SOURCE_LABEL,
-  STATUS_INFO,
   USER_STAT_KEYS,
+  sourceLabel,
   statLine,
+  statusInfo,
 } from './meta'
 
+const { t } = useI18n()
 const router = useRouter()
 const sources = ref<DirectorySource[]>([])
 const runs = ref<SyncRun[]>([])
@@ -83,16 +85,20 @@ async function sync(source: DirectorySource, mode: SyncMode): Promise<void> {
   if (mode === 'apply') {
     await ElMessageBox.confirm(
       source.is_primary
-        ? `将按「${source.name}」更新部门树、人员、部门归属与职务，上游已删除的部门会归档、离职人员会停用。建议先预览。确定直接应用吗？`
-        : `将按「${source.name}」为已有用户绑定身份（扫码登录用），不会修改部门和人员。确定应用吗？`,
-      '应用同步',
+        ? t('directory.sources.applyPrimaryConfirm', { name: source.name })
+        : t('directory.sources.applyIdentityConfirm', { name: source.name }),
+      t('directory.sources.applyTitle'),
       { type: 'warning' },
     )
   }
   busy.value = source.id
   try {
     const run = await startDirectorySync(source.id, mode)
-    ElMessage.success(mode === 'preview' ? '已开始预览，完成后可查看差异' : '已开始同步')
+    ElMessage.success(
+      mode === 'preview'
+        ? t('directory.sources.previewStarted')
+        : t('directory.sources.syncStarted'),
+    )
     runQuery.page = 1
     await loadRuns()
     if (mode === 'preview') watchRun(run.id)
@@ -139,29 +145,35 @@ async function onFile(event: Event): Promise<void> {
 
 async function toggle(source: DirectorySource): Promise<void> {
   await updateDirectorySource(source.id, { enabled: !source.enabled })
-  ElMessage.success(source.enabled ? '已停用' : '已启用')
+  ElMessage.success(
+    source.enabled ? t('directory.sources.disabledMsg') : t('directory.sources.enabledMsg'),
+  )
   await load()
 }
 
 async function makePrimary(source: DirectorySource): Promise<void> {
   await ElMessageBox.confirm(
-    `设为主数据源后，「${source.name}」将接管部门树和人员信息；原主数据源同步的部门和人员改为本地可编辑。`,
-    '设为主数据源',
+    t('directory.sources.primaryConfirm', { name: source.name }),
+    t('directory.sources.makePrimary'),
     { type: 'warning' },
   )
   await updateDirectorySource(source.id, { is_primary: true })
-  ElMessage.success('已设为主数据源')
+  ElMessage.success(t('directory.sources.primarySet'))
   await load()
 }
 
 async function remove(source: DirectorySource): Promise<void> {
   await ElMessageBox.confirm(
-    `删除「${source.name}」后不再同步；已同步的部门、人员和授权都会保留并改为本地可编辑。`,
-    '删除数据源',
-    { type: 'warning', confirmButtonText: '删除', confirmButtonClass: 'el-button--danger' },
+    t('directory.sources.deleteConfirm', { name: source.name }),
+    t('directory.sources.deleteTitle'),
+    {
+      type: 'warning',
+      confirmButtonText: t('common.delete'),
+      confirmButtonClass: 'el-button--danger',
+    },
   )
   await deleteDirectorySource(source.id)
-  ElMessage.success('已删除')
+  ElMessage.success(t('common.deleted'))
   await load()
 }
 
@@ -180,8 +192,14 @@ function onCommand(source: DirectorySource, command: string): void {
 function runSummary(run: SyncRun): string {
   const s = run.stats.stats
   if (!s) return run.error ?? '—'
-  if (s.identities) return `身份：${statLine(s.identities, IDENTITY_STAT_KEYS)}`
-  return `部门：${statLine(s.departments, DEPT_STAT_KEYS)}；人员：${statLine(s.users, USER_STAT_KEYS)}`
+  if (s.identities)
+    return t('directory.runs.summaryIdentities', {
+      stats: statLine(s.identities, IDENTITY_STAT_KEYS),
+    })
+  return t('directory.runs.summary', {
+    departments: statLine(s.departments, DEPT_STAT_KEYS),
+    users: statLine(s.users, USER_STAT_KEYS),
+  })
 }
 
 function openRun(run: SyncRun): void {
@@ -203,17 +221,15 @@ onBeforeUnmount(() => {
   <div class="page">
     <div class="page-header">
       <div>
-        <h2 class="page-header__title">组织同步</h2>
-        <p class="page-header__desc">
-          从企业微信、钉钉、泛微 OA 或 Excel
-          同步部门树、人员、多部门归属与职务。主数据源管理组织架构，
-          其他数据源只用于绑定身份（扫码登录）。同步不删除人员，只停用；上游删除的部门归档，原有授权保留。
-        </p>
+        <h2 class="page-header__title">{{ t('directory.sources.title') }}</h2>
+        <p class="page-header__desc">{{ t('directory.sources.desc') }}</p>
       </div>
       <div class="actions">
-        <el-button :icon="Download" @click="downloadExcelTemplate">Excel 模板</el-button>
+        <el-button :icon="Download" @click="downloadExcelTemplate">
+          {{ t('directory.sources.excelTemplate') }}
+        </el-button>
         <el-button type="primary" :icon="Plus" data-test="new-source" @click="openCreate">
-          新增数据源
+          {{ t('directory.sources.newSource') }}
         </el-button>
       </div>
     </div>
@@ -224,70 +240,77 @@ onBeforeUnmount(() => {
       show-icon
       :closable="false"
       class="block"
-      title="还没有主数据源：同步只会绑定身份，不会建立部门和人员。在数据源的「更多」中设为主数据源。"
+      :title="t('directory.sources.noPrimary')"
     />
 
     <el-card shadow="never" class="block">
-      <template #header>数据源</template>
+      <template #header>{{ t('directory.sources.card') }}</template>
       <el-table
         v-loading="loading"
         :data="sources"
-        empty-text="暂无数据源"
+        :empty-text="t('directory.sources.empty')"
         data-test="source-table"
       >
-        <el-table-column label="名称" min-width="200">
+        <el-table-column :label="t('common.name')" min-width="200">
           <template #default="{ row }">
             <div class="name">
               {{ row.name }}
-              <el-tag v-if="row.is_primary" size="small" type="success" effect="dark"
-                >主数据源</el-tag
-              >
-              <el-tag v-if="!row.enabled" size="small" type="info">已停用</el-tag>
+              <el-tag v-if="row.is_primary" size="small" type="success" effect="dark">{{
+                t('directory.sources.primaryTag')
+              }}</el-tag>
+              <el-tag v-if="!row.enabled" size="small" type="info">{{
+                t('directory.sources.disabledTag')
+              }}</el-tag>
             </div>
             <div class="muted small">
-              {{ SOURCE_LABEL[(row as DirectorySource).type] }}
+              {{ sourceLabel((row as DirectorySource).type) }}
               <template v-if="row.login_supported">
-                · 扫码登录{{ row.login_configured ? '已配置' : '未配置' }}
+                ·
+                {{
+                  row.login_configured
+                    ? t('directory.sources.loginConfigured')
+                    : t('directory.sources.loginNotConfigured')
+                }}
               </template>
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="自动同步" width="120">
+        <el-table-column :label="t('directory.sources.autoSync')" width="120">
           <template #default="{ row }">
             <span class="small">
               {{
                 row.type === 'excel'
-                  ? '上传导入'
+                  ? t('directory.sources.uploadImport')
                   : row.sync_interval_minutes
-                    ? `每 ${row.sync_interval_minutes} 分钟`
-                    : '仅手动'
+                    ? t('directory.sources.everyMinutes', { n: row.sync_interval_minutes })
+                    : t('directory.sources.manualOnly')
               }}
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="上次同步" width="190">
+        <el-table-column :label="t('directory.sources.lastSync')" width="190">
           <template #default="{ row }">
             <template v-if="row.last_sync_at">
               <el-tag
                 v-if="row.last_status"
                 size="small"
-                :type="STATUS_INFO[(row as DirectorySource).last_status!].type"
+                :type="statusInfo((row as DirectorySource).last_status!).type"
               >
-                {{ STATUS_INFO[(row as DirectorySource).last_status!].label }}
+                {{ statusInfo((row as DirectorySource).last_status!).label }}
               </el-tag>
               <div class="muted small">{{ formatDateTime(row.last_sync_at) }}</div>
             </template>
-            <span v-else class="muted small">从未同步</span>
+            <span v-else class="muted small">{{ t('directory.sources.neverSynced') }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="下次同步" width="160">
+        <el-table-column :label="t('directory.sources.nextSync')" width="160">
           <template #default="{ row }">
             <span class="small">{{
               row.next_sync_at ? formatDateTime(row.next_sync_at) : '—'
             }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="230" fixed="right">
+        <el-table-column :label="t('common.actions')" width="230" fixed="right">
           <template #default="{ row }">
             <template v-if="row.type === 'excel'">
               <el-button
@@ -297,7 +320,7 @@ onBeforeUnmount(() => {
                 data-test="upload-preview"
                 @click="pickFile(row as DirectorySource, 'preview')"
               >
-                上传并预览
+                {{ t('directory.sources.uploadPreview') }}
               </el-button>
             </template>
             <template v-else>
@@ -309,31 +332,33 @@ onBeforeUnmount(() => {
                 data-test="preview"
                 @click="sync(row as DirectorySource, 'preview')"
               >
-                预览差异
+                {{ t('directory.sources.preview') }}
               </el-button>
             </template>
             <el-dropdown
               trigger="click"
               @command="(cmd: string) => onCommand(row as DirectorySource, cmd)"
             >
-              <el-button link type="primary">更多</el-button>
+              <el-button link type="primary">{{ t('directory.sources.more') }}</el-button>
               <template #dropdown>
                 <el-dropdown-menu>
                   <el-dropdown-item v-if="row.type === 'excel'" command="upload_apply">
-                    上传并直接应用
+                    {{ t('directory.sources.uploadApply') }}
                   </el-dropdown-item>
                   <el-dropdown-item v-else command="apply" :disabled="!row.enabled">
-                    直接应用同步
+                    {{ t('directory.sources.applySync') }}
                   </el-dropdown-item>
-                  <el-dropdown-item command="edit">编辑配置</el-dropdown-item>
-                  <el-dropdown-item v-if="!row.is_primary" command="primary"
-                    >设为主数据源</el-dropdown-item
-                  >
+                  <el-dropdown-item command="edit">{{
+                    t('directory.sources.editConfig')
+                  }}</el-dropdown-item>
+                  <el-dropdown-item v-if="!row.is_primary" command="primary">{{
+                    t('directory.sources.makePrimary')
+                  }}</el-dropdown-item>
                   <el-dropdown-item command="toggle">{{
-                    row.enabled ? '停用' : '启用'
+                    row.enabled ? t('directory.sources.disable') : t('directory.sources.enable')
                   }}</el-dropdown-item>
                   <el-dropdown-item command="delete" divided>
-                    <span class="danger">删除</span>
+                    <span class="danger">{{ t('common.delete') }}</span>
                   </el-dropdown-item>
                 </el-dropdown-menu>
               </template>
@@ -344,49 +369,55 @@ onBeforeUnmount(() => {
     </el-card>
 
     <el-card shadow="never">
-      <template #header>同步历史</template>
+      <template #header>{{ t('directory.runs.history') }}</template>
       <el-table
         :data="runs"
-        empty-text="暂无同步记录"
+        :empty-text="t('directory.runs.empty')"
         class="run-table"
         data-test="run-table"
         @row-click="openRun"
       >
-        <el-table-column label="时间" width="170">
+        <el-table-column :label="t('directory.runs.time')" width="170">
           <template #default="{ row }">
             <span class="small">{{ formatDateTime(row.started_at) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="数据源" width="140">
+        <el-table-column :label="t('directory.runs.source')" width="140">
           <template #default="{ row }">
-            {{ sourceName.get(row.source_id)?.name ?? '（已删除）' }}
+            {{ sourceName.get(row.source_id)?.name ?? t('directory.runs.deletedSource') }}
           </template>
         </el-table-column>
-        <el-table-column label="类型" width="100">
+        <el-table-column :label="t('directory.runs.type')" width="100">
           <template #default="{ row }">
-            {{ row.mode === 'preview' ? '预览' : row.forced ? '强制应用' : '应用' }}
+            {{
+              row.mode === 'preview'
+                ? t('directory.runs.modePreview')
+                : row.forced
+                  ? t('directory.runs.modeForced')
+                  : t('directory.runs.modeApply')
+            }}
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="90">
+        <el-table-column :label="t('common.status')" width="90">
           <template #default="{ row }">
-            <el-tag size="small" :type="STATUS_INFO[(row as SyncRun).status].type">
-              {{ STATUS_INFO[(row as SyncRun).status].label }}
+            <el-tag size="small" :type="statusInfo((row as SyncRun).status).type">
+              {{ statusInfo((row as SyncRun).status).label }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="结果" min-width="280">
+        <el-table-column :label="t('directory.runs.result')" min-width="280">
           <template #default="{ row }">
             <span class="small">{{ runSummary(row as SyncRun) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="耗时" width="90" align="right">
+        <el-table-column :label="t('directory.runs.duration')" width="90" align="right">
           <template #default="{ row }">
             <span class="small">{{
               row.finished_at ? `${(row.duration_ms / 1000).toFixed(1)}s` : '…'
             }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="触发人" width="120" prop="triggered_by" />
+        <el-table-column :label="t('directory.runs.triggeredBy')" width="120" prop="triggered_by" />
       </el-table>
       <el-pagination
         v-model:current-page="runQuery.page"

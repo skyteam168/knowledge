@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, type Component } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import {
   ChatDotRound,
@@ -13,6 +14,7 @@ import {
   VideoPlay,
 } from '@element-plus/icons-vue'
 import { visibleManual, type ManualSection } from '@/guide/manual'
+import type { AppLocale } from '@/i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useGuideStore } from '@/stores/guide'
 
@@ -30,11 +32,12 @@ const ICONS: Record<string, Component> = {
 const START_RETRY_MS = 200
 const START_ATTEMPTS = 15
 
+const { t, locale } = useI18n()
 const router = useRouter()
 const auth = useAuthStore()
 const guide = useGuideStore()
 
-const manual = computed(() => visibleManual(auth.can))
+const manual = computed(() => visibleManual(auth.can, locale.value as AppLocale))
 const activeId = ref<string>('')
 
 function sectionDomId(id: string): string {
@@ -58,14 +61,14 @@ async function playTour(section: ManualSection): Promise<void> {
     if (guide.running || guide.start(key)) return
     await new Promise((resolve) => window.setTimeout(resolve, START_RETRY_MS))
   }
-  ElMessage.info('该页面暂无可播放的引导')
+  ElMessage.info(t('guide.view.noTour'))
 }
 </script>
 
 <template>
   <div class="guide-page">
     <aside class="guide-nav">
-      <div class="guide-nav__title">使用说明</div>
+      <div class="guide-nav__title">{{ t('guide.view.title') }}</div>
       <button
         v-for="s in manual.sections"
         :key="s.id"
@@ -86,7 +89,7 @@ async function playTour(section: ManualSection): Promise<void> {
         @click="jump('faq')"
       >
         <el-icon><Promotion /></el-icon>
-        <span>常见问题</span>
+        <span>{{ t('guide.view.faq') }}</span>
       </button>
     </aside>
 
@@ -108,10 +111,10 @@ async function playTour(section: ManualSection): Promise<void> {
           </div>
         </header>
 
-        <div v-for="t in s.topics" :key="t.title" class="guide-topic">
-          <h3 class="guide-topic__title">{{ t.title }}</h3>
+        <div v-for="topic in s.topics" :key="topic.title" class="guide-topic">
+          <h3 class="guide-topic__title">{{ topic.title }}</h3>
           <ol class="guide-steps">
-            <li v-for="(st, i) in t.steps" :key="st.title" class="guide-step">
+            <li v-for="(st, i) in topic.steps" :key="st.title" class="guide-step">
               <span class="guide-step__no">{{ i + 1 }}</span>
               <div>
                 <div class="guide-step__title">{{ st.title }}</div>
@@ -122,14 +125,16 @@ async function playTour(section: ManualSection): Promise<void> {
         </div>
 
         <div v-if="s.route || s.tourKey" class="guide-section__actions">
-          <el-button v-if="s.route" type="primary" plain @click="tryIt(s)">去试试</el-button>
+          <el-button v-if="s.route" type="primary" plain @click="tryIt(s)">
+            {{ t('guide.view.tryIt') }}
+          </el-button>
           <el-button
             v-if="s.tourKey"
             :icon="VideoPlay"
             :data-test="`guide-play-${s.id}`"
             @click="playTour(s)"
           >
-            播放该页引导
+            {{ t('guide.view.playTour') }}
           </el-button>
         </div>
       </section>
@@ -142,7 +147,7 @@ async function playTour(section: ManualSection): Promise<void> {
       >
         <header class="guide-section__head">
           <div>
-            <h2 class="guide-section__title">常见问题</h2>
+            <h2 class="guide-section__title">{{ t('guide.view.faq') }}</h2>
           </div>
         </header>
         <el-collapse>

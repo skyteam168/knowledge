@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { reactive, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { importEvalCases, listEvalCandidates } from '@/api/evaluation'
 import type { EvalCandidate, EvalImportSource } from '@/api/types'
@@ -8,6 +9,7 @@ import { formatDateTime } from '@/utils/format'
 const props = defineProps<{ datasetId: string }>()
 const visible = defineModel<boolean>({ required: true })
 const emit = defineEmits<{ imported: [] }>()
+const { t } = useI18n()
 
 const source = ref<EvalImportSource>('feedback')
 const keyword = ref('')
@@ -49,7 +51,12 @@ async function submit(): Promise<void> {
       selected.value.map((c) => c.source_id),
     )
     ElMessage.success(
-      `已导入 ${result.created} 条${result.skipped ? `，跳过 ${result.skipped} 条` : ''}`,
+      result.skipped
+        ? t('evaluation.importDialog.importedSkipped', {
+            created: result.created,
+            skipped: result.skipped,
+          })
+        : t('evaluation.importDialog.imported', { created: result.created }),
     )
     emit('imported')
     await load()
@@ -65,15 +72,17 @@ watch(source, search)
 </script>
 
 <template>
-  <el-dialog v-model="visible" title="从问答记录导入用例" width="960px">
+  <el-dialog v-model="visible" :title="t('evaluation.importDialog.title')" width="960px">
     <div class="toolbar">
       <el-radio-group v-model="source">
-        <el-radio-button value="feedback">点赞的问答</el-radio-button>
-        <el-radio-button value="gap">已解决的知识缺口</el-radio-button>
+        <el-radio-button value="feedback">{{
+          t('evaluation.importDialog.feedback')
+        }}</el-radio-button>
+        <el-radio-button value="gap">{{ t('evaluation.importDialog.gap') }}</el-radio-button>
       </el-radio-group>
       <el-input
         v-model="keyword"
-        placeholder="按问题搜索"
+        :placeholder="t('evaluation.shared.searchQuestion')"
         clearable
         style="width: 260px"
         @keyup.enter="search"
@@ -85,7 +94,7 @@ watch(source, search)
       :data="items"
       row-key="source_id"
       height="420"
-      empty-text="暂无可导入的记录"
+      :empty-text="t('evaluation.importDialog.empty')"
       @selection-change="(rows: EvalCandidate[]) => (selected = rows)"
     >
       <el-table-column
@@ -93,19 +102,30 @@ watch(source, search)
         width="44"
         :selectable="(row: EvalCandidate) => !row.imported"
       />
-      <el-table-column prop="question" label="问题" min-width="220" show-overflow-tooltip />
-      <el-table-column label="参考答案" min-width="260" show-overflow-tooltip>
+      <el-table-column
+        prop="question"
+        :label="t('evaluation.shared.question')"
+        min-width="220"
+        show-overflow-tooltip
+      />
+      <el-table-column
+        :label="t('evaluation.importDialog.referenceAnswer')"
+        min-width="260"
+        show-overflow-tooltip
+      >
         <template #default="{ row }">{{ row.reference_answer ?? '—' }}</template>
       </el-table-column>
-      <el-table-column label="期望文档" width="90">
+      <el-table-column :label="t('evaluation.shared.expectedDocs')" width="90">
         <template #default="{ row }">{{ row.expected_document_ids.length }}</template>
       </el-table-column>
-      <el-table-column label="时间" width="160">
+      <el-table-column :label="t('evaluation.importDialog.time')" width="160">
         <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
       </el-table-column>
-      <el-table-column label="状态" width="80">
+      <el-table-column :label="t('common.status')" width="80">
         <template #default="{ row }">
-          <el-tag v-if="row.imported" type="info" size="small">已导入</el-tag>
+          <el-tag v-if="row.imported" type="info" size="small">{{
+            t('evaluation.importDialog.importedTag')
+          }}</el-tag>
         </template>
       </el-table-column>
     </el-table>
@@ -118,9 +138,9 @@ watch(source, search)
       @current-change="load"
     />
     <template #footer>
-      <el-button @click="visible = false">关闭</el-button>
+      <el-button @click="visible = false">{{ t('common.close') }}</el-button>
       <el-button type="primary" :disabled="!selected.length" :loading="importing" @click="submit">
-        导入所选（{{ selected.length }}）
+        {{ t('evaluation.importDialog.importSelected', { n: selected.length }) }}
       </el-button>
     </template>
   </el-dialog>

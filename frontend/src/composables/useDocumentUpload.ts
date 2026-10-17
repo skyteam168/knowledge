@@ -2,6 +2,7 @@ import { computed, ref, type Ref } from 'vue'
 import { completeUpload, createUpload, putToStorage, uploadDirect } from '@/api/knowledge'
 import { toHttpError } from '@/api/http'
 import type { KbDocument } from '@/api/types'
+import { t } from '@/i18n'
 import { canHashInBrowser, isAcceptedFile, sha256Hex } from '@/utils/file'
 
 export type UploadState =
@@ -18,6 +19,11 @@ export interface UploadTask {
 
 const CONCURRENCY = 3
 let nextUid = 1
+
+function resultMessage(result: { duplicate: boolean; new_version?: boolean }): string {
+  if (result.duplicate) return t('knowledge.upload.duplicateExists')
+  return result.new_version ? t('knowledge.upload.newVersion') : ''
+}
 
 export function useDocumentUpload(kbId: Ref<string>, onFinished?: (task: UploadTask) => void) {
   const tasks = ref<UploadTask[]>([])
@@ -43,7 +49,7 @@ export function useDocumentUpload(kbId: Ref<string>, onFinished?: (task: UploadT
           state: result.duplicate ? 'duplicate' : 'done',
           percent: 100,
           document: result.document,
-          message: result.duplicate ? '内容重复，已存在' : result.new_version ? '已生成新版本' : '',
+          message: resultMessage(result),
         })
         return
       }
@@ -60,7 +66,9 @@ export function useDocumentUpload(kbId: Ref<string>, onFinished?: (task: UploadT
           state: 'duplicate',
           percent: 100,
           document: init.document,
-          message: `内容重复：${init.document?.title ?? '已存在'}`,
+          message: t('knowledge.upload.duplicateOf', {
+            title: init.document?.title ?? t('knowledge.upload.exists'),
+          }),
         })
         return
       }
@@ -72,7 +80,7 @@ export function useDocumentUpload(kbId: Ref<string>, onFinished?: (task: UploadT
         state: result.duplicate ? 'duplicate' : 'done',
         percent: 100,
         document: result.document,
-        message: result.duplicate ? '内容重复，已存在' : result.new_version ? '已生成新版本' : '',
+        message: resultMessage(result),
       })
     } catch (error) {
       update(uid, { state: 'error', message: toHttpError(error).message })
@@ -103,7 +111,7 @@ export function useDocumentUpload(kbId: Ref<string>, onFinished?: (task: UploadT
         file,
         state: accepted ? 'pending' : 'error',
         percent: 0,
-        message: accepted ? '' : '不支持的文件类型',
+        message: accepted ? '' : t('knowledge.upload.unsupported'),
         document: null,
       })
     }

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   draftFromGap,
@@ -29,6 +30,7 @@ import { renderMarkdown } from '@/utils/markdown'
 const props = defineProps<{ gapId: string }>()
 const router = useRouter()
 const auth = useAuthStore()
+const { t } = useI18n()
 
 const gap = ref<GapDetail | null>(null)
 const loading = ref(false)
@@ -60,7 +62,7 @@ async function saveTriage(): Promise<void> {
   saving.value = true
   try {
     await patchGap(gap.value.id, { assignee_id: assignee.value, kb_id: kbId.value })
-    ElMessage.success('已保存')
+    ElMessage.success(t('common.saved'))
     await load()
   } finally {
     saving.value = false
@@ -93,7 +95,7 @@ function openDraft(): void {
 async function submitDraft(): Promise<void> {
   if (!gap.value) return
   if (!draftForm.kb_id) {
-    ElMessage.warning('请选择知识条目所属的知识库')
+    ElMessage.warning(t('curation.gapWorkbench.selectKbForKo'))
     return
   }
   drafting.value = true
@@ -106,9 +108,9 @@ async function submitDraft(): Promise<void> {
     })
     draftDialog.value = false
     if (ko.ai_draft.method === 'fallback') {
-      ElMessage.warning('AI 生成失败，已创建空白草稿，请手工补充答案')
+      ElMessage.warning(t('curation.gapWorkbench.aiFallback'))
     } else {
-      ElMessage.success('已生成知识条目草稿')
+      ElMessage.success(t('curation.gapWorkbench.draftCreated'))
     }
     await router.push({ name: 'curation-ko', params: { koId: ko.id } })
   } finally {
@@ -129,14 +131,14 @@ function openLink(): void {
 
 async function submitLink(): Promise<void> {
   if (!gap.value || !linkForm.document_ids.length) {
-    ElMessage.warning('请选择至少一个文档')
+    ElMessage.warning(t('curation.gapWorkbench.selectDocuments'))
     return
   }
   linking.value = true
   try {
     await linkGapDocuments(gap.value.id, linkForm.document_ids, linkForm.note.trim())
     linkDialog.value = false
-    ElMessage.success('已关联文档，问题已记录为检索问题')
+    ElMessage.success(t('curation.gapWorkbench.linked'))
     await load()
   } finally {
     linking.value = false
@@ -160,25 +162,29 @@ async function submitDuplicate(): Promise<void> {
     duplicateForm.note.trim(),
   )
   duplicateDialog.value = false
-  ElMessage.success('已标记为重复')
+  ElMessage.success(t('curation.gapWorkbench.markedDuplicate'))
   await load()
 }
 
 async function reject(): Promise<void> {
   if (!gap.value) return
-  const { value } = await ElMessageBox.prompt('驳回原因（可选）', '驳回缺口', {
-    inputType: 'textarea',
-    inputValue: '',
-  })
+  const { value } = await ElMessageBox.prompt(
+    t('curation.gapWorkbench.rejectPrompt'),
+    t('curation.gapWorkbench.rejectTitle'),
+    {
+      inputType: 'textarea',
+      inputValue: '',
+    },
+  )
   await rejectGap(gap.value.id, value)
-  ElMessage.success('已驳回')
+  ElMessage.success(t('curation.field.rejected'))
   await load()
 }
 
 async function reopen(): Promise<void> {
   if (!gap.value) return
   await reopenGap(gap.value.id)
-  ElMessage.success('已重新打开')
+  ElMessage.success(t('curation.gapWorkbench.reopened'))
   await load()
 }
 
@@ -211,7 +217,9 @@ onMounted(async () => {
         <el-card shadow="never">
           <template #header>
             <div class="workbench__header">
-              <el-button text @click="router.push({ name: 'curation-gaps' })">← 返回</el-button>
+              <el-button text @click="router.push({ name: 'curation-gaps' })">
+                ← {{ t('common.back') }}
+              </el-button>
               <el-tag :type="metaOf(GAP_TYPE_META, gap.gap_type).type">
                 {{ metaOf(GAP_TYPE_META, gap.gap_type).label }}
               </el-tag>
@@ -222,21 +230,25 @@ onMounted(async () => {
           </template>
           <h2 class="workbench__question" data-test="gap-question">{{ question }}</h2>
           <p v-if="gap.rewritten_query && gap.rewritten_query !== gap.query" class="muted">
-            用户原问：{{ gap.query }}
+            {{ t('curation.gapWorkbench.originalQuery', { query: gap.query }) }}
           </p>
           <el-descriptions :column="3" size="small" border>
-            <el-descriptions-item label="出现次数">{{ gap.occurrences }}</el-descriptions-item>
-            <el-descriptions-item label="同类频次">
+            <el-descriptions-item :label="t('curation.gapWorkbench.occurrences')">
+              {{ gap.occurrences }}
+            </el-descriptions-item>
+            <el-descriptions-item :label="t('curation.gapWorkbench.clusterOccurrences')">
               {{ gap.cluster_occurrences ?? '-' }}
             </el-descriptions-item>
-            <el-descriptions-item label="最高相关分">
+            <el-descriptions-item :label="t('curation.gapWorkbench.topScore')">
               {{ gap.top_score == null ? '-' : gap.top_score.toFixed(3) }}
             </el-descriptions-item>
-            <el-descriptions-item label="知识库">{{ gap.kb_name ?? '-' }}</el-descriptions-item>
-            <el-descriptions-item label="首次出现">
+            <el-descriptions-item :label="t('curation.field.kb')">
+              {{ gap.kb_name ?? '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item :label="t('curation.gapWorkbench.firstSeen')">
               {{ formatDateTime(gap.created_at) }}
             </el-descriptions-item>
-            <el-descriptions-item label="最近出现">
+            <el-descriptions-item :label="t('curation.field.lastSeen')">
               {{ formatDateTime(gap.last_seen_at) }}
             </el-descriptions-item>
           </el-descriptions>
@@ -245,19 +257,22 @@ onMounted(async () => {
             type="info"
             :closable="false"
             class="workbench__desc"
-            :title="`用户描述：${gap.description}`"
+            :title="t('curation.gapWorkbench.userDescription', { text: gap.description })"
           />
           <el-alert
             v-if="gap.resolution && Object.keys(gap.resolution).length"
             type="success"
             :closable="false"
             class="workbench__desc"
-            :title="`处理结果：${pretty(gap.resolution)}`"
+            :title="t('curation.gapWorkbench.resolution', { text: pretty(gap.resolution) })"
           />
         </el-card>
 
-        <el-card shadow="never" header="原始对话">
-          <el-empty v-if="!gap.conversation.length" description="对话已删除或不可见" />
+        <el-card shadow="never" :header="t('curation.gapWorkbench.conversation')">
+          <el-empty
+            v-if="!gap.conversation.length"
+            :description="t('curation.gapWorkbench.conversationGone')"
+          />
           <div
             v-for="m in gap.conversation"
             :key="m.id"
@@ -265,29 +280,36 @@ onMounted(async () => {
             :class="[`msg--${m.role}`, { 'msg--gap': m.is_gap_message }]"
           >
             <div class="msg__meta">
-              {{ m.role === 'user' ? '用户' : 'AI 助手' }} · {{ formatDateTime(m.created_at) }}
+              {{
+                m.role === 'user'
+                  ? t('curation.gapWorkbench.roleUser')
+                  : t('curation.gapWorkbench.roleAssistant')
+              }}
+              · {{ formatDateTime(m.created_at) }}
               <el-tag v-if="m.grounding" size="small" type="info">{{ m.grounding }}</el-tag>
-              <el-tag v-if="m.is_gap_message" size="small" type="danger">产生缺口</el-tag>
+              <el-tag v-if="m.is_gap_message" size="small" type="danger">{{
+                t('curation.gapWorkbench.gapMessage')
+              }}</el-tag>
             </div>
             <el-alert
               v-if="m.redacted"
               type="warning"
               :closable="false"
-              title="该回答引用了你无权查看的内容，已隐藏"
+              :title="t('curation.gapWorkbench.redacted')"
             />
             <!-- eslint-disable-next-line vue/no-v-html -- markdown-it with html disabled -->
             <div v-else class="msg__content markdown" v-html="renderMarkdown(m.content)" />
           </div>
         </el-card>
 
-        <el-card shadow="never" header="检索与问答 Trace">
-          <el-empty v-if="!gap.qa_trace" description="无 trace 记录" />
+        <el-card shadow="never" :header="t('curation.gapWorkbench.trace')">
+          <el-empty v-if="!gap.qa_trace" :description="t('curation.gapWorkbench.noTrace')" />
           <template v-else>
             <el-descriptions :column="3" size="small" class="workbench__trace-head">
-              <el-descriptions-item label="状态">
+              <el-descriptions-item :label="t('common.status')">
                 {{ String(gap.qa_trace.status ?? '-') }}
               </el-descriptions-item>
-              <el-descriptions-item label="依据">
+              <el-descriptions-item :label="t('curation.gapWorkbench.grounding')">
                 {{ String(gap.qa_trace.grounding ?? '-') }}
               </el-descriptions-item>
               <el-descriptions-item label="Trace ID">{{ gap.trace_id }}</el-descriptions-item>
@@ -307,22 +329,24 @@ onMounted(async () => {
       </div>
 
       <div class="workbench__side">
-        <el-card shadow="never" header="分派">
+        <el-card shadow="never" :header="t('curation.gapWorkbench.assignment')">
           <el-form label-position="top" size="small">
-            <el-form-item label="负责人">
+            <el-form-item :label="t('curation.field.assignee')">
               <UserPicker v-model="assignee" :initial="gap.assignee" />
             </el-form-item>
-            <el-form-item label="所属知识库">
+            <el-form-item :label="t('curation.gapWorkbench.ownerKb')">
               <el-select v-model="kbId" clearable filterable style="width: 100%">
                 <el-option v-for="kb in kbOptions" :key="kb.id" :label="kb.name" :value="kb.id" />
               </el-select>
             </el-form-item>
-            <el-button type="primary" :loading="saving" @click="saveTriage">保存</el-button>
-            <el-button @click="assignToMe">分派给我</el-button>
+            <el-button type="primary" :loading="saving" @click="saveTriage">{{
+              t('common.save')
+            }}</el-button>
+            <el-button @click="assignToMe">{{ t('curation.gapWorkbench.assignToMe') }}</el-button>
           </el-form>
         </el-card>
 
-        <el-card shadow="never" header="处理">
+        <el-card shadow="never" :header="t('curation.gapWorkbench.handle')">
           <div class="workbench__actions">
             <el-button
               v-if="canDraft"
@@ -331,17 +355,29 @@ onMounted(async () => {
               data-test="draft-ko"
               @click="openDraft"
             >
-              AI 生成知识条目
+              {{ t('curation.gapWorkbench.draftKo') }}
             </el-button>
-            <el-button :disabled="!active" @click="openLink">关联已有文档（检索问题）</el-button>
-            <el-button :disabled="!active" @click="openDuplicate">标记为重复</el-button>
-            <el-button type="danger" plain :disabled="!active" @click="reject">驳回</el-button>
-            <el-button v-if="!active" @click="reopen">重新打开</el-button>
+            <el-button :disabled="!active" @click="openLink">{{
+              t('curation.gapWorkbench.linkDocuments')
+            }}</el-button>
+            <el-button :disabled="!active" @click="openDuplicate">{{
+              t('curation.gapWorkbench.markDuplicate')
+            }}</el-button>
+            <el-button type="danger" plain :disabled="!active" @click="reject">{{
+              t('curation.field.reject')
+            }}</el-button>
+            <el-button v-if="!active" @click="reopen">{{
+              t('curation.gapWorkbench.reopen')
+            }}</el-button>
           </div>
         </el-card>
 
-        <el-card shadow="never" header="关联知识条目">
-          <el-empty v-if="!gap.knowledge_objects.length" :image-size="60" description="暂无" />
+        <el-card shadow="never" :header="t('curation.gapWorkbench.linkedKos')">
+          <el-empty
+            v-if="!gap.knowledge_objects.length"
+            :image-size="60"
+            :description="t('curation.gapWorkbench.noLinkedKos')"
+          />
           <div v-for="ko in gap.knowledge_objects" :key="ko.id" class="workbench__ko">
             <el-link
               type="primary"
@@ -355,9 +391,14 @@ onMounted(async () => {
           </div>
         </el-card>
 
-        <el-card v-if="gap.cluster" shadow="never" header="同类问题">
+        <el-card v-if="gap.cluster" shadow="never" :header="t('curation.gapWorkbench.similar')">
           <p class="muted">
-            聚类共 {{ gap.cluster.gap_count }} 个问题，{{ gap.cluster.occurrences }} 次提问
+            {{
+              t('curation.gapWorkbench.clusterSummary', {
+                gaps: gap.cluster.gap_count,
+                occurrences: gap.cluster.occurrences,
+              })
+            }}
           </p>
           <div v-for="s in gap.similar" :key="s.id" class="workbench__similar">
             <el-link @click="router.push({ name: 'curation-gap', params: { gapId: s.id } })">
@@ -371,76 +412,92 @@ onMounted(async () => {
       </div>
     </template>
 
-    <el-dialog v-model="draftDialog" title="AI 生成知识条目草稿" width="640px">
+    <el-dialog
+      v-model="draftDialog"
+      :title="t('curation.gapWorkbench.draftDialogTitle')"
+      width="640px"
+    >
       <el-form label-width="96px">
-        <el-form-item label="问题">{{ question }}</el-form-item>
-        <el-form-item label="知识库" required>
+        <el-form-item :label="t('curation.gapWorkbench.question')">{{ question }}</el-form-item>
+        <el-form-item :label="t('curation.field.kb')" required>
           <el-select v-model="draftForm.kb_id" filterable style="width: 100%">
             <el-option v-for="kb in kbOptions" :key="kb.id" :label="kb.name" :value="kb.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="类型">
+        <el-form-item :label="t('curation.field.type')">
           <el-radio-group v-model="draftForm.ko_type">
             <el-radio-button v-for="(label, key) in KO_TYPE_LABEL" :key="key" :value="key">
               {{ label }}
             </el-radio-button>
           </el-radio-group>
         </el-form-item>
-        <el-form-item label="指定文档">
+        <el-form-item :label="t('curation.gapWorkbench.pickDocuments')">
           <DocumentPicker v-model="draftForm.document_ids" :kb-id="draftForm.kb_id" />
-          <div class="muted">不指定时，将在知识库中检索相关资料</div>
+          <div class="muted">{{ t('curation.gapWorkbench.pickDocumentsHint') }}</div>
         </el-form-item>
-        <el-form-item label="补充资料">
+        <el-form-item :label="t('curation.gapWorkbench.notes')">
           <el-input
             v-model="draftForm.notes"
             type="textarea"
             :rows="5"
             maxlength="8000"
             show-word-limit
-            placeholder="审核人提供的答案要点或资料原文，会作为生成依据"
+            :placeholder="t('curation.gapWorkbench.notesPlaceholder')"
           />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="draftDialog = false">取消</el-button>
-        <el-button type="primary" :loading="drafting" @click="submitDraft">生成草稿</el-button>
+        <el-button @click="draftDialog = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" :loading="drafting" @click="submitDraft">{{
+          t('curation.gapWorkbench.generateDraft')
+        }}</el-button>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="linkDialog" title="关联已有文档" width="560px">
+    <el-dialog
+      v-model="linkDialog"
+      :title="t('curation.gapWorkbench.linkDialogTitle')"
+      width="560px"
+    >
       <el-alert
         type="info"
         :closable="false"
-        title="答案已存在于文档中但未被检索到：记录为检索问题，用于后续调优。"
+        :title="t('curation.gapWorkbench.linkHint')"
         class="workbench__desc"
       />
       <el-form label-width="80px">
-        <el-form-item label="知识库">
+        <el-form-item :label="t('curation.field.kb')">
           <el-select v-model="linkForm.kb_id" filterable style="width: 100%">
             <el-option v-for="kb in kbOptions" :key="kb.id" :label="kb.name" :value="kb.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="文档" required>
+        <el-form-item :label="t('curation.field.document')" required>
           <DocumentPicker v-model="linkForm.document_ids" :kb-id="linkForm.kb_id" />
         </el-form-item>
-        <el-form-item label="备注">
+        <el-form-item :label="t('curation.field.note')">
           <el-input v-model="linkForm.note" type="textarea" :rows="3" maxlength="2000" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="linkDialog = false">取消</el-button>
-        <el-button type="primary" :loading="linking" @click="submitLink">确定</el-button>
+        <el-button @click="linkDialog = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" :loading="linking" @click="submitLink">{{
+          t('common.ok')
+        }}</el-button>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="duplicateDialog" title="标记为重复" width="520px">
+    <el-dialog
+      v-model="duplicateDialog"
+      :title="t('curation.gapWorkbench.markDuplicate')"
+      width="520px"
+    >
       <el-form label-width="96px">
-        <el-form-item label="重复于" required>
+        <el-form-item :label="t('curation.gapWorkbench.duplicateOf')" required>
           <el-select
             v-model="duplicateForm.duplicate_of_id"
             filterable
             allow-create
-            placeholder="选择同类问题或输入缺口 ID"
+            :placeholder="t('curation.gapWorkbench.duplicatePlaceholder')"
             style="width: 100%"
           >
             <el-option
@@ -451,13 +508,13 @@ onMounted(async () => {
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="备注">
+        <el-form-item :label="t('curation.field.note')">
           <el-input v-model="duplicateForm.note" type="textarea" :rows="3" maxlength="2000" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="duplicateDialog = false">取消</el-button>
-        <el-button type="primary" @click="submitDuplicate">确定</el-button>
+        <el-button @click="duplicateDialog = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="submitDuplicate">{{ t('common.ok') }}</el-button>
       </template>
     </el-dialog>
   </div>

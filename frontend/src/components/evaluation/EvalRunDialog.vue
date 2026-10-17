@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { createEvalRun, listEvalDatasets } from '@/api/evaluation'
 import { listRetrievalProfiles } from '@/api/search'
@@ -10,6 +11,7 @@ const BUILTIN = 'builtin'
 const props = defineProps<{ datasetId?: string }>()
 const visible = defineModel<boolean>({ required: true })
 const emit = defineEmits<{ created: [EvalRun] }>()
+const { t } = useI18n()
 
 const formRef = ref<FormInstance>()
 const form = reactive<EvalRunCreate>({
@@ -18,9 +20,11 @@ const form = reactive<EvalRunCreate>({
   name: '',
   judge_enabled: true,
 })
-const rules: FormRules = {
-  dataset_id: [{ required: true, message: '请选择评测集', trigger: 'change' }],
-}
+const rules = computed<FormRules>(() => ({
+  dataset_id: [
+    { required: true, message: t('evaluation.runDialog.datasetRequired'), trigger: 'change' },
+  ],
+}))
 const datasets = ref<EvalDataset[]>([])
 const profiles = ref<RetrievalProfile[]>([])
 const saving = ref(false)
@@ -50,7 +54,7 @@ async function submit(): Promise<void> {
   saving.value = true
   try {
     const run = await createEvalRun({ ...form, name: form.name?.trim() || null })
-    ElMessage.success('评测任务已提交')
+    ElMessage.success(t('evaluation.runDialog.submitted'))
     emit('created', run)
     visible.value = false
   } finally {
@@ -60,20 +64,20 @@ async function submit(): Promise<void> {
 </script>
 
 <template>
-  <el-dialog v-model="visible" title="运行评测" width="560px">
+  <el-dialog v-model="visible" :title="t('evaluation.shared.runEval')" width="560px">
     <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
-      <el-form-item label="评测集" prop="dataset_id">
+      <el-form-item :label="t('evaluation.shared.dataset')" prop="dataset_id">
         <el-select v-model="form.dataset_id" filterable style="width: 100%">
           <el-option
             v-for="ds in datasets"
             :key="ds.id"
-            :label="`${ds.name}（${ds.case_count} 条）`"
+            :label="t('evaluation.runDialog.datasetOption', { name: ds.name, n: ds.case_count })"
             :value="ds.id"
             :disabled="!ds.case_count"
           />
         </el-select>
       </el-form-item>
-      <el-form-item label="检索策略">
+      <el-form-item :label="t('evaluation.shared.profile')">
         <el-select v-model="form.profile_id" style="width: 100%">
           <el-option
             v-for="p in profiles"
@@ -82,26 +86,32 @@ async function submit(): Promise<void> {
             :value="profileValue(p)"
           >
             <span>{{ p.name }}</span>
-            <el-tag v-if="p.is_active" size="small" type="success" class="tag">使用中</el-tag>
-            <el-tag v-if="p.builtin" size="small" type="info" class="tag">内置</el-tag>
+            <el-tag v-if="p.is_active" size="small" type="success" class="tag">{{
+              t('evaluation.runDialog.active')
+            }}</el-tag>
+            <el-tag v-if="p.builtin" size="small" type="info" class="tag">{{
+              t('evaluation.runDialog.builtin')
+            }}</el-tag>
           </el-option>
         </el-select>
       </el-form-item>
-      <el-form-item label="任务名称">
+      <el-form-item :label="t('evaluation.runDialog.name')">
         <el-input
           v-model="form.name"
           maxlength="128"
-          placeholder="可选，如 “RRF 0.7/0.3 + top_k 8”"
+          :placeholder="t('evaluation.runDialog.namePlaceholder')"
         />
       </el-form-item>
-      <el-form-item label="LLM 评判">
+      <el-form-item :label="t('evaluation.shared.judge')">
         <el-switch v-model="form.judge_enabled" />
-        <span class="hint">生成答案并评估忠实度、相关性、引用正确率（较慢，消耗模型调用）</span>
+        <span class="hint">{{ t('evaluation.runDialog.judgeHint') }}</span>
       </el-form-item>
     </el-form>
     <template #footer>
-      <el-button @click="visible = false">取消</el-button>
-      <el-button type="primary" :loading="saving" @click="submit">开始评测</el-button>
+      <el-button @click="visible = false">{{ t('common.cancel') }}</el-button>
+      <el-button type="primary" :loading="saving" @click="submit">{{
+        t('evaluation.runDialog.start')
+      }}</el-button>
     </template>
   </el-dialog>
 </template>

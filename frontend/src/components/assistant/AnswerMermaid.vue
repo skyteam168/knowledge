@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useTheme } from '@/composables/useTheme'
 
 const props = defineProps<{
   source: string
 }>()
 
+const { t } = useI18n()
 const svgHtml = ref('')
 const error = ref('')
 const el = ref<HTMLDivElement | null>(null)
@@ -31,11 +33,15 @@ async function render(): Promise<void> {
     svgHtml.value = svg
   } catch (e) {
     if (id !== renderId) return
-    error.value = e instanceof Error ? e.message : '流程图渲染失败'
+    error.value = e instanceof Error ? e.message : t('assistant.mermaidFailed')
   }
 }
 
-watch(() => [props.source, isDark.value] as const, () => void render(), { immediate: true })
+watch(
+  () => [props.source, isDark.value] as const,
+  () => void render(),
+  { immediate: true },
+)
 
 onBeforeUnmount(() => {
   renderId += 1

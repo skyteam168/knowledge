@@ -1,25 +1,26 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ArrowDown, CircleCheckFilled, CircleCloseFilled, Loading } from '@element-plus/icons-vue'
 import type { ChatStep, ChatStepName } from '@/api/types'
 
 const props = defineProps<{ steps: ChatStep[]; streaming?: boolean }>()
+const { t } = useI18n()
 
-const LABELS: Record<ChatStepName, string> = {
-  rewrite: '理解问题',
-  retrieve: '检索知识库',
-  evidence: '筛选与校验证据',
-  generate: '生成回答',
+const STEPS: ChatStepName[] = ['rewrite', 'retrieve', 'evidence', 'generate']
+const INTENTS = ['knowledge_qa', 'chitchat', 'out_of_scope']
+const VERDICTS = ['confident', 'uncertain', 'refuse']
+
+function stepLabel(step: string): string {
+  return (STEPS as string[]).includes(step) ? t(`assistant.steps.${step}`) : step
 }
-const INTENTS: Record<string, string> = {
-  knowledge_qa: '知识问答',
-  chitchat: '闲聊',
-  out_of_scope: '超出知识范围',
+
+function intentLabel(intent: string): string | undefined {
+  return INTENTS.includes(intent) ? t(`assistant.intents.${intent}`) : undefined
 }
-const VERDICTS: Record<string, string> = {
-  confident: '依据充分',
-  uncertain: '依据有限',
-  refuse: '依据不足，不作答',
+
+function verdictLabel(verdict: string): string | undefined {
+  return VERDICTS.includes(verdict) ? t(`assistant.verdicts.${verdict}`) : undefined
 }
 
 const open = ref(!!props.streaming)
@@ -36,9 +37,12 @@ const failed = computed(() => props.steps.some((s) => s.status === 'failed'))
 const totalMs = computed(() => props.steps.reduce((sum, s) => sum + (s.ms ?? 0), 0))
 
 const title = computed(() => {
-  if (running.value) return `${LABELS[running.value.step] ?? running.value.step}…`
-  if (failed.value) return '处理中断'
-  return `已完成 ${props.steps.length} 个步骤 · 用时 ${seconds(totalMs.value)}`
+  if (running.value) return t('assistant.steps.running', { label: stepLabel(running.value.step) })
+  if (failed.value) return t('assistant.steps.interrupted')
+  return t('assistant.steps.completed', {
+    count: props.steps.length,
+    time: seconds(totalMs.value),
+  })
 })
 
 function seconds(ms: number): string {
@@ -58,32 +62,43 @@ function summary(step: ChatStep): string[] {
   if (step.status === 'running') return []
   switch (step.step) {
     case 'rewrite': {
-      const lines = [`意图：${INTENTS[str(d.intent)] ?? (str(d.intent) || '—')}`]
-      if (str(d.query)) lines.push(`检索语句：${str(d.query)}`)
+      const intent = intentLabel(str(d.intent)) ?? (str(d.intent) || '—')
+      const lines = [t('assistant.steps.intent', { intent })]
+      if (str(d.query)) lines.push(t('assistant.steps.query', { query: str(d.query) }))
       const subs = Array.isArray(d.sub_queries) ? (d.sub_queries as unknown[]).map(str) : []
-      if (subs.length) lines.push(`拆分子问题：${subs.join('；')}`)
+      if (subs.length) {
+        const queries = subs.join(t('assistant.steps.subQuerySep'))
+        lines.push(t('assistant.steps.subQueries', { queries }))
+      }
       return lines
     }
     case 'retrieve': {
       const hits = num(d.hits) ?? 0
       const docs = num(d.documents) ?? 0
-      const lines = [`${num(d.queries) ?? 1} 路查询，召回 ${hits} 个片段，来自 ${docs} 篇文档`]
+      const lines = [t('assistant.steps.retrieved', { queries: num(d.queries) ?? 1, hits, docs })]
       const top = num(d.top_score)
-      if (top !== null) lines.push(`最高相关度 ${top.toFixed(3)}`)
+      if (top !== null) lines.push(t('assistant.steps.topScore', { score: top.toFixed(3) }))
       return lines
     }
     case 'evidence': {
-      const lines = [`保留 ${num(d.kept) ?? 0} 条证据`]
+      const kept = num(d.kept) ?? 0
       const dropped = num(d.dropped) ?? 0
-      if (dropped) lines[0] += `，按权限剔除 ${dropped} 条`
-      if (str(d.verdict)) lines.push(`判定：${VERDICTS[str(d.verdict)] ?? str(d.verdict)}`)
+      const lines = [
+        dropped
+          ? t('assistant.steps.keptDropped', { kept, dropped })
+          : t('assistant.steps.kept', { kept }),
+      ]
+      if (str(d.verdict)) {
+        const verdict = verdictLabel(str(d.verdict)) ?? str(d.verdict)
+        lines.push(t('assistant.steps.verdict', { verdict }))
+      }
       return lines
     }
     case 'generate': {
       const lines: string[] = []
-      if (str(d.model)) lines.push(`模型：${str(d.model)}`)
+      if (str(d.model)) lines.push(t('assistant.steps.model', { model: str(d.model) }))
       const first = num(d.first_token_ms)
-      if (first !== null) lines.push(`首字耗时 ${seconds(first)}`)
+      if (first !== null) lines.push(t('assistant.steps.firstToken', { time: seconds(first) }))
       return lines
     }
     default:
@@ -106,9 +121,13 @@ function summary(step: ChatStep): string[] {
         <span class="step__dot" />
         <div class="step__body">
           <div class="step__line">
-            <span class="step__name">{{ LABELS[s.step] ?? s.step }}</span>
-            <span v-if="s.status === 'running'" class="step__status">进行中</span>
-            <span v-else-if="s.status === 'failed'" class="step__status failed">失败</span>
+            <span class="step__name">{{ stepLabel(s.step) }}</span>
+            <span v-if="s.status === 'running'" class="step__status">{{
+              t('assistant.steps.inProgress')
+            }}</span>
+            <span v-else-if="s.status === 'failed'" class="step__status failed">{{
+              t('assistant.steps.failed')
+            }}</span>
             <span v-else-if="s.ms !== undefined" class="step__ms">{{ seconds(s.ms) }}</span>
           </div>
           <div v-for="line in summary(s)" :key="line" class="step__detail">{{ line }}</div>

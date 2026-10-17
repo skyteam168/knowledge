@@ -1,17 +1,17 @@
 <script setup lang="ts">
-import { reactive, watch } from 'vue'
+import { computed, reactive, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { FeedbackReason, MessageFeedback } from '@/api/types'
 
 const visible = defineModel<boolean>({ required: true })
 const props = defineProps<{ initial: MessageFeedback | null; submitting?: boolean }>()
 const emit = defineEmits<{ submit: [value: { reasons: FeedbackReason[]; comment: string }] }>()
+const { t } = useI18n()
 
-const REASONS: { value: FeedbackReason; label: string }[] = [
-  { value: 'inaccurate', label: '不准确' },
-  { value: 'incomplete', label: '不完整' },
-  { value: 'outdated', label: '过时' },
-  { value: 'not_found', label: '未找到' },
-]
+const REASON_VALUES: FeedbackReason[] = ['inaccurate', 'incomplete', 'outdated', 'not_found']
+const REASONS = computed(() =>
+  REASON_VALUES.map((value) => ({ value, label: t(`assistant.feedback.${value}`) })),
+)
 
 const form = reactive({ reasons: [] as FeedbackReason[], comment: '' })
 
@@ -24,34 +24,34 @@ watch(visible, (open) => {
 </script>
 
 <template>
-  <el-dialog v-model="visible" title="反馈问题" width="460px">
+  <el-dialog v-model="visible" :title="t('assistant.feedback.title')" width="460px">
     <el-form label-position="top">
-      <el-form-item label="问题类型">
+      <el-form-item :label="t('assistant.feedback.reasons')">
         <el-checkbox-group v-model="form.reasons">
           <el-checkbox v-for="r in REASONS" :key="r.value" :value="r.value">{{
             r.label
           }}</el-checkbox>
         </el-checkbox-group>
       </el-form-item>
-      <el-form-item label="补充说明（可选）">
+      <el-form-item :label="t('assistant.feedback.comment')">
         <el-input
           v-model="form.comment"
           type="textarea"
           :rows="3"
           maxlength="2000"
           show-word-limit
-          placeholder="例如：正确的规定是什么、哪里有误"
+          :placeholder="t('assistant.feedback.commentPlaceholder')"
         />
       </el-form-item>
     </el-form>
     <template #footer>
-      <el-button @click="visible = false">取消</el-button>
+      <el-button @click="visible = false">{{ t('common.cancel') }}</el-button>
       <el-button
         type="primary"
         :loading="submitting"
         @click="emit('submit', { reasons: [...form.reasons], comment: form.comment.trim() })"
       >
-        提交
+        {{ t('common.submit') }}
       </el-button>
     </template>
   </el-dialog>

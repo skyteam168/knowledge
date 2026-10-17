@@ -1,0 +1,78 @@
+import type { LocaleModule } from '../index'
+
+/**
+ * Built-in names the backend seeds in Chinese (permission catalog, system roles).
+ * Keys are permission codes with `:` → `_` and `*` → `all`.
+ */
+export default {
+  'zh-CN': {
+    permission: {
+      kb_create: '创建知识库',
+      kb_read: '查看知识库',
+      kb_update: '编辑知识库',
+      kb_delete: '删除知识库',
+      doc_upload: '上传文档',
+      doc_delete: '删除文档',
+      review_approve: '审核通过',
+      gap_review: '处理知识缺口',
+      ko_edit: '编辑知识条目',
+      chat_use: '使用 AI 助手',
+      search_use: '使用搜索',
+      analytics_view: '查看分析',
+      analytics_usage: '查看模型用量（含每人 token 消耗）',
+      admin_org: '管理组织信息',
+      admin_dept: '管理部门',
+      admin_user: '管理用户',
+      admin_group: '管理用户组',
+      admin_role: '管理角色与授权',
+      admin_audit: '查看审计日志',
+      admin_index: '管理索引同步',
+      admin_retrieval: '管理检索策略与检索调试',
+      admin_openapi: '管理开放平台（外部 Agent 接入）',
+      admin_directory: '管理组织架构同步与扫码登录',
+      admin_model: '管理模型（提供方、模型检测、对话模型切换）',
+      admin_all: '全部管理权限',
+      all: '超级权限',
+    },
+    role: {
+      kb_admin: '知识库管理员',
+      kb_editor: '知识库编辑者',
+      kb_viewer: '知识库只读用户',
+    },
+  },
+  en: {
+    permission: {
+      kb_create: 'Create knowledge bases',
+      kb_read: 'View knowledge bases',
+      kb_update: 'Edit knowledge bases',
+      kb_delete: 'Delete knowledge bases',
+      doc_upload: 'Upload documents',
+      doc_delete: 'Delete documents',
+      review_approve: 'Approve reviews',
+      gap_review: 'Handle knowledge gaps',
+      ko_edit: 'Edit knowledge objects',
+      chat_use: 'Use AI Assistant',
+      search_use: 'Use search',
+      analytics_view: 'View analytics',
+      analytics_usage: 'View model usage (incl. per-user token usage)',
+      admin_org: 'Manage organization info',
+      admin_dept: 'Manage departments',
+      admin_user: 'Manage users',
+      admin_group: 'Manage user groups',
+      admin_role: 'Manage roles and grants',
+      admin_audit: 'View audit logs',
+      admin_index: 'Manage index sync',
+      admin_retrieval: 'Manage retrieval strategy and debugging',
+      admin_openapi: 'Manage open platform (external agents)',
+      admin_directory: 'Manage directory sync and QR sign-in',
+      admin_model: 'Manage models (providers, checks, chat model switch)',
+      admin_all: 'All admin permissions',
+      all: 'Superuser',
+    },
+    role: {
+      kb_admin: 'Knowledge base admin',
+      kb_editor: 'Knowledge base editor',
+      kb_viewer: 'Knowledge base viewer',
+    },
+  },
+} satisfies LocaleModule

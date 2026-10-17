@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { listDocuments } from '@/api/knowledge'
 import type { KbDocument } from '@/api/types'
 
 const props = withDefaults(
   defineProps<{ kbId: string | null; multiple?: boolean; placeholder?: string }>(),
-  { multiple: true, placeholder: '搜索文档标题' },
+  { multiple: true, placeholder: '' },
 )
+const { t } = useI18n()
 const model = defineModel<string[]>({ required: true })
 
 const options = ref<KbDocument[]>([])
@@ -61,7 +63,11 @@ watch(
     :remote-method="search"
     :loading="loading"
     :disabled="!kbId"
-    :placeholder="kbId ? placeholder : '请先选择知识库'"
+    :placeholder="
+      kbId
+        ? placeholder || t('curation.documentPicker.placeholder')
+        : t('curation.documentPicker.selectKbFirst')
+    "
     style="width: 100%"
   >
     <el-option v-for="doc in options" :key="doc.id" :label="doc.title" :value="doc.id">

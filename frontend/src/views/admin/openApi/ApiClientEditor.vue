@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { createApiClient, getOpenApiOptions, updateApiClient } from '@/api/openApi'
 import type {
@@ -10,11 +11,12 @@ import type {
   ApiScope,
   OpenApiOptions,
 } from '@/api/types'
-import { SCOPE_INFO } from './meta'
+import { SCOPES, scopeDesc, scopeLabel } from './meta'
 
 const props = defineProps<{ client?: ApiClient | null }>()
 const visible = defineModel<boolean>({ required: true })
 const emit = defineEmits<{ saved: [client: ApiClient] }>()
+const { t } = useI18n()
 
 const options = ref<OpenApiOptions | null>(null)
 const saving = ref(false)
@@ -41,14 +43,14 @@ const editing = computed(() => !!props.client)
 const principalsValid = (_: unknown, __: unknown, cb: (e?: Error) => void) =>
   form.dept.length + form.group.length + form.role.length
     ? cb()
-    : cb(new Error('至少绑定一个部门、用户组或角色'))
+    : cb(new Error(t('openApi.editor.rules.principals')))
 
-const rules: FormRules = {
-  name: [{ required: true, message: '请输入应用名称', trigger: 'blur' }],
-  kb_ids: [{ type: 'array', required: true, min: 1, message: '至少授权一个知识库' }],
+const rules = computed<FormRules>(() => ({
+  name: [{ required: true, message: t('openApi.editor.rules.name'), trigger: 'blur' }],
+  kb_ids: [{ type: 'array', required: true, min: 1, message: t('openApi.editor.rules.kbs') }],
   principals: [{ validator: principalsValid }],
-  scopes: [{ type: 'array', required: true, min: 1, message: '至少开通一项能力' }],
-}
+  scopes: [{ type: 'array', required: true, min: 1, message: t('openApi.editor.rules.scopes') }],
+}))
 
 function reset(): void {
   const c = props.client
@@ -112,7 +114,7 @@ async function submit(): Promise<void> {
           clear_expires_at: !form.expires_at && !!props.client.expires_at,
         })
       : await createApiClient(body)
-    ElMessage.success(editing.value ? '已保存' : '已创建，请在详情页签发密钥')
+    ElMessage.success(editing.value ? t('common.saved') : t('openApi.editor.created'))
     visible.value = false
     emit('saved', saved)
   } finally {
@@ -124,7 +126,7 @@ async function submit(): Promise<void> {
 <template>
   <el-drawer
     v-model="visible"
-    :title="editing ? '编辑接入应用' : '新建接入应用'"
+    :title="editing ? t('openApi.editor.titleEdit') : t('openApi.editor.titleCreate')"
     size="600px"
     destroy-on-close
   >
@@ -136,13 +138,22 @@ async function submit(): Promise<void> {
       label-position="top"
       class="editor"
     >
-      <div class="editor__section">基本信息</div>
-      <el-form-item label="应用名称" prop="name">
-        <el-input v-model="form.name" maxlength="128" placeholder="如：财务部报销助手 Agent" />
+      <div class="editor__section">{{ t('openApi.editor.basicInfo') }}</div>
+      <el-form-item :label="t('openApi.editor.name')" prop="name">
+        <el-input
+          v-model="form.name"
+          maxlength="128"
+          :placeholder="t('openApi.editor.namePlaceholder')"
+        />
       </el-form-item>
       <div class="editor__row">
-        <el-form-item label="所属部门">
-          <el-select v-model="form.owner_department_id" clearable filterable placeholder="可选">
+        <el-form-item :label="t('openApi.editor.ownerDepartment')">
+          <el-select
+            v-model="form.owner_department_id"
+            clearable
+            filterable
+            :placeholder="t('openApi.editor.optional')"
+          >
             <el-option
               v-for="d in options?.departments ?? []"
               :key="d.id"
@@ -151,30 +162,34 @@ async function submit(): Promise<void> {
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="负责人 / 联系方式">
-          <el-input v-model="form.contact" maxlength="255" placeholder="可选" />
+        <el-form-item :label="t('openApi.editor.contact')">
+          <el-input
+            v-model="form.contact"
+            maxlength="255"
+            :placeholder="t('openApi.editor.optional')"
+          />
         </el-form-item>
       </div>
-      <el-form-item label="用途说明">
+      <el-form-item :label="t('openApi.editor.description')">
         <el-input
           v-model="form.description"
           type="textarea"
           :rows="2"
           maxlength="2000"
-          placeholder="申请用途、调用场景，便于后续审计"
+          :placeholder="t('openApi.editor.descriptionPlaceholder')"
         />
       </el-form-item>
 
       <div class="editor__section">
-        授权范围
-        <span class="editor__hint">实际可见 = 授权知识库 ∩ 绑定身份在 ACL 中可读的内容</span>
+        {{ t('openApi.editor.scopeSection') }}
+        <span class="editor__hint">{{ t('openApi.editor.scopeHint') }}</span>
       </div>
-      <el-form-item label="授权知识库（上限）" prop="kb_ids">
+      <el-form-item :label="t('openApi.fields.kbsLimit')" prop="kb_ids">
         <el-select
           v-model="form.kb_ids"
           multiple
           filterable
-          placeholder="选择可被该应用检索的知识库"
+          :placeholder="t('openApi.editor.kbsPlaceholder')"
           data-test="kb-select"
         >
           <el-option
@@ -185,9 +200,14 @@ async function submit(): Promise<void> {
           />
         </el-select>
       </el-form-item>
-      <el-form-item label="代理身份（按部门 / 用户组 / 角色的文档权限过滤）" prop="principals">
+      <el-form-item :label="t('openApi.editor.principals')" prop="principals">
         <div class="editor__principals">
-          <el-select v-model="form.dept" multiple filterable placeholder="部门（含上级继承）">
+          <el-select
+            v-model="form.dept"
+            multiple
+            filterable
+            :placeholder="t('openApi.editor.deptPlaceholder')"
+          >
             <el-option
               v-for="d in options?.departments ?? []"
               :key="d.id"
@@ -195,7 +215,12 @@ async function submit(): Promise<void> {
               :value="d.id"
             />
           </el-select>
-          <el-select v-model="form.group" multiple filterable placeholder="用户组">
+          <el-select
+            v-model="form.group"
+            multiple
+            filterable
+            :placeholder="t('openApi.editor.groupPlaceholder')"
+          >
             <el-option
               v-for="g in options?.groups ?? []"
               :key="g.id"
@@ -203,7 +228,12 @@ async function submit(): Promise<void> {
               :value="g.id"
             />
           </el-select>
-          <el-select v-model="form.role" multiple filterable placeholder="角色（仅用于文档 ACL）">
+          <el-select
+            v-model="form.role"
+            multiple
+            filterable
+            :placeholder="t('openApi.editor.rolePlaceholder')"
+          >
             <el-option
               v-for="r in options?.roles ?? []"
               :key="r.id"
@@ -213,56 +243,56 @@ async function submit(): Promise<void> {
           </el-select>
         </div>
       </el-form-item>
-      <el-form-item label="开通能力" prop="scopes">
+      <el-form-item :label="t('openApi.fields.scopes')" prop="scopes">
         <el-checkbox-group v-model="form.scopes" class="editor__scopes">
           <el-checkbox
-            v-for="(info, scope) in SCOPE_INFO"
+            v-for="scope in SCOPES"
             :key="scope"
             :value="scope"
             border
             class="editor__scope"
           >
-            <span class="editor__scope-label">{{ info.label }}</span>
-            <span class="editor__scope-desc">{{ info.desc }}</span>
+            <span class="editor__scope-label">{{ scopeLabel(scope) }}</span>
+            <span class="editor__scope-desc">{{ scopeDesc(scope) }}</span>
           </el-checkbox>
         </el-checkbox-group>
       </el-form-item>
 
-      <div class="editor__section">安全与配额</div>
+      <div class="editor__section">{{ t('openApi.fields.security') }}</div>
       <div class="editor__row">
-        <el-form-item label="每分钟请求上限">
+        <el-form-item :label="t('openApi.editor.ratePerMinute')">
           <el-input-number v-model="form.rate_limit_per_minute" :min="0" :max="6000" />
           <div class="editor__tip">
-            0 = 使用默认值（{{ options?.default_rate_per_minute ?? '—' }} 次/分钟）
+            {{ t('openApi.editor.rateDefaultTip', { n: options?.default_rate_per_minute ?? '—' }) }}
           </div>
         </el-form-item>
-        <el-form-item label="每日调用配额">
+        <el-form-item :label="t('openApi.editor.dailyQuota')">
           <el-input-number v-model="form.daily_quota" :min="0" :max="10000000" :step="100" />
-          <div class="editor__tip">0 = 不限</div>
+          <div class="editor__tip">{{ t('openApi.editor.unlimitedTip') }}</div>
         </el-form-item>
       </div>
-      <el-form-item label="IP 白名单">
+      <el-form-item :label="t('openApi.editor.ipAllowlist')">
         <el-input
           v-model="form.ip_text"
           type="textarea"
           :rows="2"
-          placeholder="每行一个 IP 或 CIDR，如 10.20.0.0/16；留空表示不限制"
+          :placeholder="t('openApi.editor.ipPlaceholder')"
         />
       </el-form-item>
-      <el-form-item label="应用有效期">
+      <el-form-item :label="t('openApi.editor.expiresAt')">
         <el-date-picker
           v-model="form.expires_at"
           type="datetime"
           value-format="YYYY-MM-DDTHH:mm:ssZ"
-          placeholder="留空表示长期有效"
+          :placeholder="t('openApi.editor.neverExpiresPlaceholder')"
           clearable
         />
       </el-form-item>
     </el-form>
     <template #footer>
-      <el-button @click="visible = false">取消</el-button>
+      <el-button @click="visible = false">{{ t('common.cancel') }}</el-button>
       <el-button type="primary" :loading="saving" data-test="save-client" @click="submit">
-        {{ editing ? '保存' : '创建应用' }}
+        {{ editing ? t('common.save') : t('openApi.editor.createSubmit') }}
       </el-button>
     </template>
   </el-drawer>

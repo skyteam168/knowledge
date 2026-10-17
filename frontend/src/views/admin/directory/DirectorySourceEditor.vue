@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { createDirectorySource, testDirectorySource, updateDirectorySource } from '@/api/directory'
 import type { DirectorySource, DirectorySourceType, DirectoryTestResult } from '@/api/types'
-import { CONFIG_FIELDS, SOURCE_TYPES, type ConfigField } from './meta'
+import { WECOM_EMPLOYEE_NO_ATTR, configFields, sourceTypes, type ConfigField } from './meta'
 
+const { t } = useI18n()
 const visible = defineModel<boolean>({ required: true })
 const props = defineProps<{ source: DirectorySource | null; usedTypes: DirectorySourceType[] }>()
 const emit = defineEmits<{ saved: [DirectorySource] }>()
@@ -22,7 +24,7 @@ const testing = ref(false)
 const testResult = ref<DirectoryTestResult | null>(null)
 
 const editing = computed(() => props.source !== null)
-const fields = computed(() => CONFIG_FIELDS[form.type])
+const fields = computed(() => configFields(form.type))
 const groups = computed(() => {
   const result: { title: string | null; fields: ConfigField[] }[] = []
   for (const field of fields.value) {
@@ -33,9 +35,11 @@ const groups = computed(() => {
   }
   return result
 })
+const types = computed(() => sourceTypes())
 const availableTypes = computed(() =>
-  SOURCE_TYPES.filter((t) => editing.value || !props.usedTypes.includes(t.value)),
+  types.value.filter((item) => editing.value || !props.usedTypes.includes(item.value)),
 )
+const typeDesc = computed(() => types.value.find((item) => item.value === form.type)?.desc)
 
 watch(visible, (open) => {
   if (!open) return
@@ -54,7 +58,7 @@ watch(visible, (open) => {
     const first = availableTypes.value[0]?.value ?? 'wecom'
     Object.assign(form, {
       type: first,
-      name: SOURCE_TYPES.find((t) => t.value === first)?.label ?? '',
+      name: types.value.find((item) => item.value === first)?.label ?? '',
       is_primary: false,
       enabled: true,
       sync_interval_minutes: 0,
@@ -65,13 +69,13 @@ watch(visible, (open) => {
 
 function defaults(type: DirectorySourceType): Record<string, unknown> {
   if (type === 'weaver') return { db_type: 'sqlserver', include_subcompanies: true }
-  if (type === 'wecom') return { employee_no_attr: '工号' }
+  if (type === 'wecom') return { employee_no_attr: WECOM_EMPLOYEE_NO_ATTR }
   return {}
 }
 
 function changeType(type: DirectorySourceType): void {
   form.config = defaults(type)
-  form.name = SOURCE_TYPES.find((t) => t.value === type)?.label ?? form.name
+  form.name = types.value.find((item) => item.value === type)?.label ?? form.name
   testResult.value = null
 }
 
@@ -93,7 +97,7 @@ function validate(): boolean {
     if (!field.required) continue
     const value = form.config[field.key]
     if ((value === undefined || value === '') && !secretSet(field)) {
-      ElMessage.warning(`请填写「${field.label}」`)
+      ElMessage.warning(t('directory.editor.fieldRequired', { field: field.label }))
       return false
     }
   }
@@ -117,7 +121,7 @@ async function test(): Promise<void> {
 
 async function save(): Promise<void> {
   if (!form.name.trim()) {
-    ElMessage.warning('请填写名称')
+    ElMessage.warning(t('directory.editor.nameRequired'))
     return
   }
   if (!validate()) return
@@ -133,7 +137,7 @@ async function save(): Promise<void> {
     const saved = props.source
       ? await updateDirectorySource(props.source.id, body)
       : await createDirectorySource({ type: form.type, ...body })
-    ElMessage.success('已保存')
+    ElMessage.success(t('common.saved'))
     visible.value = false
     emit('saved', saved)
   } finally {
@@ -145,39 +149,36 @@ async function save(): Promise<void> {
 <template>
   <el-dialog
     v-model="visible"
-    :title="editing ? '编辑数据源' : '新增数据源'"
+    :title="editing ? t('directory.editor.editTitle') : t('directory.sources.newSource')"
     width="640px"
     destroy-on-close
     data-test="source-editor"
   >
     <el-form label-width="150px" @submit.prevent>
-      <el-form-item label="类型">
+      <el-form-item :label="t('directory.editor.type')">
         <el-radio-group
           v-model="form.type"
           :disabled="editing"
           class="type-group"
           @change="(v) => changeType(v as DirectorySourceType)"
         >
-          <el-radio v-for="t in availableTypes" :key="t.value" :value="t.value" border>
-            {{ t.label }}
+          <el-radio v-for="item in availableTypes" :key="item.value" :value="item.value" border>
+            {{ item.label }}
           </el-radio>
         </el-radio-group>
-        <div class="help">{{ SOURCE_TYPES.find((t) => t.value === form.type)?.desc }}</div>
+        <div class="help">{{ typeDesc }}</div>
       </el-form-item>
-      <el-form-item label="名称" required>
+      <el-form-item :label="t('common.name')" required>
         <el-input v-model="form.name" maxlength="128" />
       </el-form-item>
-      <el-form-item label="主数据源">
+      <el-form-item :label="t('directory.editor.primary')">
         <el-switch v-model="form.is_primary" />
-        <div class="help">
-          主数据源管理部门树、人员、部门归属与职务（这些字段在后台变为只读）；
-          非主数据源只用于绑定身份（扫码登录）。每个组织只能有一个主数据源。
-        </div>
+        <div class="help">{{ t('directory.editor.primaryHelp') }}</div>
       </el-form-item>
-      <el-form-item label="启用">
+      <el-form-item :label="t('common.enabled')">
         <el-switch v-model="form.enabled" />
       </el-form-item>
-      <el-form-item v-if="form.type !== 'excel'" label="自动同步间隔">
+      <el-form-item v-if="form.type !== 'excel'" :label="t('directory.editor.interval')">
         <el-input-number
           v-model="form.sync_interval_minutes"
           :min="0"
@@ -185,8 +186,8 @@ async function save(): Promise<void> {
           :step="60"
           controls-position="right"
         />
-        <span class="unit">分钟</span>
-        <div class="help">0 表示只手动同步；自动同步最少 10 分钟，建议 60 或 1440。</div>
+        <span class="unit">{{ t('directory.editor.minutes') }}</span>
+        <div class="help">{{ t('directory.editor.intervalHelp') }}</div>
       </el-form-item>
 
       <template v-for="group in groups" :key="group.title ?? 'main'">
@@ -235,7 +236,7 @@ async function save(): Promise<void> {
             v-model="form.config[field.key] as string"
             :type="field.type === 'password' ? 'password' : 'text'"
             :show-password="field.type === 'password'"
-            :placeholder="secretSet(field) ? '已设置，留空保持不变' : field.placeholder"
+            :placeholder="secretSet(field) ? t('directory.editor.secretSet') : field.placeholder"
             autocomplete="new-password"
           />
           <div v-if="field.help" class="help">{{ field.help }}</div>
@@ -247,7 +248,7 @@ async function save(): Promise<void> {
         type="info"
         :closable="false"
         show-icon
-        title="Excel 数据源保存后，在列表中下载模板、填写并上传即可预览和应用。"
+        :title="t('directory.editor.excelHint')"
       />
 
       <el-alert
@@ -260,10 +261,16 @@ async function save(): Promise<void> {
       >
         <template #title>
           <span v-if="testResult.ok">
-            连接成功：{{ testResult.departments }} 个部门，{{ testResult.users }} 人（在职
-            {{ testResult.active_users }}），耗时 {{ testResult.duration_ms }} ms
+            {{
+              t('directory.editor.testOk', {
+                departments: testResult.departments,
+                users: testResult.users,
+                active: testResult.active_users,
+                ms: testResult.duration_ms,
+              })
+            }}
           </span>
-          <span v-else>连接失败：{{ testResult.error }}</span>
+          <span v-else>{{ t('directory.editor.testFailed', { error: testResult.error }) }}</span>
         </template>
         <ul v-if="testResult.warnings.length" class="warnings">
           <li v-for="w in testResult.warnings" :key="w">{{ w }}</li>
@@ -277,12 +284,12 @@ async function save(): Promise<void> {
         data-test="test-connection"
         @click="test"
       >
-        测试连接
+        {{ t('directory.editor.testConnection') }}
       </el-button>
-      <el-button @click="visible = false">取消</el-button>
-      <el-button type="primary" :loading="saving" data-test="save-source" @click="save"
-        >保存</el-button
-      >
+      <el-button @click="visible = false">{{ t('common.cancel') }}</el-button>
+      <el-button type="primary" :loading="saving" data-test="save-source" @click="save">{{
+        t('common.save')
+      }}</el-button>
     </template>
   </el-dialog>
 </template>

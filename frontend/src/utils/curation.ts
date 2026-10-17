@@ -7,6 +7,7 @@ import type {
   KoVersionStatus,
   ReviewStatus,
 } from '@/api/types'
+import { t } from '@/i18n'
 
 export type TagType = 'success' | 'warning' | 'danger' | 'info' | 'primary'
 
@@ -15,64 +16,89 @@ interface Meta {
   type: TagType
 }
 
-export const GAP_TYPE_META: Record<GapType, Meta> = {
-  no_evidence: { label: '无依据', type: 'danger' },
-  low_grounding: { label: '依据不足', type: 'warning' },
-  negative_feedback: { label: '用户差评', type: 'warning' },
-  user_request: { label: '用户求助', type: 'primary' },
+/** Labels are getters so they are translated at read time and follow locale switches. */
+function metaMap<K extends string>(group: string, types: Record<K, TagType>): Record<K, Meta> {
+  const map = {} as Record<K, Meta>
+  for (const key of Object.keys(types) as K[]) {
+    map[key] = {
+      type: types[key],
+      get label() {
+        return t(`curation.meta.${group}.${key}`)
+      },
+    }
+  }
+  return map
 }
 
-export const GAP_STATUS_META: Record<GapStatus, Meta> = {
-  open: { label: '待处理', type: 'danger' },
-  in_review: { label: '处理中', type: 'warning' },
-  resolved: { label: '已解决', type: 'success' },
-  rejected: { label: '已驳回', type: 'info' },
-  duplicate: { label: '重复', type: 'info' },
+function labelMap<K extends string>(group: string, keys: readonly K[]): Record<K, string> {
+  const map = {} as Record<K, string>
+  for (const key of keys) {
+    Object.defineProperty(map, key, {
+      enumerable: true,
+      get: () => t(`curation.meta.${group}.${key}`),
+    })
+  }
+  return map
 }
 
-export const KO_TYPE_LABEL: Record<KoType, string> = {
-  faq: 'FAQ',
-  qa: '问答',
-  card: '知识卡片',
-  policy_summary: '制度摘要',
-}
+export const GAP_TYPE_META: Record<GapType, Meta> = metaMap('gapType', {
+  no_evidence: 'danger',
+  low_grounding: 'warning',
+  negative_feedback: 'warning',
+  user_request: 'primary',
+})
 
-export const KO_STATUS_META: Record<KoStatus, Meta> = {
-  draft: { label: '草稿', type: 'info' },
-  pending_review: { label: '待审核', type: 'warning' },
-  published: { label: '已发布', type: 'success' },
-  deprecated: { label: '已下线', type: 'danger' },
-}
+export const GAP_STATUS_META: Record<GapStatus, Meta> = metaMap('gapStatus', {
+  open: 'danger',
+  in_review: 'warning',
+  resolved: 'success',
+  rejected: 'info',
+  duplicate: 'info',
+})
 
-export const KO_VERSION_STATUS_META: Record<KoVersionStatus, Meta> = {
-  pending_review: { label: '待审核', type: 'warning' },
-  published: { label: '已发布', type: 'success' },
-  rejected: { label: '已驳回', type: 'danger' },
-  withdrawn: { label: '已撤回', type: 'info' },
-  superseded: { label: '已被替代', type: 'info' },
-  deprecated: { label: '已下线', type: 'danger' },
-}
+export const KO_TYPE_LABEL: Record<KoType, string> = labelMap<KoType>('koType', [
+  'faq',
+  'qa',
+  'card',
+  'policy_summary',
+])
 
-export const REVIEW_STATUS_META: Record<ReviewStatus, Meta> = {
-  pending: { label: '待审核', type: 'warning' },
-  approved: { label: '已通过', type: 'success' },
-  rejected: { label: '已驳回', type: 'danger' },
-  cancelled: { label: '已取消', type: 'info' },
-}
+export const KO_STATUS_META: Record<KoStatus, Meta> = metaMap('koStatus', {
+  draft: 'info',
+  pending_review: 'warning',
+  published: 'success',
+  deprecated: 'danger',
+})
 
-export const VERDICT_META: Record<ConflictVerdict, Meta> = {
-  conflict: { label: '内容矛盾', type: 'danger' },
-  duplicate: { label: '内容重复', type: 'warning' },
-  consistent: { label: '一致', type: 'success' },
-  unrelated: { label: '无关', type: 'info' },
-  unknown: { label: '未能判断', type: 'info' },
-}
+export const KO_VERSION_STATUS_META: Record<KoVersionStatus, Meta> = metaMap('koVersionStatus', {
+  pending_review: 'warning',
+  published: 'success',
+  rejected: 'danger',
+  withdrawn: 'info',
+  superseded: 'info',
+  deprecated: 'danger',
+})
 
-export const ORIGIN_LABEL: Record<string, string> = {
-  manual: '手工创建',
-  gap: '来自缺口',
-  document: '文档生成',
-}
+export const REVIEW_STATUS_META: Record<ReviewStatus, Meta> = metaMap('reviewStatus', {
+  pending: 'warning',
+  approved: 'success',
+  rejected: 'danger',
+  cancelled: 'info',
+})
+
+export const VERDICT_META: Record<ConflictVerdict, Meta> = metaMap('verdict', {
+  conflict: 'danger',
+  duplicate: 'warning',
+  consistent: 'success',
+  unrelated: 'info',
+  unknown: 'info',
+})
+
+export const ORIGIN_LABEL: Record<string, string> = labelMap('origin', [
+  'manual',
+  'gap',
+  'document',
+])
 
 export function metaOf<K extends string>(map: Record<K, Meta>, key: string): Meta {
   return (map as Record<string, Meta>)[key] ?? { label: key, type: 'info' }

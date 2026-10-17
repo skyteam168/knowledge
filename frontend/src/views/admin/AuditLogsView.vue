@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { listAuditLogs } from '@/api/admin'
 import type { AuditDiffEntry, AuditLog } from '@/api/types'
 import { formatDateTime } from '@/utils/format'
+
+const { t } = useI18n()
 
 const filters = reactive({
   action: '',
@@ -74,41 +77,49 @@ onMounted(load)
 <template>
   <el-card shadow="never">
     <el-form :inline="true" @submit.prevent="search">
-      <el-form-item label="动作">
-        <el-input v-model="filters.action" placeholder="如 user.update" clearable />
+      <el-form-item :label="t('audit.filters.action')">
+        <el-input
+          v-model="filters.action"
+          :placeholder="t('audit.filters.actionPlaceholder')"
+          clearable
+        />
       </el-form-item>
-      <el-form-item label="资源类型">
-        <el-input v-model="filters.resource_type" placeholder="如 user / role" clearable />
+      <el-form-item :label="t('audit.filters.resourceType')">
+        <el-input
+          v-model="filters.resource_type"
+          :placeholder="t('audit.filters.resourceTypePlaceholder')"
+          clearable
+        />
       </el-form-item>
-      <el-form-item label="资源 ID">
+      <el-form-item :label="t('audit.filters.resourceId')">
         <el-input v-model="filters.resource_id" clearable />
       </el-form-item>
-      <el-form-item label="操作人 ID">
+      <el-form-item :label="t('audit.filters.actorId')">
         <el-input v-model="filters.actor_id" clearable />
       </el-form-item>
       <el-form-item label="Trace ID">
         <el-input v-model="filters.trace_id" clearable />
       </el-form-item>
-      <el-form-item label="时间">
+      <el-form-item :label="t('audit.filters.time')">
         <el-date-picker
           v-model="filters.range"
           type="datetimerange"
-          start-placeholder="开始"
-          end-placeholder="结束"
+          :start-placeholder="t('audit.filters.start')"
+          :end-placeholder="t('audit.filters.end')"
         />
       </el-form-item>
       <el-form-item>
-        <el-button type="primary" native-type="submit">查询</el-button>
-        <el-button @click="reset">重置</el-button>
+        <el-button type="primary" native-type="submit">{{ t('audit.filters.query') }}</el-button>
+        <el-button @click="reset">{{ t('common.reset') }}</el-button>
       </el-form-item>
     </el-form>
 
-    <el-table v-loading="loading" :data="rows" row-key="id" empty-text="暂无审计记录">
+    <el-table v-loading="loading" :data="rows" row-key="id" :empty-text="t('audit.empty')">
       <el-table-column type="expand">
         <template #default="{ row }">
           <div class="detail">
             <el-descriptions :column="2" size="small" border>
-              <el-descriptions-item label="请求">
+              <el-descriptions-item :label="t('audit.detail.request')">
                 {{ row.method ?? '-' }} {{ row.path ?? '' }}
               </el-descriptions-item>
               <el-descriptions-item label="Trace ID">
@@ -124,36 +135,40 @@ onMounted(load)
               size="small"
               class="detail__diff"
             >
-              <el-table-column prop="field" label="字段" width="180" />
-              <el-table-column label="变更前">
+              <el-table-column prop="field" :label="t('audit.detail.field')" width="180" />
+              <el-table-column :label="t('audit.detail.before')">
                 <template #default="{ row: d }">
                   <span class="diff-before">{{ display(d.before) }}</span>
                 </template>
               </el-table-column>
-              <el-table-column label="变更后">
+              <el-table-column :label="t('audit.detail.after')">
                 <template #default="{ row: d }">
                   <span class="diff-after">{{ display(d.after) }}</span>
                 </template>
               </el-table-column>
             </el-table>
-            <el-text v-else type="info" size="small" class="detail__diff">无字段变更</el-text>
+            <el-text v-else type="info" size="small" class="detail__diff">{{
+              t('audit.detail.noDiff')
+            }}</el-text>
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="时间" width="170">
+      <el-table-column :label="t('audit.columns.time')" width="170">
         <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
       </el-table-column>
-      <el-table-column label="操作人" min-width="110">
-        <template #default="{ row }">{{ row.actor_name ?? row.actor_id ?? '系统' }}</template>
+      <el-table-column :label="t('audit.columns.actor')" min-width="110">
+        <template #default="{ row }">{{
+          row.actor_name ?? row.actor_id ?? t('audit.system')
+        }}</template>
       </el-table-column>
-      <el-table-column prop="action" label="动作" min-width="140" />
-      <el-table-column label="资源" min-width="200">
+      <el-table-column prop="action" :label="t('audit.columns.action')" min-width="140" />
+      <el-table-column :label="t('audit.columns.resource')" min-width="200">
         <template #default="{ row }">
           {{ row.resource_type ?? '-' }}<span v-if="row.resource_id"> / {{ row.resource_id }}</span>
         </template>
       </el-table-column>
       <el-table-column prop="ip" label="IP" width="130" />
-      <el-table-column label="状态" width="80">
+      <el-table-column :label="t('common.status')" width="80">
         <template #default="{ row }">
           <el-tag v-if="row.status_code" :type="statusType(row.status_code)" size="small">
             {{ row.status_code }}

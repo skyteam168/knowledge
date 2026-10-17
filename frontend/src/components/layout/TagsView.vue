@@ -2,11 +2,13 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft, ArrowRight, Close, RefreshRight } from '@element-plus/icons-vue'
+import { useI18n } from 'vue-i18n'
 import { useTagsStore, type TagView } from '@/stores/tags'
 
 const route = useRoute()
 const router = useRouter()
 const store = useTagsStore()
+const { t } = useI18n()
 
 const scroller = ref<HTMLElement>()
 const menu = reactive({ visible: false, x: 0, y: 0, key: '' })
@@ -101,7 +103,12 @@ onBeforeUnmount(() => document.removeEventListener('click', hideMenu))
 
 <template>
   <div class="tags" data-test="tags-view">
-    <button class="tags__nav" type="button" aria-label="向左滚动" @click="scrollBy(-240)">
+    <button
+      class="tags__nav"
+      type="button"
+      :aria-label="t('layout.tags.scrollLeft')"
+      @click="scrollBy(-240)"
+    >
       <el-icon><ArrowLeft /></el-icon>
     </button>
     <div ref="scroller" class="tags__scroller" @wheel.prevent="onWheel">
@@ -113,7 +120,7 @@ onBeforeUnmount(() => document.removeEventListener('click', hideMenu))
           'tags__item--active': tag.key === activeKey,
           'tags__item--over': dragOver === index && dragFrom !== index,
         }"
-        :title="tag.title"
+        :title="t(tag.title)"
         draggable="true"
         data-test="tag-item"
         @click="go(tag)"
@@ -126,7 +133,7 @@ onBeforeUnmount(() => document.removeEventListener('click', hideMenu))
         @dragend="dragFrom = -1"
       >
         <span class="tags__dot" />
-        <span class="tags__title">{{ tag.title }}</span>
+        <span class="tags__title">{{ t(tag.title) }}</span>
         <el-icon
           v-if="!tag.affix && store.tags.length > 1"
           class="tags__close"
@@ -136,13 +143,18 @@ onBeforeUnmount(() => document.removeEventListener('click', hideMenu))
         </el-icon>
       </div>
     </div>
-    <button class="tags__nav" type="button" aria-label="向右滚动" @click="scrollBy(240)">
+    <button
+      class="tags__nav"
+      type="button"
+      :aria-label="t('layout.tags.scrollRight')"
+      @click="scrollBy(240)"
+    >
       <el-icon><ArrowRight /></el-icon>
     </button>
     <button
       class="tags__nav tags__nav--refresh"
       type="button"
-      title="刷新当前页"
+      :title="t('layout.tags.refreshCurrent')"
       @click="store.refresh(activeKey)"
     >
       <el-icon><RefreshRight /></el-icon>
@@ -155,13 +167,17 @@ onBeforeUnmount(() => document.removeEventListener('click', hideMenu))
         :style="{ left: `${menu.x}px`, top: `${menu.y}px` }"
         data-test="tags-menu"
       >
-        <li @click="command('refresh')">刷新页面</li>
-        <li v-if="store.tags.length > 1" @click="command('close')">关闭当前</li>
-        <li v-if="store.tags.length > 1" @click="command('others')">关闭其他</li>
-        <li v-if="menuIndex > 0" @click="command('left')">关闭左侧</li>
-        <li v-if="menuIndex < store.tags.length - 1" @click="command('right')">关闭右侧</li>
+        <li @click="command('refresh')">{{ t('layout.tags.refresh') }}</li>
+        <li v-if="store.tags.length > 1" @click="command('close')">{{ t('layout.tags.close') }}</li>
+        <li v-if="store.tags.length > 1" @click="command('others')">
+          {{ t('layout.tags.closeOthers') }}
+        </li>
+        <li v-if="menuIndex > 0" @click="command('left')">{{ t('layout.tags.closeLeft') }}</li>
+        <li v-if="menuIndex < store.tags.length - 1" @click="command('right')">
+          {{ t('layout.tags.closeRight') }}
+        </li>
         <li class="tags-menu__divider" />
-        <li @click="command('all')">全部关闭</li>
+        <li @click="command('all')">{{ t('layout.tags.closeAll') }}</li>
       </ul>
     </Teleport>
   </div>

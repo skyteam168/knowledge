@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { ElImageViewer, ElMessage } from 'element-plus'
+import { useI18n } from 'vue-i18n'
 import { getCitationSource } from '@/api/chat'
 import type { Citation } from '@/api/types'
 import AnswerChart from '@/components/assistant/AnswerChart.vue'
@@ -18,6 +19,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{ cite: [n: number] }>()
+const { t } = useI18n()
 
 const byNumber = computed(() => new Map(props.citations.map((c) => [c.n, c])))
 
@@ -106,14 +108,14 @@ async function copyCode(target: EventTarget | null): Promise<boolean> {
   if (!hit) return false
   try {
     await navigator.clipboard.writeText(hit.code)
-    hit.el.textContent = '已复制'
+    hit.el.textContent = t('common.copied')
     hit.el.classList.add('copied')
     window.setTimeout(() => {
-      hit.el.textContent = '复制'
+      hit.el.textContent = t('common.copy')
       hit.el.classList.remove('copied')
     }, 1500)
   } catch {
-    ElMessage.warning('复制失败，请手动选择文本')
+    ElMessage.warning(t('assistant.copyFailed'))
   }
   return true
 }
@@ -156,11 +158,7 @@ function onClick(event: Event): void {
         v-html="markdownHtml(block.text)"
       />
       <!-- eslint-enable vue/no-v-html -->
-      <AnswerTable
-        v-else-if="block.type === 'table'"
-        :headers="block.headers"
-        :rows="block.rows"
-      />
+      <AnswerTable v-else-if="block.type === 'table'" :headers="block.headers" :rows="block.rows" />
       <AnswerChart v-else-if="block.type === 'echarts'" :option="block.option" />
       <AnswerMermaid v-else-if="block.type === 'mermaid'" :source="block.source" />
     </template>
@@ -184,7 +182,7 @@ function onClick(event: Event): void {
         {{ hovered.heading_path.join(' › ') }}
       </div>
       <div v-if="hoverImageLoading" class="cite-image-loading" data-test="cite-image-loading">
-        附图加载中…
+        {{ t('assistant.citation.imageLoading') }}
       </div>
       <button
         v-else-if="hoverImageUrl"
@@ -193,20 +191,19 @@ function onClick(event: Event): void {
         data-test="cite-image"
         @click="openHovered"
       >
-        <img :src="hoverImageUrl" alt="引用页附图" loading="lazy" />
+        <img :src="hoverImageUrl" :alt="t('assistant.citation.pageImageAlt')" loading="lazy" />
       </button>
       <div class="cite-quote">{{ hovered.quote }}</div>
       <button type="button" class="cite-hint" data-test="cite-open" @click="openHovered">
-        {{ hoverImageUrl ? '点击查看原文与附图' : '点击查看原文' }}
+        {{
+          hoverImageUrl
+            ? t('assistant.citation.openSourceWithImage')
+            : t('assistant.citation.openSource')
+        }}
       </button>
     </div>
   </el-popover>
-  <ElImageViewer
-    v-if="previewUrl"
-    :url-list="[previewUrl]"
-    teleported
-    @close="previewUrl = null"
-  />
+  <ElImageViewer v-if="previewUrl" :url-list="[previewUrl]" teleported @close="previewUrl = null" />
 </template>
 
 <style scoped>

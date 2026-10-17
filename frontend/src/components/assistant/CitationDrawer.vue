@@ -2,6 +2,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { ElImageViewer } from 'element-plus'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { getCitationSource } from '@/api/chat'
 import { HttpError } from '@/api/http'
 import type { Citation, CitationSource } from '@/api/types'
@@ -15,6 +16,7 @@ const visible = defineModel<boolean>({ required: true })
 const props = defineProps<{ messageId: string | null; citation: Citation | null }>()
 
 const router = useRouter()
+const { t } = useI18n()
 const source = ref<CitationSource | null>(null)
 const error = ref('')
 const loading = ref(false)
@@ -32,7 +34,7 @@ async function load(): Promise<void> {
     await nextTick()
     body.value?.querySelector('.segment.highlight')?.scrollIntoView({ block: 'center' })
   } catch (err) {
-    error.value = err instanceof HttpError ? err.message : '原文加载失败'
+    error.value = err instanceof HttpError ? err.message : t('assistant.citation.loadFailed')
   } finally {
     loading.value = false
   }
@@ -86,11 +88,19 @@ function location(s: CitationSource): string {
 </script>
 
 <template>
-  <el-drawer v-model="visible" size="42%" :title="citation ? `引用 [${citation.n}]` : '引用'">
+  <el-drawer
+    v-model="visible"
+    size="42%"
+    :title="
+      citation ? t('assistant.citation.titleN', { n: citation.n }) : t('assistant.citation.title')
+    "
+  >
     <div ref="body" v-loading="loading" class="drawer-body">
       <template v-if="source?.is_ko && source.ko">
         <div class="doc-title">
-          <el-tag type="success" size="small" effect="dark">知识条目</el-tag>
+          <el-tag type="success" size="small" effect="dark">{{
+            t('assistant.knowledgeObject')
+          }}</el-tag>
           {{ source.ko.question }}
         </div>
         <div class="doc-meta">
@@ -98,7 +108,9 @@ function location(s: CitationSource): string {
           <span>{{ KO_TYPE_LABEL[source.ko.ko_type] ?? source.ko.ko_type }}</span>
           <span>v{{ source.document.version }}</span>
           <span v-if="source.ko.effective_to">
-            有效期至 {{ formatDateTime(source.ko.effective_to) }}
+            {{
+              t('assistant.citation.validUntil', { date: formatDateTime(source.ko.effective_to) })
+            }}
           </span>
         </div>
         <el-alert
@@ -107,16 +119,16 @@ function location(s: CitationSource): string {
           show-icon
           :closable="false"
           class="notice"
-          title="该知识条目在回答生成后已更新，以下为当前发布版本"
+          :title="t('assistant.citation.koOutdated')"
         />
         <div v-if="source.ko.variants.length" class="variants">
-          <span class="label">相似问法：</span>
+          <span class="label">{{ t('assistant.citation.variants') }}</span>
           <el-tag v-for="v in source.ko.variants" :key="v" size="small" type="info">{{ v }}</el-tag>
         </div>
         <!-- eslint-disable-next-line vue/no-v-html -- markdown-it with html disabled -->
         <div class="segments markdown ko-answer" v-html="renderMarkdown(source.ko.answer)" />
         <template v-if="source.ko.sources.length">
-          <div class="label">依据文档</div>
+          <div class="label">{{ t('assistant.citation.sourceDocs') }}</div>
           <div
             v-for="s in source.ko.sources"
             :key="`${s.document_id}:${s.chunk_id}`"
@@ -132,7 +144,7 @@ function location(s: CitationSource): string {
           </div>
         </template>
         <el-button v-if="canEditKo" type="primary" plain class="notice" @click="openKo">
-          打开知识条目
+          {{ t('assistant.citation.openKo') }}
         </el-button>
       </template>
       <template v-else-if="source">
@@ -154,18 +166,18 @@ function location(s: CitationSource): string {
           show-icon
           :closable="false"
           class="notice"
-          title="该文档在回答生成后已更新，以下内容可能与回答引用时不同"
+          :title="t('assistant.citation.docOutdated')"
         />
         <div v-if="source.image_url" class="page-image">
           <button type="button" class="page-image__btn" @click="previewOpen = true">
             <img
               :src="source.image_url"
-              alt="引用页附图"
+              :alt="t('assistant.citation.pageImageAlt')"
               loading="lazy"
               class="page-image__img"
             />
           </button>
-          <div class="page-image__hint">点击查看大图</div>
+          <div class="page-image__hint">{{ t('assistant.citation.clickToEnlarge') }}</div>
         </div>
         <div class="segments">
           <p
@@ -177,7 +189,9 @@ function location(s: CitationSource): string {
             {{ seg.content }}
           </p>
         </div>
-        <el-button type="primary" plain @click="openDocument">打开原文档</el-button>
+        <el-button type="primary" plain @click="openDocument">{{
+          t('assistant.citation.openDocument')
+        }}</el-button>
         <ElImageViewer
           v-if="previewOpen && source.image_url"
           :url-list="[source.image_url]"
