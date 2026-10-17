@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.core.exceptions import ConflictError, NotFoundError, ValidationAppError
-from app.models import Organization
+from app.models import Organization, User
 from app.repositories.user_repo import UserRepository
 from app.schemas.identity import PasswordLoginOut
 from app.services.authz.cache import AuthzCache
@@ -80,6 +80,7 @@ class PasswordLoginService(BaseService):
                 account.setdefault("attributes", {})["org_id"] = [org.code]
                 account["enabled"] = True
                 await admin.update_user(account_id, account)
+        await self._bind(user, account_id)
 
         password = temporary_password()
         await admin.reset_password(account_id, password, temporary=True)
@@ -93,3 +94,19 @@ class PasswordLoginService(BaseService):
         return PasswordLoginOut(
             username=user.username, created=created, temporary_password=password
         )
+
+    async def _bind(self, user: User, account_id: str) -> None:
+        """Link the Keycloak account now, so first login cannot provision a second user."""
+        if user.keycloak_sub == account_id:
+            return
+        holder = await UserRepository(self.session).get_by_sub(account_id)
+        if holder is not None and holder.id != user.id:
+            raise ConflictError(
+                f"Keycloak 账号 {user.username} 已绑定到另一个用户"
+                f"（{holder.display_name or holder.username} / {holder.username}），"
+                "请先运行 python -m app.cli users fix-duplicates 合并重复账号",
+                code="KEYCLOAK_IDENTITY_TAKEN",
+            )
+        user.keycloak_sub = account_id
+        user.claims_hash = None
+        await self.session.flush()

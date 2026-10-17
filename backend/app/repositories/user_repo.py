@@ -1,4 +1,4 @@
-from sqlalchemy import Select, delete, or_, select
+from sqlalchemy import Select, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
@@ -25,8 +25,31 @@ class UserRepository:
         return (await self.session.execute(stmt)).scalar_one_or_none()
 
     async def get_by_username(self, org_id: str, username: str) -> User | None:
-        stmt = select(User).where(User.org_id == org_id, User.username == username)
-        return (await self.session.execute(stmt)).scalar_one_or_none()
+        """Case-insensitive: Keycloak lowercases usernames, local ones may keep their case."""
+        stmt = select(User).where(
+            User.org_id == org_id, func.lower(User.username) == username.lower()
+        )
+        matches = list((await self.session.execute(stmt)).scalars())
+        exact = [u for u in matches if u.username == username]
+        return next(iter(exact or matches), None)
+
+    async def list_case_duplicates(self, org_id: str) -> list[list[User]]:
+        """Users of an org whose usernames differ only by case, grouped."""
+        dup = (
+            select(func.lower(User.username))
+            .where(User.org_id == org_id, ~User.username.startswith(SERVICE_USER_PREFIX))
+            .group_by(func.lower(User.username))
+            .having(func.count() > 1)
+        )
+        stmt = (
+            select(User)
+            .where(User.org_id == org_id, func.lower(User.username).in_(dup))
+            .order_by(func.lower(User.username), User.created_at)
+        )
+        groups: dict[str, list[User]] = {}
+        for user in (await self.session.execute(stmt)).scalars():
+            groups.setdefault(user.username.lower(), []).append(user)
+        return list(groups.values())
 
     def search_stmt(
         self,

@@ -529,6 +529,9 @@ async def test_open_password_login_creates_keycloak_account(env: Env, engine: As
         "value": password,
         "temporary": True,
     }
+    async with create_session_factory(engine)() as s:
+        bound = await s.get(User, env.ids["zhangsan"])
+        assert bound is not None and bound.keycloak_sub == account["id"]
 
     again = (
         await env.api.post(

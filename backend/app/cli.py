@@ -16,6 +16,11 @@ keycloak setup-idp [--providers wecom dingtalk] [--admin-user U --admin-password
                                register the WeCom / DingTalk OIDC bridge as Keycloak identity
                                providers, the auto-link first-login flow, relaxed user profile
                                and the ekb-backend service account roles (idempotent)
+
+users fix-duplicates [--apply]
+                               find users whose usernames differ only by case (e.g. pre-created
+                               `Hien` + auto-created `hien`) and move the Keycloak identity onto
+                               the pre-created one; dry run unless --apply
 """
 
 import argparse
@@ -29,12 +34,15 @@ from typing import Any
 
 import httpx
 
+from app.core.cache import RedisCache
 from app.core.config import Settings, get_settings
 from app.core.db import create_engine, create_session_factory
 from app.core.logging import setup_logging
 from app.llm import EmbeddingSpec
 from app.models import KnowledgeBase
+from app.services.admin.duplicate_users import fix_case_duplicates
 from app.services.analytics.aggregator import AnalyticsAggregator
+from app.services.authz.cache import AuthzCache
 from app.services.indexing.consistency import ConsistencyReport
 from app.services.indexing.generations import GenerationConflictError
 from app.services.indexing.rebuild import RebuildVerificationError
@@ -210,6 +218,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="do not grant manage-users to the ekb-backend service account",
     )
+
+    users = groups.add_parser("users", help="user maintenance")
+    users_cmds = users.add_subparsers(dest="command", required=True)
+    dups = users_cmds.add_parser("fix-duplicates")
+    dups.add_argument("--apply", action="store_true", help="write the changes (default: dry run)")
     return parser
 
 
@@ -251,10 +264,28 @@ async def _analytics_refresh(settings: Settings, args: argparse.Namespace) -> in
     return 0
 
 
+async def _users_fix_duplicates(settings: Settings, args: argparse.Namespace) -> int:
+    engine = create_engine(settings)
+    cache = RedisCache.from_url(settings.redis_url)
+    try:
+        async with create_session_factory(engine)() as session:
+            authz = AuthzCache(cache, settings.authz_cache_ttl_seconds)
+            result = await fix_case_duplicates(session, authz, apply=args.apply)
+            if args.apply:
+                await session.commit()
+        _print({"apply": args.apply, "groups": result})
+    finally:
+        await cache.close()
+        await engine.dispose()
+    return 0
+
+
 async def run(argv: list[str], settings: Settings, runtime: IndexingRuntime | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.group == "analytics":
         return await _analytics_refresh(settings, args)
+    if args.group == "users":
+        return await _users_fix_duplicates(settings, args)
     if args.group == "keycloak":
         return await _keycloak_setup_idp(settings, args)
     rt = runtime or IndexingRuntime.create(settings)

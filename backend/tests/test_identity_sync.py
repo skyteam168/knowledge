@@ -80,6 +80,73 @@ async def test_pre_provisioned_user_is_bound_by_username(
     assert count == 1
 
 
+async def test_pre_provisioned_user_matches_keycloak_lowercased_username(
+    session: AsyncSession, settings: Settings, authz_cache: AuthzCache
+) -> None:
+    svc = IdentitySyncService(session, settings, authz_cache)
+    _, org = await svc.sync(make_claims("sub-admin", "admin"))
+    pre = User(org_id=org.id, username="Hien", display_name="Nguyen Minh Hien")
+    session.add(pre)
+    await session.flush()
+
+    user, _ = await svc.sync(make_claims("sub-hien", "hien"))
+
+    assert user.id == pre.id and user.keycloak_sub == "sub-hien"
+    assert user.username == "Hien"
+    rows = (await session.execute(select(User).where(User.org_id == org.id))).scalars().all()
+    assert sorted(u.username for u in rows) == ["Hien", "admin"]
+    roles = await UserRepository(session).list_roles(org.id, user.id)
+    assert [r.code for r in roles] == ["kb_viewer"]
+
+
+async def test_first_login_keeps_roles_assigned_before_sign_in(
+    session: AsyncSession, settings: Settings, authz_cache: AuthzCache
+) -> None:
+    svc = IdentitySyncService(session, settings, authz_cache)
+    _, org = await svc.sync(make_claims("sub-admin", "admin"))
+    pre = User(org_id=org.id, username="editor1", keycloak_sub="sub-editor1")
+    session.add(pre)
+    await session.flush()
+    repo = UserRepository(session)
+    all_roles = await RoleRepository(session).list_all(org.id)
+    editor = next(r for r in all_roles if r.code == "kb_editor")
+    await repo.add_roles(org.id, pre.id, [editor.id])
+
+    await svc.sync(make_claims("sub-editor1", "editor1"))
+
+    assert [r.code for r in await repo.list_roles(org.id, pre.id)] == ["kb_editor"]
+
+
+async def test_fix_duplicates_moves_identity_to_pre_provisioned_user(
+    session: AsyncSession, settings: Settings, authz_cache: AuthzCache
+) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from app.services.admin.duplicate_users import fix_case_duplicates
+
+    svc = IdentitySyncService(session, settings, authz_cache)
+    _, org = await svc.sync(make_claims("sub-admin", "admin"))
+    created = datetime.now(UTC) - timedelta(hours=1)
+    pre = User(org_id=org.id, username="Hien", display_name="Nguyen Minh Hien", created_at=created)
+    dup = User(org_id=org.id, username="hien", keycloak_sub="sub-hien")
+    session.add_all([pre, dup])
+    await session.flush()
+
+    dry = await fix_case_duplicates(session, authz_cache, apply=False)
+    assert [(r["into_user_id"], r["applied"]) for r in dry] == [(pre.id, False)]
+    assert dup.keycloak_sub == "sub-hien"
+
+    done = await fix_case_duplicates(session, authz_cache, apply=True)
+    assert done[0]["applied"] is True
+    assert pre.keycloak_sub == "sub-hien" and pre.claims_hash is None
+    assert dup.keycloak_sub is None and not dup.is_active
+    assert dup.username.startswith("hien.dup-")
+
+    user, _ = await svc.sync(make_claims("sub-hien", "hien"))
+    assert user.id == pre.id
+    assert await fix_case_duplicates(session, authz_cache, apply=False) == []
+
+
 async def test_disabled_user_is_rejected(
     session: AsyncSession, settings: Settings, authz_cache: AuthzCache
 ) -> None:

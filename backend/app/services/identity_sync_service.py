@@ -107,7 +107,8 @@ class IdentitySyncService:
                 "Identity belongs to another organization", code="ORG_MISMATCH"
             )
 
-        user.username = claims.username
+        if user.username.lower() != claims.username.lower():
+            user.username = claims.username
         if (user.source or LOCAL_SOURCE) == LOCAL_SOURCE:
             user.email = claims.email
             user.display_name = claims.name or user.display_name or claims.username
@@ -116,6 +117,7 @@ class IdentitySyncService:
             user.email = user.email or claims.email
             user.display_name = user.display_name or claims.name or claims.username
         user.claims_hash = fingerprint
+        first_login = user.last_login_at is None
         user.last_login_at = datetime.now(UTC)
         if created:
             await self.users.add(user)
@@ -125,8 +127,8 @@ class IdentitySyncService:
 
         await self._sync_groups(org.id, user.id, list(claims.groups))
         await self._sync_roles(org.id, user.id, list(claims.roles))
-        if created and not await self.users.list_role_links(org.id, user.id):
-            # Roles mapped from the token take precedence over the defaults.
+        if first_login and not await self.users.list_role_links(org.id, user.id):
+            # Covers pre-provisioned users too; roles mapped from the token take precedence.
             await self.users.add_roles(org.id, user.id, await self.roles.default_role_ids(org.id))
         await self.authz_cache.invalidate_user(org.id, user.id)
 
