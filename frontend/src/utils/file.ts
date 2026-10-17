@@ -1,6 +1,7 @@
 export const ACCEPTED_EXTENSIONS = [
   '.pdf',
   '.docx',
+  '.doc',
   '.xlsx',
   '.xlsm',
   '.csv',

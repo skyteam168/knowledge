@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 import subprocess
 import tempfile
@@ -38,6 +39,9 @@ def convert_with_soffice(
             completed = subprocess.run(
                 [
                     binary,
+                    # Private profile per call: concurrent soffice runs sharing one profile
+                    # lock each other out, and the worker's HOME may not be writable.
+                    f"-env:UserInstallation={(tmp_path / 'profile').as_uri()}",
                     "--headless",
                     "--nologo",
                     "--nofirststartwizard",
@@ -50,6 +54,7 @@ def convert_with_soffice(
                 check=False,
                 capture_output=True,
                 timeout=timeout_seconds,
+                env={**os.environ, "HOME": str(tmp_path)},
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
             logger.warning("soffice_convert_failed", extra={"error": str(exc), "to": to_format})

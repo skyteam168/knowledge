@@ -49,6 +49,12 @@ ENTRYPOINT ["tini", "--", "/app/docker-entrypoint.sh"]
 
 
 FROM runtime AS worker
+# LibreOffice Writer (headless) converts legacy .doc to .docx before parsing; only the worker parses.
+USER root
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libreoffice-writer-nogui \
+    && rm -rf /var/lib/apt/lists/*
+USER app
 CMD ["dramatiq", "app.workers.main", "--processes", "2", "--threads", "4"]
 
 

@@ -257,9 +257,10 @@ services:
   worker:
     build:
       context: ../backend
+      target: worker
       args:
         INSTALL_DOCLING: ${INSTALL_DOCLING:-false}
-    image: ekb/backend:latest
+    image: ekb/backend-worker:latest
     command: ["dramatiq", "app.workers.main", "--processes", "1", "--threads", "4"]
     environment:
       <<: *backend-env

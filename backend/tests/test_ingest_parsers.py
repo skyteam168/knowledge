@@ -164,6 +164,59 @@ def test_legacy_doc_without_soffice_explains_requirement(
         registry.parse(b"\xd0\xcf\x11\xe0" + b"\x00" * 64, "legacy.doc")
 
 
+def test_legacy_doc_is_parsed_after_soffice_conversion(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from io import BytesIO
+
+    import docx
+
+    from app.services.ingest import office_convert
+
+    converted = docx.Document()
+    converted.add_heading("请假制度", level=1)
+    converted.add_paragraph("员工请假需提前一天申请。")
+    buf = BytesIO()
+    converted.save(buf)
+    calls: list[dict[str, object]] = []
+
+    def fake_convert(data: bytes, **kwargs: object) -> bytes:
+        calls.append(kwargs)
+        return buf.getvalue()
+
+    monkeypatch.setattr(office_convert, "convert_with_soffice", fake_convert)
+    registry = ParserRegistry(settings.model_copy(update={"pdf_parser": "basic"}))
+    doc = registry.parse(b"\xd0\xcf\x11\xe0" + b"\x00" * 64, "旧版制度.doc")
+
+    assert calls and calls[0]["source_suffix"] == ".doc" and calls[0]["to_format"] == "docx"
+    assert doc.parser == "doc" and doc.metadata["converted_from"] == "doc"
+    assert "员工请假需提前一天申请" in " ".join(b.text for b in doc.iter_blocks())
+
+
+def test_soffice_runs_with_a_private_profile(monkeypatch: pytest.MonkeyPatch) -> None:
+    import subprocess
+    from pathlib import Path
+
+    from app.services.ingest import office_convert
+
+    seen: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **_: object) -> subprocess.CompletedProcess[bytes]:
+        seen.append(cmd)
+        outdir = Path(cmd[cmd.index("--outdir") + 1])
+        (outdir / "input.docx").write_bytes(b"docx")
+        return subprocess.CompletedProcess(cmd, 0, b"", b"")
+
+    monkeypatch.setattr(office_convert, "resolve_soffice", lambda _=None: "/usr/bin/soffice")
+    monkeypatch.setattr(office_convert.subprocess, "run", fake_run)
+
+    out = office_convert.convert_with_soffice(b"x", source_suffix=".doc", to_format="docx")
+
+    assert out == b"docx"
+    profile = [a for a in seen[0] if a.startswith("-env:UserInstallation=file://")]
+    assert len(profile) == 1 and "ekb-soffice-" in profile[0]
+
+
 def test_image_ocr_builds_text_and_page_location(settings: Settings) -> None:
     from io import BytesIO
 

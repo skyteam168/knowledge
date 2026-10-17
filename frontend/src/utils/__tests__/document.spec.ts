@@ -43,6 +43,7 @@ describe('file helpers', () => {
   it('accepts supported extensions only', () => {
     expect(isAcceptedFile('手册.DOCX')).toBe(true)
     expect(isAcceptedFile('report.pdf')).toBe(true)
+    expect(isAcceptedFile('旧版制度.doc')).toBe(true)
     expect(isAcceptedFile('setup.exe')).toBe(false)
     expect(isAcceptedFile('README')).toBe(false)
   })
