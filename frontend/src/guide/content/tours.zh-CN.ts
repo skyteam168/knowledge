@@ -14,7 +14,7 @@ export const TOURS: TourDef[] = [
       },
       {
         target: 'menu-assistant',
-        title: 'AI 助手',
+        title: '知识库问答专家',
         description: '用日常语言提问，AI 会基于你有权访问的知识库作答，并逐句标注引用来源。',
         placement: 'right',
         permission: 'chat:use',
@@ -84,7 +84,7 @@ export const TOURS: TourDef[] = [
   {
     key: 'assistant',
     version: 1,
-    title: 'AI 助手引导',
+    title: '知识库问答专家引导',
     routeName: 'assistant',
     permission: 'chat:use',
     steps: [
@@ -164,7 +164,7 @@ export const TOURS: TourDef[] = [
         target: 'kb-upload',
         title: '上传文档',
         description:
-          '支持 PDF、Word、Excel、PPT、Markdown 等格式。上传后系统会自动解析、切分并建立索引，完成后即可被搜索和 AI 助手引用。',
+          '支持 PDF、Word、Excel、PPT、Markdown 等格式。上传后系统会自动解析、切分并建立索引，完成后即可被搜索和知识库问答专家引用。',
         placement: 'bottom',
       },
       {

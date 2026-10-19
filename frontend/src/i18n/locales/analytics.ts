@@ -3,12 +3,13 @@ import type { LocaleModule } from '../index'
 export default {
   'zh-CN': {
     feature: {
-      assistant: 'AI 助手',
+      assistant: '知识库问答专家',
       search: '搜索',
       open_api: '开放平台',
       evaluation: '评测',
       curation: '知识运营',
       indexing: '索引',
+      admin_agent: 'AI 管理助手',
       other: '其他',
     },
     kind: {
@@ -169,7 +170,7 @@ export default {
       userCol: '用户',
       serviceAccount: '服务账号',
       department: '部门',
-      assistantTokens: 'AI 助手 token',
+      assistantTokens: '知识库问答专家 token',
       totalTokensCol: '合计 token',
       refreshedAt: '数据汇总于 {time}（最新调用需点击“重新汇总”或等待定时汇总）',
       notAggregated: '尚未汇总',
@@ -177,12 +178,13 @@ export default {
   },
   en: {
     feature: {
-      assistant: 'AI assistant',
+      assistant: 'Knowledge Q&A Expert',
       search: 'Search',
       open_api: 'Open platform',
       evaluation: 'Evaluation',
       curation: 'Knowledge curation',
       indexing: 'Indexing',
+      admin_agent: 'AI admin assistant',
       other: 'Other',
     },
     kind: {
@@ -344,7 +346,7 @@ export default {
       userCol: 'User',
       serviceAccount: 'Service account',
       department: 'Department',
-      assistantTokens: 'AI assistant tokens',
+      assistantTokens: 'Knowledge Q&A Expert tokens',
       totalTokensCol: 'Total tokens',
       refreshedAt:
         'Data aggregated at {time} (click "Re-aggregate" or wait for the scheduled run to include the latest calls)',

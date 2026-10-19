@@ -69,7 +69,7 @@ describe('AppLayout', () => {
   it('shows every menu for a superuser and switches route', async () => {
     const { wrapper, router } = await mountWith(['*'], '/assistant')
     const text = wrapper.text()
-    for (const title of ['AI 助手', '知识库', '搜索', '知识运营', '管理', '分析']) {
+    for (const title of ['知识库问答专家', '知识库', '搜索', '知识运营', '管理', '分析']) {
       expect(text).toContain(title)
     }
     expect(wrapper.get('[data-test="readiness-tag"]').text()).toBe('服务正常')
@@ -105,7 +105,7 @@ describe('AppLayout', () => {
   it('hides menus the user lacks permission for', async () => {
     const { wrapper } = await mountWith(['kb:read', 'chat:use', 'search:use'], '/assistant')
     const menu = wrapper.get('[data-test="side-menu"]').text()
-    expect(menu).toContain('AI 助手')
+    expect(menu).toContain('知识库问答专家')
     expect(menu).toContain('知识库')
     expect(menu).toContain('搜索')
     expect(menu).not.toContain('管理')

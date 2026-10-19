@@ -25,7 +25,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
           {
             title: '问第一个问题',
             detail:
-              '打开「AI 助手」，输入一个工作中的问题（例如「出差住宿报销标准是多少」），按 Enter 发送。',
+              '打开「知识库问答专家」，输入一个工作中的问题（例如「出差住宿报销标准是多少」），按 Enter 发送。',
             permission: 'chat:use',
           },
           {
@@ -40,7 +40,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
   },
   {
     id: 'assistant',
-    title: 'AI 助手',
+    title: '知识库问答专家',
     icon: 'ChatDotRound',
     summary: '用日常语言提问，答案只来自你有权访问的资料，并逐句标注出处。',
     permission: 'chat:use',
@@ -177,7 +177,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
           {
             title: '等待处理',
             detail:
-              '上传后系统自动解析、切分并建立索引，「状态」列会显示进度；处理完成后文档即可被搜索和 AI 助手引用。',
+              '上传后系统自动解析、切分并建立索引，「状态」列会显示进度；处理完成后文档即可被搜索和知识库问答专家引用。',
           },
           {
             title: '处理失败',
@@ -267,7 +267,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
           {
             title: '提交审核',
             detail:
-              '编辑完成后点击「提交审核」，审核通过即发布并更新索引，之后可被搜索和 AI 助手引用。',
+              '编辑完成后点击「提交审核」，审核通过即发布并更新索引，之后可被搜索和知识库问答专家引用。',
           },
         ],
       },

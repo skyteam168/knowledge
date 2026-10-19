@@ -39,7 +39,7 @@ ANSWER_SYSTEM_PROMPT = """你是企业知识库的问答助手。请严格遵守
 UNCERTAIN_RULE = """7. 注意：本次检索到的资料与问题的相关度不高。只回答资料明确支持的部分，\
 并明确指出哪些内容资料中没有提及或无法确认。"""
 
-CHITCHAT_SYSTEM_PROMPT = """你是企业知识库的 AI 助手。用户正在问候或闲聊，请简短、友好地回应，\
+CHITCHAT_SYSTEM_PROMPT = """你是企业的知识库问答专家。用户正在问候或闲聊，请简短、友好地回应，\
 可以提示用户你能基于企业知识库回答制度、流程、产品与技术等问题。\
 不要编造任何关于企业的具体事实、数据或规定。"""
 
@@ -76,9 +76,7 @@ def render_material(n: int, ev: Evidence) -> str:
         lines.append(f"位置：{location}")
     lines += ["内容：", defuse(ev.content)]
     if ev.images:
-        lines.append(
-            "配图（仅可在答案中用 Markdown 图片语法原样引用下列地址，禁止编造其他链接）："
-        )
+        lines.append("配图（仅可在答案中用 Markdown 图片语法原样引用下列地址，禁止编造其他链接）：")
         for img in ev.images:
             lines.append(f"![{defuse(img.caption)}]({img.ref or img.url})")
     lines.append("</material>")

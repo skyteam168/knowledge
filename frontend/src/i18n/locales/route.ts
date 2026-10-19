@@ -3,7 +3,7 @@ import type { LocaleModule } from '../index'
 /** Menu / tab / breadcrumb / document titles, referenced from `route.meta.title`. */
 export default {
   'zh-CN': {
-    assistant: 'AI 助手',
+    assistant: '知识库问答专家',
     knowledge: '知识库',
     search: '搜索',
     curation: '知识运营',
@@ -11,6 +11,7 @@ export default {
     curationKos: '知识条目',
     curationReviews: '发布审核',
     admin: '管理',
+    adminAgent: 'AI 管理助手',
     adminDepartments: '部门管理',
     adminUsers: '用户管理',
     adminDirectory: '组织同步',
@@ -38,7 +39,7 @@ export default {
     forbidden: '无权访问',
   },
   en: {
-    assistant: 'AI Assistant',
+    assistant: 'Knowledge Q&A Expert',
     knowledge: 'Knowledge Bases',
     search: 'Search',
     curation: 'Knowledge Ops',
@@ -46,6 +47,7 @@ export default {
     curationKos: 'Knowledge Objects',
     curationReviews: 'Publish Reviews',
     admin: 'Admin',
+    adminAgent: 'AI Admin Assistant',
     adminDepartments: 'Departments',
     adminUsers: 'Users',
     adminDirectory: 'Directory Sync',

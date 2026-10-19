@@ -55,7 +55,8 @@ export default {
       switched: '已切换，当前服务立即生效，其他服务 {seconds} 秒内生效',
       restored: '已恢复为部署配置',
       failureLine: '{scene}「{model}」：{message}',
-      forceConfirm: '{failures}\n\n模型检测未通过，强制切换可能导致 AI 助手无法回答。仍要切换吗？',
+      forceConfirm:
+        '{failures}\n\n模型检测未通过，强制切换可能导致知识库问答专家无法回答。仍要切换吗？',
       forceTitle: '模型检测未通过',
       forceButton: '仍然切换',
       selectChat: '请选择对话模型',
@@ -177,7 +178,7 @@ export default {
       restored: 'Restored to deployment config',
       failureLine: '{scene} "{model}": {message}',
       forceConfirm:
-        '{failures}\n\nModel test failed. Forcing the switch may leave the AI assistant unable to answer. Switch anyway?',
+        '{failures}\n\nModel test failed. Forcing the switch may leave the Knowledge Q&A Expert unable to answer. Switch anyway?',
       forceTitle: 'Model test failed',
       forceButton: 'Switch anyway',
       selectChat: 'Select a chat model',

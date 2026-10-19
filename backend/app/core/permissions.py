@@ -12,7 +12,7 @@ PERMISSION_CATALOG: dict[str, str] = {
     "review:approve": "审核通过",
     "gap:review": "处理知识缺口",
     "ko:edit": "编辑知识条目",
-    "chat:use": "使用 AI 助手",
+    "chat:use": "使用知识库问答专家",
     "search:use": "使用搜索",
     "analytics:view": "查看分析",
     "analytics:usage": "查看模型用量（含每人 token 消耗）",

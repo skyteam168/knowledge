@@ -25,7 +25,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
           {
             title: 'Ask your first question',
             detail:
-              'Open "AI Assistant", type a question from your daily work (for example, "What is the hotel allowance for business trips?") and press Enter to send it.',
+              'Open "Knowledge Q&A Expert", type a question from your daily work (for example, "What is the hotel allowance for business trips?") and press Enter to send it.',
             permission: 'chat:use',
           },
           {
@@ -40,7 +40,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
   },
   {
     id: 'assistant',
-    title: 'AI Assistant',
+    title: 'Knowledge Q&A Expert',
     icon: 'ChatDotRound',
     summary:
       'Ask in everyday language. Answers come only from content you have access to, with a citation for every statement.',
@@ -188,7 +188,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
           {
             title: 'Wait for processing',
             detail:
-              'After upload, documents are parsed, split into chunks and indexed automatically, with progress shown in the "Status" column. Once processing finishes, the document can be found in search and cited by the AI Assistant.',
+              'After upload, documents are parsed, split into chunks and indexed automatically, with progress shown in the "Status" column. Once processing finishes, the document can be found in search and cited by the Knowledge Q&A Expert.',
           },
           {
             title: 'If processing fails',
@@ -282,7 +282,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
           {
             title: 'Submit for review',
             detail:
-              'When you\'re done, click "Submit for review". Once approved, the knowledge object is published and indexed, and can then be found in search and cited by the AI Assistant.',
+              'When you\'re done, click "Submit for review". Once approved, the knowledge object is published and indexed, and can then be found in search and cited by the Knowledge Q&A Expert.',
           },
         ],
       },

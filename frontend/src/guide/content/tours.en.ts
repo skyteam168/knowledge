@@ -14,7 +14,7 @@ export const TOURS: TourDef[] = [
       },
       {
         target: 'menu-assistant',
-        title: 'AI Assistant',
+        title: 'Knowledge Q&A Expert',
         description:
           'Ask in everyday language. The AI answers from the knowledge bases you can access and cites a source for every statement.',
         placement: 'right',
@@ -93,7 +93,7 @@ export const TOURS: TourDef[] = [
   {
     key: 'assistant',
     version: 1,
-    title: 'AI Assistant tour',
+    title: 'Knowledge Q&A Expert tour',
     routeName: 'assistant',
     permission: 'chat:use',
     steps: [
@@ -178,7 +178,7 @@ export const TOURS: TourDef[] = [
         target: 'kb-upload',
         title: 'Upload documents',
         description:
-          'PDF, Word, Excel, PowerPoint, Markdown and more are supported. Uploaded files are parsed, split into chunks and indexed automatically, after which they can be found in search and cited by the AI Assistant.',
+          'PDF, Word, Excel, PowerPoint, Markdown and more are supported. Uploaded files are parsed, split into chunks and indexed automatically, after which they can be found in search and cited by the Knowledge Q&A Expert.',
         placement: 'bottom',
       },
       {

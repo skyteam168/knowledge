@@ -22,7 +22,7 @@ export default {
     collapseSidebar: '收起会话列表',
     untitled: '新对话',
     scopedKbs: '已限定 {count} 个知识库',
-    welcomeTitle: '你好，我是知识库 AI 助手',
+    welcomeTitle: '你好，我是知识库问答专家',
     welcomeDesc: '回答只依据你有权访问的知识库资料，并逐句标注引用来源，可点击查看原文。',
     suggestionKb: '「{name}」里主要有哪些内容？',
     suggestionPolicy: '帮我总结一下最新的制度变化',
@@ -146,7 +146,7 @@ export default {
     collapseSidebar: 'Hide conversation list',
     untitled: 'New conversation',
     scopedKbs: 'Limited to {count} knowledge base(s)',
-    welcomeTitle: "Hi, I'm the knowledge base AI Assistant",
+    welcomeTitle: "Hi, I'm the Knowledge Q&A Expert",
     welcomeDesc:
       'Answers are based only on knowledge bases you can access, with sources cited sentence by sentence. Click a citation to view the original.',
     suggestionKb: 'What does "{name}" mainly cover?',
