@@ -76,15 +76,31 @@ class PrincipalDirectory:
     async def describe(self, entries: Iterable[tuple[str, str, str]]) -> list[AclEntryOut]:
         rows = list(entries)
         names = await self.names((t, i) for t, i, _ in rows)
-        return [
-            AclEntryOut(
-                principal_type=t,
-                principal_id=i,
-                permission=p,
-                principal_name=names.get((t, i)),
+        users = await self._users(sorted({i for t, i, _ in rows if t == "user"}))
+        out: list[AclEntryOut] = []
+        for t, i, p in rows:
+            user = users.get(i) if t == "user" else None
+            out.append(
+                AclEntryOut(
+                    principal_type=t,
+                    principal_id=i,
+                    permission=p,
+                    principal_name=names.get((t, i)),
+                    principal_detail=user_detail(user) if user else None,
+                    principal_active=user.is_active if user else True,
+                )
             )
-            for t, i, p in rows
-        ]
+        return out
+
+    async def _users(self, ids: list[str]) -> dict[str, User]:
+        if not ids:
+            return {}
+        stmt = select(User).where(User.org_id == self.org_id, User.id.in_(ids))
+        return {u.id: u for u in (await self.session.execute(stmt)).scalars()}
+
+
+def user_detail(user: User) -> str:
+    return " · ".join(p for p in (user.username, user.employee_no) if p)
 
 
 class DirectoryService(BaseService):
@@ -118,7 +134,10 @@ class DirectoryService(BaseService):
             users: list[User] = list((await self.session.execute(stmt.limit(limit))).scalars())
             return [
                 PrincipalOption(
-                    type="user", id=u.id, name=u.display_name or u.username, description=u.username
+                    type="user",
+                    id=u.id,
+                    name=u.display_name or u.username,
+                    description=user_detail(u),
                 )
                 for u in users
             ]

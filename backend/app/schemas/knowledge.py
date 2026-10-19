@@ -23,6 +23,9 @@ class AclEntryIn(BaseModel):
 
 class AclEntryOut(AclEntryIn):
     principal_name: str | None = None
+    # Users only: "username · employee no." so people with the same name can be told apart.
+    principal_detail: str | None = None
+    principal_active: bool = True
 
 
 class KbAclOut(BaseModel):

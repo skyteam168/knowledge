@@ -82,6 +82,30 @@ async def group_id(api: httpx.AsyncClient, name: str) -> str:
     return str(next(p["id"] for p in resp.json() if p["name"] == name))
 
 
+async def test_edit_grant_alone_makes_restricted_kb_visible(
+    api: httpx.AsyncClient, engine: AsyncEngine
+) -> None:
+    await login_all(api)
+    kb = await create_kb(api, "运维库")
+    me = (await api.get("/api/v1/auth/me", headers=BOB)).json()
+    carol = (await api.get("/api/v1/auth/me", headers=CAROL)).json()
+    resp = await api.put(
+        f"/api/v1/knowledge-bases/{kb['id']}/acl",
+        json={
+            "visibility": "restricted",
+            "entries": [
+                {"principal_type": "user", "principal_id": me["id"], "permission": "manage"},
+                {"principal_type": "user", "principal_id": carol["id"], "permission": "edit"},
+            ],
+        },
+        headers=BOB,
+    )
+    assert resp.status_code == 200, resp.text
+
+    listed = (await api.get("/api/v1/knowledge-bases", headers=CAROL)).json()
+    assert [(i["id"], i["my_permission"]) for i in listed["items"]] == [(kb["id"], "edit")]
+
+
 async def test_restricted_kb_is_invisible_without_acl(
     api: httpx.AsyncClient, engine: AsyncEngine
 ) -> None:
@@ -115,6 +139,8 @@ async def test_restricted_kb_is_invisible_without_acl(
     assert resp.status_code == 200, resp.text
     names = {e["principal_name"] for e in resp.json()["entries"]}
     assert "sales" in names
+    bob_entry = next(e for e in resp.json()["entries"] if e["principal_type"] == "user")
+    assert bob_entry["principal_detail"] == "bob" and bob_entry["principal_active"] is True
 
     carol_list = (await api.get("/api/v1/knowledge-bases", headers=CAROL)).json()
     assert carol_list["total"] == 1 and carol_list["items"][0]["my_permission"] == "read"

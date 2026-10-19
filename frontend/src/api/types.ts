@@ -267,6 +267,9 @@ export interface AclEntry {
 
 export interface AclEntryOut extends AclEntry {
   principal_name: string | null
+  /** Users only: "username · employee no." */
+  principal_detail?: string | null
+  principal_active?: boolean
 }
 
 export interface KbAcl {
@@ -1841,4 +1844,107 @@ export interface SyncChange {
 
 export interface SyncRunDetail extends SyncRun {
   changes: Record<string, SyncChange[]>
+}
+
+// ---- admin assistant (workflow events) --------------------------------------------------
+
+export interface AgentMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+export type AgentStage =
+  | 'understand'
+  | 'clarify'
+  | 'query'
+  | 'answer'
+  | 'resolve'
+  | 'plan'
+  | 'risk'
+  | 'approval'
+  | 'execute'
+  | 'verify'
+
+export type AgentStageStatus = 'running' | 'done' | 'failed' | 'blocked' | 'waiting' | 'skipped'
+
+/** A problem the admin resolves; `reason` + `params` are localized by the UI. */
+export interface AgentIssue {
+  reason: string
+  params: Record<string, string>
+  options?: string[]
+  step?: number
+  tool?: string
+  task?: string
+  index?: number
+}
+
+export type AgentRisk = 'low' | 'medium' | 'high'
+
+export interface AgentPlanStep {
+  tool: string
+  args: Record<string, unknown>
+  /** Names, or raw codes (permission / visibility / principal_type) the UI localizes. */
+  display: Record<string, string>
+  warnings: Record<string, string>[]
+  risk: AgentRisk
+  risk_reasons: Record<string, string>[]
+}
+
+export interface AgentPlan {
+  run_id: string
+  steps: AgentPlanStep[]
+  risk: AgentRisk
+  needs_ack: boolean
+  expires_in: number
+}
+
+export type AgentStepStatus = 'pending' | 'running' | 'done' | 'failed' | 'not_run' | 'rolled_back'
+
+export type AgentOutcome =
+  | 'answered'
+  | 'clarify'
+  | 'awaiting_approval'
+  | 'done'
+  | 'failed'
+  | 'blocked'
+  | 'expired'
+  | 'cancelled'
+  | 'out_of_scope'
+  | 'error'
+
+export type AgentRunStatus =
+  | 'running'
+  | 'answered'
+  | 'clarify'
+  | 'out_of_scope'
+  | 'awaiting_approval'
+  | 'executing'
+  | 'done'
+  | 'failed'
+  | 'cancelled'
+  | 'error'
+
+export interface AgentRun {
+  id: string
+  message: string
+  status: AgentRunStatus
+  intent: string | null
+  language: string | null
+  /** "tools" (native function calling) or "json". */
+  understand_mode: string | null
+  risk: AgentRisk | null
+  step_count: number
+  created_at: string
+  executed_at: string | null
+}
+
+export interface AgentStoredEvent {
+  type: string
+  data: Record<string, unknown>
+}
+
+export interface AgentRunDetail extends AgentRun {
+  expires_at: string | null
+  events: AgentStoredEvent[]
+  exec_events: AgentStoredEvent[]
 }

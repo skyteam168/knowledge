@@ -59,9 +59,13 @@ function filterDepartment(keyword: string, node: Record<string, unknown>): boole
   return (dept.path_name ?? dept.name).toLowerCase().includes(keyword.toLowerCase())
 }
 
+function optionOf(type: PrincipalType, id: string): PrincipalOption | undefined {
+  return options.value.find((o) => o.type === type && o.id === id)
+}
+
 function nameOf(type: PrincipalType, id: string): string {
   if (type === 'dept') return departmentNames.value.get(id) ?? id
-  return options.value.find((o) => o.type === type && o.id === id)?.name ?? id
+  return optionOf(type, id)?.name ?? id
 }
 
 function add(): void {
@@ -76,6 +80,8 @@ function add(): void {
         principal_id: id,
         permission: draft.permission,
         principal_name: nameOf(draft.type, id),
+        principal_detail: draft.type === 'user' ? optionOf(draft.type, id)?.description : null,
+        principal_active: true,
       })
     }
   }
@@ -159,7 +165,28 @@ onMounted(async () => {
       </el-table-column>
       <el-table-column :label="t('common.name')" min-width="200" show-overflow-tooltip>
         <template #default="{ row }">
-          {{ (row as AclEntryOut).principal_name ?? (row as AclEntryOut).principal_id }}
+          <span :class="{ 'entry--inactive': (row as AclEntryOut).principal_active === false }">
+            {{ (row as AclEntryOut).principal_name ?? (row as AclEntryOut).principal_id }}
+          </span>
+          <span v-if="(row as AclEntryOut).principal_detail" class="option-desc">
+            {{ (row as AclEntryOut).principal_detail }}
+          </span>
+          <el-tooltip
+            v-if="(row as AclEntryOut).principal_name == null"
+            :content="t('knowledge.acl.missingHint')"
+          >
+            <el-tag type="danger" size="small" class="entry-tag">
+              {{ t('knowledge.acl.missing') }}
+            </el-tag>
+          </el-tooltip>
+          <el-tooltip
+            v-else-if="(row as AclEntryOut).principal_active === false"
+            :content="t('knowledge.acl.inactiveHint')"
+          >
+            <el-tag type="danger" size="small" effect="plain" class="entry-tag">
+              {{ t('knowledge.acl.inactive') }}
+            </el-tag>
+          </el-tooltip>
         </template>
       </el-table-column>
       <el-table-column :label="t('knowledge.acl.permission')" width="120">
@@ -197,5 +224,12 @@ onMounted(async () => {
   margin-left: 8px;
   color: var(--el-text-color-secondary);
   font-size: 12px;
+}
+.entry--inactive {
+  color: var(--el-text-color-secondary);
+  text-decoration: line-through;
+}
+.entry-tag {
+  margin-left: 6px;
 }
 </style>
