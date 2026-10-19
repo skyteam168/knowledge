@@ -15,6 +15,7 @@ alwaysApply: true
 
 ## 目录结构
 - `/backend/app/{api,core,models,schemas,services,repositories,workers,retrieval,llm}`
+  - `services/admin_agent/`：AI 管理助手（understand / prompt / tasks / tools / ops / resolve / risk / verify / service / evaluate + `eval_cases.json`）
 - `/frontend/src/{api,views,components,stores,router,composables,utils}`
 - `/deploy`：docker-compose、opensearch、keycloak、mock-llm、nginx
 - `/docs`：开放平台、运维、ADR、压测等
@@ -71,7 +72,7 @@ QueryPreprocessor → SearchFilter（org + ACL principals + kb 范围）
 - 结果缓存 key 必须含权限范围 / 组织缓存代次；ACL 变更后递增代次使旧缓存失效。
 - Open API 另加 `allowed_kb_ids`（应用授权库硬上限）与内容截断。
 
-**3. AI 助手问答（站内 SSE / MCP ask_knowledge）**
+**3. 知识库问答专家（原「AI 助手」；站内 SSE / MCP ask_knowledge）**
 ```
 改写/意图 →（闲聊/越界短路）
   → 每子查询 SearchService → 合并 Hit
@@ -90,9 +91,24 @@ QueryPreprocessor → SearchFilter（org + ACL principals + kb 范围）
 - REST：`/open/retrieve`、`/open/chat`；MCP：`list_knowledge_bases` / `search_knowledge` / `ask_knowledge`。
 - 检索条目与问答 `citations` 可带签名 `image_url`（会过期）。
 
+**6. AI 管理助手（`/admin/agent/runs`，SSE）**
+```
+understand（模型：原生函数调用 submit_understanding，失败退回 JSON；只出 intent + 任务槽位）
+  → clarify 门禁（任务存在、必填槽位、调用者权限）
+  → query：读工具直接查 → 模型仅组织答复（answer）
+  → resolve：TaskSpec 模板展开为固定顺序步骤 + 每步 preview（解析名称、校验，歧义给候选）
+  → risk（规则表）→ approval（30 分钟、单次、仅发起人；高风险需 acknowledge_risk）
+  → execute：重新 preview → 每步 savepoint 执行 + CHECKS 后置校验 → 任一失败整体回滚
+  → report；全程事件写入 admin_agent_runs（events / exec_events，临时密码脱敏）
+```
+- 模型只在 understand / answer 两处使用；是否继续、步骤、成败与报告全部由代码决定。
+- 写工具调用原有 admin / kb / eval 等 service，权限与审计照常生效，另记 `admin_agent.execute`。
+- 入口权限 `AGENT_ACCESS`（admin:user/group/role/dept/audit/model/retrieval/openapi/index 任一），每个任务再按其工具权限检查。
+
 ### 前端架构
 - `api/` 与后端 schema 对齐；`stores/auth` + Keycloak JS；路由 `meta.permission` 做菜单与守卫。
-- 助手：`askQuestion` SSE（meta/step/token/citations/done）；`AnswerContent` 拆分 markdown / table / echarts / mermaid / 图片。
+- 知识库问答专家：`askQuestion` SSE（meta/step/token/citations/done）；`AnswerContent` 拆分 markdown / table / echarts / mermaid / 图片；代码块经 `utils/highlight.ts`（highlight.js core + 按需语言）高亮。
+- AI 管理助手：`views/admin/agent/`（`run.ts` 事件归并、`visual.ts` 结果表格 / 关系图 / 计划流程图 / 历史回放），答案复用 `AnswerContent`。
 - 管理域：组织同步、索引、检索策略、模型、开放平台、评测、分析看板等。
 
 ### 认证与权限
@@ -103,7 +119,7 @@ QueryPreprocessor → SearchFilter（org + ACL principals + kb 范围）
 ### 文档附图与答案可视化
 - 页图：`document_page_assets`；引用悬停/抽屉按需 presign。
 - 答案二期：`CHAT_ANSWER_IMAGES_*` 把签名 URL 写入 materials；仅允许引用这些 URL。
-- 答案可渲染表格、echarts、mermaid；图片仅 https 或同源 `/api`/`/oidc`。
+- 答案可渲染表格（可切柱图）、echarts、mermaid、代码高亮；图片仅 https 或同源 `/api`/`/oidc`。
 
 ### 可观测与安全
 - TraceId 中间件、审计日志、QaTrace / RetrievalTrace、Prometheus metrics、可选 OTel。
@@ -130,3 +146,4 @@ QueryPreprocessor → SearchFilter（org + ACL principals + kb 范围）
 - 改问答提示词或附图：同步 Open API/MCP 字段与前端渲染白名单。
 - 改鉴权或转发头：核对 `frontend/nginx.conf` 的 `X-Forwarded-For` 覆盖策略。
 - 新增 worker 任务：注册到 `workers/main`，并确认 scheduler/outbox 是否需要入口。
+- 管理助手新增任务：`TaskSpec`（槽位 + 模板）+ 写工具 `preview`/`run` + `risk.py` 规则 + `verify.py` 后置校验 + 前端 zh/en 文案（tasks / tools / check / warnings）+ `eval_cases.json` 用例（zh/en/vi）；不得让模型直接决定执行步骤。
