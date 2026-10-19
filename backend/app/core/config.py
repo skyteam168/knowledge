@@ -195,6 +195,11 @@ class Settings(BaseSettings):
     chat_answer_images_per_material: int = 2
     chat_answer_images_total: int = 6
 
+    # ---- admin assistant ----
+    # Native function calling for the understanding stage; falls back to JSON mode by itself
+    # when the provider rejects tools, so turning this off is only needed to save a round-trip.
+    admin_agent_native_tools: bool = True
+
     # ---- knowledge loop (gaps -> review -> knowledge objects) ----
     # Incremental clustering: cosine similarity of question embeddings to a cluster centroid.
     gap_cluster_similarity: float = 0.85

@@ -48,7 +48,8 @@ describe('authGuard', () => {
     vi.mocked(fetchMe).mockResolvedValue(makeProfile(['admin:role', 'admin:audit']))
     const router = makeRouter()
     await router.push('/admin')
-    expect(router.currentRoute.value.name).toBe('admin-roles')
+    // The admin assistant comes first for anyone holding user / group / role / dept rights.
+    expect(router.currentRoute.value.name).toBe('admin-agent')
   })
 
   it('sends / to 403 when nothing is accessible', async () => {

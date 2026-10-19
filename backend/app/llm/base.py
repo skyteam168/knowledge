@@ -35,11 +35,20 @@ class ChatMessage:
 
 
 @dataclass(frozen=True)
+class ToolCall:
+    """A native function call returned by the model (OpenAI `tool_calls`)."""
+
+    name: str
+    arguments: str
+
+
+@dataclass(frozen=True)
 class ChatResult:
     content: str
     model: str
     finish_reason: str | None = None
     usage: dict[str, int] = field(default_factory=dict)
+    tool_calls: tuple[ToolCall, ...] = ()
 
 
 class EmbeddingClient(Protocol):

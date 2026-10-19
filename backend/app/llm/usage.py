@@ -25,6 +25,7 @@ FEATURE_OPEN_API = "open_api"
 FEATURE_EVALUATION = "evaluation"
 FEATURE_CURATION = "curation"
 FEATURE_INDEXING = "indexing"
+FEATURE_ADMIN_AGENT = "admin_agent"
 FEATURE_OTHER = "other"
 
 STAGE_REWRITE = "rewrite"

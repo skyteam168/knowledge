@@ -33,7 +33,26 @@ export const ADMIN_PERMISSIONS = [
   'admin:model',
 ] as const
 
+/** Any of these opens the admin assistant; each of its tools checks its own permission. */
+export const ADMIN_AGENT_PERMISSIONS = [
+  'admin:user',
+  'admin:group',
+  'admin:role',
+  'admin:dept',
+  'admin:audit',
+  'admin:model',
+  'admin:retrieval',
+  'admin:openapi',
+  'admin:index',
+]
+
 const adminChildren: (RouteRecordRaw & MenuRoute)[] = [
+  {
+    path: '/admin/agent',
+    name: 'admin-agent',
+    component: () => import('@/views/admin/agent/AdminAgentView.vue'),
+    meta: { title: 'route.adminAgent', icon: 'MagicStick', permission: ADMIN_AGENT_PERMISSIONS },
+  },
   {
     path: '/admin/departments',
     name: 'admin-departments',

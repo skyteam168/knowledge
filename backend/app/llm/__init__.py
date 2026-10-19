@@ -7,6 +7,7 @@ from app.llm.base import (
     LLMError,
     RerankClient,
     RerankResult,
+    ToolCall,
 )
 from app.llm.gateway import LLMGateway, build_llm_gateway, build_mock_gateway
 
@@ -20,6 +21,7 @@ __all__ = [
     "LLMGateway",
     "RerankClient",
     "RerankResult",
+    "ToolCall",
     "build_llm_gateway",
     "build_mock_gateway",
 ]

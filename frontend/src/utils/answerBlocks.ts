@@ -44,7 +44,7 @@ function sanitizeEchartsOption(value: unknown): Record<string, unknown> | null {
 
 function pushMarkdown(out: AnswerBlock[], text: string): void {
   if (!text) return
-  const re = /(?:^|\n)((?:\|[^\n]*\|[ \t]*\r?\n)+)/g
+  const re = /(?:^|\n)((?:\|[^\n]*\|[ \t]*(?:\r?\n|$))+)/g
   let last = 0
   let m: RegExpExecArray | null
   while ((m = re.exec(text)) !== null) {

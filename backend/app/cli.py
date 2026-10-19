@@ -17,6 +17,10 @@ keycloak setup-idp [--providers wecom dingtalk] [--admin-user U --admin-password
                                providers, the auto-link first-login flow, relaxed user profile
                                and the ekb-backend service account roles (idempotent)
 
+agent eval [--lang zh|en|vi] [--limit N] [--no-tools] [--out report.json]
+                               score the admin assistant's intent understanding (real model)
+                               on the multilingual instruction set; prints accuracy per language
+
 users fix-duplicates [--apply]
                                find users whose usernames differ only by case (e.g. pre-created
                                `Hien` + auto-created `hien`) and move the Keycloak identity onto
@@ -30,7 +34,10 @@ import os
 import sys
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict
+from datetime import datetime
+from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -38,9 +45,10 @@ from app.core.cache import RedisCache
 from app.core.config import Settings, get_settings
 from app.core.db import create_engine, create_session_factory
 from app.core.logging import setup_logging
-from app.llm import EmbeddingSpec
+from app.llm import EmbeddingSpec, build_llm_gateway
 from app.models import KnowledgeBase
 from app.services.admin.duplicate_users import fix_case_duplicates
+from app.services.admin_agent.evaluate import load_cases, run_case, summarize
 from app.services.analytics.aggregator import AnalyticsAggregator
 from app.services.authz.cache import AuthzCache
 from app.services.indexing.consistency import ConsistencyReport
@@ -48,6 +56,7 @@ from app.services.indexing.generations import GenerationConflictError
 from app.services.indexing.rebuild import RebuildVerificationError
 from app.services.indexing.runtime import IndexingRuntime
 from app.services.keycloak_admin import BRIDGE_PROVIDERS, KeycloakAdmin, identity_provider
+from app.services.models.runtime import attach_chat_routing
 
 
 def _print(data: Any) -> None:
@@ -219,6 +228,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="do not grant manage-users to the ekb-backend service account",
     )
 
+    agent = groups.add_parser("agent", help="admin assistant")
+    agent_cmds = agent.add_subparsers(dest="command", required=True)
+    ev = agent_cmds.add_parser("eval", help="evaluate intent understanding on the case set")
+    ev.add_argument("--lang", action="append", dest="langs", help="zh / en / vi (repeatable)")
+    ev.add_argument("--limit", type=int, default=0)
+    ev.add_argument("--no-tools", action="store_true", help="JSON mode only (no function calling)")
+    ev.add_argument("--concurrency", type=int, default=4)
+    ev.add_argument("--out", help="write the full report (JSON) to this file")
+
     users = groups.add_parser("users", help="user maintenance")
     users_cmds = users.add_subparsers(dest="command", required=True)
     dups = users_cmds.add_parser("fix-duplicates")
@@ -280,10 +298,48 @@ async def _users_fix_duplicates(settings: Settings, args: argparse.Namespace) ->
     return 0
 
 
+async def _agent_eval(settings: Settings, args: argparse.Namespace) -> int:
+    today = datetime.now(ZoneInfo(settings.analytics_timezone)).date()
+    cases = [c for c in load_cases(today=today) if not args.langs or c["lang"] in args.langs]
+    if args.limit:
+        cases = cases[: args.limit]
+    engine = create_engine(settings)
+    gateway = build_llm_gateway(settings)
+    # Same chat model as the running app (model admin page routing).
+    attach_chat_routing(gateway, create_session_factory(engine), settings)
+    semaphore = asyncio.Semaphore(max(1, args.concurrency))
+
+    async def one(case: dict[str, Any]) -> Any:
+        async with semaphore:
+            return await run_case(gateway, case, native_tools=not args.no_tools, today=today)
+
+    try:
+        results = await asyncio.gather(*(one(c) for c in cases))
+    finally:
+        await engine.dispose()
+    report = {"model": gateway.chat.model, "native_tools": not args.no_tools, **summarize(results)}
+    if args.out:
+        text = json.dumps(report, ensure_ascii=False, indent=2, default=str)
+        await asyncio.to_thread(Path(args.out).write_text, text, encoding="utf-8")
+    _print({k: report[k] for k in ("model", "native_tools", "summary")})
+    for failure in report["failures"]:
+        got = failure.get("got") or {}
+        print(
+            f"FAIL {failure['id']}: intent={got.get('intent')} "
+            f"tasks={[t.get('type') for t in got.get('tasks', [])]} "
+            f"slots {failure['slots_matched']}/{failure['slots_expected']} "
+            f"invented={failure['invented']} error={failure['error']}",
+            file=sys.stderr,
+        )
+    return 0
+
+
 async def run(argv: list[str], settings: Settings, runtime: IndexingRuntime | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.group == "analytics":
         return await _analytics_refresh(settings, args)
+    if args.group == "agent":
+        return await _agent_eval(settings, args)
     if args.group == "users":
         return await _users_fix_duplicates(settings, args)
     if args.group == "keycloak":

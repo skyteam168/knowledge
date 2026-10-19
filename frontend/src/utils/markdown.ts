@@ -1,5 +1,6 @@
 import MarkdownIt, { type StateInline } from 'markdown-it'
 import { t } from '@/i18n'
+import { highlightCode } from '@/utils/highlight'
 
 export interface RenderEnv {
   /** Citation numbers that exist; others render as plain text. Omit to accept all. */
@@ -42,11 +43,14 @@ function create(): MarkdownIt {
   }
   md.renderer.rules.fence = (tokens, idx) => {
     const token = tokens[idx]
-    const lang = md.utils.escapeHtml(token.info.trim().split(/\s+/)[0] || 'text')
+    const raw = token.info.trim().split(/\s+/)[0] || ''
+    const lang = md.utils.escapeHtml(raw || 'text')
+    const highlighted = highlightCode(token.content, raw)
+    const body = highlighted ?? md.utils.escapeHtml(token.content)
     return (
       `<div class="code-block"><div class="code-head"><span class="code-lang">${lang}</span>` +
       `<button type="button" class="code-copy">${md.utils.escapeHtml(t('common.copy'))}</button></div>` +
-      `<pre><code>${md.utils.escapeHtml(token.content)}</code></pre></div>`
+      `<pre><code class="hljs">${body}</code></pre></div>`
     )
   }
   // Safe images only: https or same-origin /api| /oidc paths (presigned previews).

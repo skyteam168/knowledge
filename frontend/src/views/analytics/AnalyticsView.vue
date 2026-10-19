@@ -26,7 +26,16 @@ import { formatDateTime } from '@/utils/format'
 
 type Tab = 'usage' | 'quality' | 'latency' | 'content' | 'llm'
 
-const FEATURES = ['assistant', 'search', 'open_api', 'evaluation', 'curation', 'indexing', 'other']
+const FEATURES = [
+  'assistant',
+  'search',
+  'open_api',
+  'evaluation',
+  'curation',
+  'indexing',
+  'admin_agent',
+  'other',
+]
 const KINDS: LlmUsageKind[] = ['chat', 'embedding', 'rerank']
 const STAGES: LatencyStage[] = ['retrieval', 'rerank', 'first_token', 'total']
 const DOC_STATUSES: DocumentStatus[] = [

@@ -1,4 +1,5 @@
 from app.models.acl import ResourceAcl
+from app.models.admin_agent import AgentRun, AgentRunStatus
 from app.models.analytics import ALL_KBS, AnalyticsDaily, AnalyticsDocCitation, AnalyticsTopQuestion
 from app.models.audit import AuditLog
 from app.models.base import Base
@@ -95,6 +96,8 @@ __all__ = [
     "LOCAL_SOURCE",
     "NO_USER",
     "SERVICE_USER_PREFIX",
+    "AgentRun",
+    "AgentRunStatus",
     "AnalyticsDaily",
     "AnalyticsDocCitation",
     "AnalyticsLlmUsage",
@@ -120,7 +123,6 @@ __all__ = [
     "DocumentPageAsset",
     "DocumentStatus",
     "DocumentVersion",
-    "PageAssetKind",
     "EvalCase",
     "EvalCaseSource",
     "EvalDataset",
@@ -161,6 +163,7 @@ __all__ = [
     "Organization",
     "OutboxEvent",
     "OutboxStatus",
+    "PageAssetKind",
     "Permission",
     "QaTrace",
     "ResourceAcl",

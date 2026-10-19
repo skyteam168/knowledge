@@ -34,6 +34,19 @@ describe('splitAnswerBlocks', () => {
     expect(blocks[1]).toMatchObject({ type: 'table', headers: ['项', '值'] })
   })
 
+  it('keeps the last row of a table that ends the answer', () => {
+    const blocks = splitAnswerBlocks(
+      '访问情况：\n\n| 类型 | 名称 |\n|---|---|\n| user | a |\n| group | b |',
+    )
+    expect(blocks.map((b) => b.type)).toEqual(['markdown', 'table'])
+    expect(blocks[1]).toMatchObject({
+      rows: [
+        ['user', 'a'],
+        ['group', 'b'],
+      ],
+    })
+  })
+
   it('parses echarts and mermaid fences', () => {
     const blocks = splitAnswerBlocks(`\`\`\`echarts
 {"title":{"text":"产量"},"series":[{"type":"bar","data":[1,2]}]}

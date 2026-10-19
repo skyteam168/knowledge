@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.v1 import (
+    admin_agent,
     analytics,
     audit,
     auth,
@@ -50,3 +51,4 @@ api_router.include_router(evaluation.router)
 api_router.include_router(models_admin.router)
 api_router.include_router(open_admin.router)
 api_router.include_router(open_api.router)
+api_router.include_router(admin_agent.router)

@@ -9,7 +9,14 @@ from typing import Any
 
 import httpx
 
-from app.llm.base import ChatMessage, ChatResult, EmbeddingSpec, LLMError, RerankResult
+from app.llm.base import (
+    ChatMessage,
+    ChatResult,
+    EmbeddingSpec,
+    LLMError,
+    RerankResult,
+    ToolCall,
+)
 from app.llm.usage import report_usage
 
 logger = logging.getLogger(__name__)
@@ -251,6 +258,14 @@ class OpenAIChatClient:
         )
         try:
             choice = data["choices"][0]
+            calls = tuple(
+                ToolCall(
+                    name=str(c["function"]["name"]),
+                    arguments=str(c["function"].get("arguments") or "{}"),
+                )
+                for c in (choice["message"].get("tool_calls") or [])
+                if isinstance(c, dict) and isinstance(c.get("function"), dict)
+            )
             result = ChatResult(
                 content=choice["message"].get("content") or "",
                 model=data.get("model", self._model),
@@ -258,6 +273,7 @@ class OpenAIChatClient:
                 usage={
                     k: int(v) for k, v in (data.get("usage") or {}).items() if isinstance(v, int)
                 },
+                tool_calls=calls,
             )
         except (KeyError, IndexError, TypeError) as exc:
             raise LLMError("/chat/completions: malformed response") from exc

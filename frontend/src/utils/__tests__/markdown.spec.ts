@@ -37,6 +37,22 @@ describe('code blocks', () => {
     expect(html).toContain('&lt;script&gt;')
   })
 
+  it('highlights known languages and keeps the code escaped', () => {
+    const html = renderMarkdown('```python\ndef f(x):\n    return "<b>"\n```')
+    expect(html).toContain('<code class="hljs">')
+    expect(html).toContain('<span class="hljs-keyword">def</span>')
+    expect(html).toContain('&lt;b&gt;')
+    expect(html).not.toContain('<b>')
+    const sql = renderMarkdown('```sql\nSELECT name FROM users WHERE id = 1\n```')
+    expect(sql).toContain('<span class="hljs-keyword">SELECT</span>')
+  })
+
+  it('leaves unknown languages plain', () => {
+    const html = renderMarkdown('```brainfuck\n++[>+<-]\n```')
+    expect(html).not.toContain('hljs-')
+    expect(html).toContain('++[&gt;+&lt;-]')
+  })
+
   it('finds the code of a clicked copy button', () => {
     const root = document.createElement('div')
     root.innerHTML = renderMarkdown('```sh\necho [1]\n```')

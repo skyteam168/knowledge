@@ -28,6 +28,7 @@ import {
   Guide,
   Key,
   Lock,
+  MagicStick,
   Monitor,
   Moon,
   Notebook,
@@ -85,6 +86,7 @@ const iconMap: Record<string, Component> = {
   Files,
   Key,
   TrendCharts,
+  MagicStick,
 }
 
 const route = useRoute()
