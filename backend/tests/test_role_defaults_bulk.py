@@ -79,8 +79,8 @@ def erin(monkeypatch: pytest.MonkeyPatch) -> None:
 async def test_first_login_gets_default_roles(erin: None, api: httpx.AsyncClient) -> None:
     await api.get("/api/v1/auth/me", headers=ALICE)
     # No roles in the token (e.g. an AD account): the default roles apply.
-    erin = (await api.get("/api/v1/auth/me", headers=auth("erin-token"))).json()
-    assert "chat:use" in erin["permissions"]
+    me = (await api.get("/api/v1/auth/me", headers=auth("erin-token"))).json()
+    assert "chat:use" in me["permissions"]
     assert await _user_roles(api, "erin") == {"kb_viewer"}
     # Roles mapped from the token take precedence.
     await api.get("/api/v1/auth/me", headers=auth("bob-token"))

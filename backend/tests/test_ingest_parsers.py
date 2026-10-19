@@ -208,7 +208,7 @@ def test_soffice_runs_with_a_private_profile(monkeypatch: pytest.MonkeyPatch) ->
         return subprocess.CompletedProcess(cmd, 0, b"", b"")
 
     monkeypatch.setattr(office_convert, "resolve_soffice", lambda _=None: "/usr/bin/soffice")
-    monkeypatch.setattr(office_convert.subprocess, "run", fake_run)
+    monkeypatch.setattr("app.services.ingest.office_convert.subprocess.run", fake_run)
 
     out = office_convert.convert_with_soffice(b"x", source_suffix=".doc", to_format="docx")
 

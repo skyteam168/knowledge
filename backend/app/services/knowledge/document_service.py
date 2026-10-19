@@ -425,9 +425,7 @@ class DocumentService(BaseService):
     async def download_url(self, document_id: str) -> PreviewOut:
         return await self._file_url(document_id, attachment=True)
 
-    async def page_asset_url(
-        self, document_id: str, *, kind: str, page_index: int
-    ) -> PreviewOut:
+    async def page_asset_url(self, document_id: str, *, kind: str, page_index: int) -> PreviewOut:
         if kind not in {PageAssetKind.PAGE.value, PageAssetKind.SLIDE.value}:
             raise NotFoundError("Page asset not found")
         doc, _, _ = await self._doc(document_id, AclPermission.READ)
@@ -453,9 +451,7 @@ class DocumentService(BaseService):
             None,
             {"kb_id": doc.kb_id, "version": doc.version, "kind": kind, "page_index": page_index},
         )
-        return PreviewOut(
-            url=url, filename=filename, mime_type=asset.mime_type, expires_in=expires
-        )
+        return PreviewOut(url=url, filename=filename, mime_type=asset.mime_type, expires_in=expires)
 
     async def _file_url(self, document_id: str, *, attachment: bool) -> PreviewOut:
         doc, _, _ = await self._doc(document_id, AclPermission.READ)

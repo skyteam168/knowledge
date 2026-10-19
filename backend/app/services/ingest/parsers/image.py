@@ -38,9 +38,7 @@ class ImageParser:
         rgb = image.convert("RGB")
         engine = self._engine()
         if engine is None:
-            raise ParseError(
-                "Image OCR requires the 'ocr' package extra (rapidocr-onnxruntime)."
-            )
+            raise ParseError("Image OCR requires the 'ocr' package extra (rapidocr-onnxruntime).")
         try:
             lines = engine.recognize(rgb)
         except Exception as exc:

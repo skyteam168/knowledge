@@ -69,9 +69,7 @@ class WordParser:
             parsed_doc.metadata.update(meta)
         return parsed_doc
 
-    def _normalize(
-        self, data: bytes, filename: str
-    ) -> tuple[bytes, str, dict[str, Any]]:
+    def _normalize(self, data: bytes, filename: str) -> tuple[bytes, str, dict[str, Any]]:
         lower = filename.lower()
         legacy = lower.endswith(".doc") and not lower.endswith(".docx")
         ole2 = data.startswith(_OLE2)

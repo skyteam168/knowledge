@@ -1,7 +1,7 @@
 """Token metering: provider usage capture, estimates, attribution and the usage dashboard."""
 
 import json
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncGenerator, AsyncIterator, Sequence
 from typing import Any
 
 import httpx
@@ -150,6 +150,7 @@ async def test_cancelled_stream_is_recorded() -> None:
     with usage_scope(org_id="o1"):
         stream = gateway(OpenAIChatClient(caller(handler), "m"), recorder).stream(MESSAGES)
         assert await anext(stream) == "一"
+        assert isinstance(stream, AsyncGenerator)
         await stream.aclose()
     (event,) = recorder.events
     assert event.status == "cancelled" and event.estimated

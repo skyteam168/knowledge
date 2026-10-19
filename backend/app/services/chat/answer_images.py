@@ -76,9 +76,7 @@ async def attach_material_images(
         if not indices:
             continue
         indices = indices[:remaining]
-        assets = await repo.list_by_indices(
-            ev.document.id, ev.document.version, kind, indices
-        )
+        assets = await repo.list_by_indices(ev.document.id, ev.document.version, kind, indices)
         by_index = {a.page_index: a for a in assets}
         images: list[MaterialImage] = []
         for index in indices:

@@ -1,6 +1,7 @@
 import asyncio
 from collections.abc import Sequence
 from datetime import UTC, datetime
+from typing import Any
 
 import pytest
 
@@ -280,7 +281,8 @@ async def test_query_embedding_is_cached(llm_gateway: LLMGateway) -> None:
     spec = llm_gateway.default_embedding
     await backends.vector.ensure_collection("kb_chunks_v1", spec.dim)
     pipe = RetrievalPipeline.build(backends, llm_gateway, MemoryCache())
-    embedder = llm_gateway.embedding(spec).inner
+    metered: Any = llm_gateway.embedding(spec)
+    embedder = metered.inner
     assert isinstance(embedder, MockEmbeddingClient)
     cfg = config(sparse={"enabled": False}, cache={"result_ttl_seconds": 0})
     for _ in range(2):

@@ -211,7 +211,8 @@ async def test_acl_change_updates_payload_without_reembedding(
     kb = await create_kb(api, "权限库")
     doc = await ingest(api, pipeline, kb["id"])
     await drain(indexing)
-    embedder = indexing.gateway.embedding(indexing.gateway.default_embedding).inner
+    metered: Any = indexing.gateway.embedding(indexing.gateway.default_embedding)
+    embedder = metered.inner
     assert isinstance(embedder, MockEmbeddingClient)
     calls = len(embedder.calls)
 
@@ -312,7 +313,8 @@ class HookedEmbedding:
 
 def mock_embedder(indexing: IndexingRuntime) -> tuple[EmbeddingSpec, MockEmbeddingClient]:
     spec = indexing.gateway.default_embedding
-    inner = indexing.gateway.embedding(spec).inner
+    metered: Any = indexing.gateway.embedding(spec)
+    inner = metered.inner
     assert isinstance(inner, MockEmbeddingClient)
     return spec, inner
 

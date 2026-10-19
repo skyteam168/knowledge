@@ -281,7 +281,8 @@ async def test_routed_client_keeps_running_on_errors_and_in_flight_streams() -> 
         state["loads"] += 1
         if state["fail"]:
             raise RuntimeError("db down")
-        return state["route"]
+        route: ChatRoute | None = state["route"]
+        return route
 
     routed = RoutedChatClient(
         FakeChat("default"), loader, lambda r: FakeChat(r.primary.model), refresh_seconds=3600

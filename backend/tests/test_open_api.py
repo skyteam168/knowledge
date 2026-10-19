@@ -354,7 +354,7 @@ async def test_rate_limit_holds_across_minute_boundary(
     client = ApiClient(id="c1", org_id="o", rate_limit_per_minute=3, daily_quota=0)
     cache = MemoryCache()
     clock = {"now": 60 * 1000 + 58.0}
-    monkeypatch.setattr(open_auth.time, "time", lambda: clock["now"])
+    monkeypatch.setattr("app.services.open_api.auth.time.time", lambda: clock["now"])
     outcomes = []
     for t in [58.0, 58.5, 59.0, 60.2, 60.4, 60.6]:
         clock["now"] = 60 * 1000 + t
