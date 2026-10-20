@@ -1,0 +1,6 @@
+{"id": "zh-annual-leave", "lang": "zh", "query": "年假有几天", "expected_document_ids": ["doc-leave-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5}
+{"id": "zh-leave-apply", "lang": "zh", "query": "年假怎么申请", "expected_document_ids": ["doc-leave-policy"], "min_recall_at_5": 1.0, "min_mrr": 1.0}
+{"id": "en-pto-days", "lang": "en", "query": "how many PTO days per year", "expected_document_ids": ["doc-leave-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5}
+{"id": "en-expense", "lang": "en", "query": "expense reimbursement process", "expected_document_ids": ["doc-expense-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5}
+{"id": "vi-leave-days", "lang": "vi", "query": "bao nhieu ngay nghi phep nam", "expected_document_ids": ["doc-leave-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5}
+{"id": "vi-onboarding", "lang": "vi", "query": "quy trinh nhan su moi", "expected_document_ids": ["doc-onboarding"], "min_recall_at_5": 1.0, "min_mrr": 0.5}

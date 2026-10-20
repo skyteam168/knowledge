@@ -244,6 +244,11 @@ class Settings(BaseSettings):
     retention_llm_usage_days: int = 365
     # Audit logs are often subject to compliance rules: kept unless configured.
     retention_audit_days: int = 0
+    # Soft-deleted documents: purge MinIO blobs (and optionally PG rows) after N days; 0 = keep.
+    retention_deleted_document_days: int = 30
+    # When true, also DELETE the document row (CASCADE chunks/versions/assets). Default false
+    # keeps a tombstone for audit / accidental restore of metadata.
+    retention_purge_deleted_document_rows: bool = False
     retention_batch_size: int = 5000
     retention_check_interval_seconds: float = 86400.0
 

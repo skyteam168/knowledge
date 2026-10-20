@@ -14,7 +14,32 @@ class Route(StrEnum):
     SPARSE = "sparse"
 
 
-SPARSE_FIELDS = ("title", "heading_path", "content")
+# Root fields use IK (Chinese); `.en` / `.vi` multi-fields cover English / Vietnamese BM25.
+SPARSE_FIELDS = (
+    "title",
+    "title.en",
+    "title.vi",
+    "heading_path",
+    "heading_path.en",
+    "heading_path.vi",
+    "content",
+    "content.en",
+    "content.vi",
+)
+
+
+def default_sparse_boosts() -> dict[str, float]:
+    return {
+        "title": 3.0,
+        "title.en": 2.4,
+        "title.vi": 2.4,
+        "heading_path": 2.0,
+        "heading_path.en": 1.6,
+        "heading_path.vi": 1.6,
+        "content": 1.0,
+        "content.en": 0.9,
+        "content.vi": 0.9,
+    }
 
 
 class _Strict(BaseModel):
@@ -35,9 +60,7 @@ class DenseConfig(_Strict):
 class SparseConfig(_Strict):
     enabled: bool = True
     top_k: int = Field(default=40, ge=1, le=200)
-    field_boosts: dict[str, float] = Field(
-        default_factory=lambda: {"title": 3.0, "heading_path": 2.0, "content": 1.0}
-    )
+    field_boosts: dict[str, float] = Field(default_factory=default_sparse_boosts)
     # Extra score for exact phrase hits of quoted text / codes (e.g. "HR-2024-001").
     phrase_boost: float = Field(default=2.0, ge=0, le=100)
     minimum_should_match: str | None = Field(default=None, max_length=16)

@@ -10,40 +10,39 @@
 
 ```bash
 cd backend
-.venv/Scripts/python.exe -m pytest tests/test_document_lifecycle.py -q
-# 3 passed
-
 .venv/Scripts/python.exe -m pytest \
-  tests/test_document_lifecycle.py \
-  tests/test_document_protection.py \
-  tests/test_search_acl.py \
-  tests/test_acl_regression.py \
-  tests/test_document_versions.py \
-  tests/test_open_api.py -q
-# 39 passed
+  tests/test_document_purge.py \
+  tests/test_retrieval_gold.py \
+  tests/test_index_backends.py \
+  tests/test_retention.py -q
+# 14 passed
 
-.venv/Scripts/ruff.exe check <changed app files>
+.venv/Scripts/python.exe -m pytest -m gold -q
+# gold gate green
+
+.venv/Scripts/ruff.exe check <changed app/test files>
 # All checks passed
 ```
 
 | 套件 | 通过 | 失败 | 说明 |
 | --- | --- | --- | --- |
-| `test_document_lifecycle` | 3 | 0 | 生效窗口、状态机、hydrate 过滤 |
-| 保护 / ACL / 版本 / Open API 回归 | 36 | 0 | 与上表合计 39 |
-| 全量 pytest (~369) | — | — | **本阶段未完整跑完** → `unverifiable` |
+| `test_document_purge` + retention | 含软删对象清理 | 0 | MinIO + chunk；墓碑保留 |
+| `test_retrieval_gold` (`-m gold`) | 3 | 0 | JSONL 金标门禁 + 多语 sparse 字段 |
+| `test_index_backends` OpenSearch mapping | 含 `.en`/`.vi` | 0 | 分析器断言 |
+| 全量 pytest | — | — | **本阶段未完整跑完** → `unverifiable` |
 | 前端 vitest | — | — | **未执行** |
 | 生产备份恢复演练 | — | — | **未执行** |
 
 ---
 
-## 2. 安全相关（本阶段）
+## 2. 安全 / 运维相关（本阶段）
 
 | 项 | 结果 |
 | --- | --- |
-| 过期 / 草稿文档不进 hydrate | 通过（新测） |
-| 水印页 ACL 重验代码路径 | 已实现；专用「撤销后拒访」API 测待补 |
-| Open API 对 confidential+ 强制截断导出 | 已实现；依赖既有 open_api 套件回归 |
-| 流式中途 ACL 撤销 | 仍为已知窗口，未测 |
+| 软删超期 MinIO / chunk 清理 | 通过；默认 30 天；可选硬删行 |
+| 多语 BM25 mapping | 代码落地；**生产需 `index rebuild`** |
+| 金标门禁 | 单元门禁通过；线上召回仍依赖真实索引评测 |
+| 过期 / 草稿文档不进 hydrate | 前期 P0 已测 |
 
 ---
 
@@ -51,8 +50,9 @@ cd backend
 
 **有条件建议**：单组织内网试运行可以，须先：
 
-1. `alembic upgrade head`（含 `0021` lifecycle/classification）  
-2. 重建或依赖 hydrate 过滤（无需强制全量 rebuild，但建议抽检过期文档）  
-3. 确认备份异地与告警仍为待办（见 `docs/operations/backup-recovery.md`）
+1. `alembic upgrade head`（含 lifecycle / gap SLA 迁移）  
+2. OpenSearch **全量 rebuild**（多语 multi-field）  
+3. 确认 `RETENTION_DELETED_DOCUMENT_DAYS` 与备份窗口协调（见 `docs/ops/backup-restore.md`）  
+4. 备份异地与告警仍为待办（见 `docs/operations/backup-recovery.md`）
 
-正式多工厂 / 强制审核制度库上线前，完成全量 pytest、vitest、备份演练与 P1 僵尸任务/告警闭环。
+正式多工厂 / 强制审核制度库上线前，完成全量 pytest、vitest、备份演练。

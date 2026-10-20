@@ -14,17 +14,26 @@ TERMS_BATCH = 1000
 
 INDEX_ANALYZER = "ekb_index"
 SEARCH_ANALYZER = "ekb_search"
+# Secondary language fields (multi-field). Primary stays IK for Chinese; English uses the
+# built-in stemmer; Vietnamese uses standard+lowercase until a dedicated plugin is installed.
+EN_ANALYZER = "ekb_en"
+VI_ANALYZER = "ekb_vi"
 
 
 def _text(with_raw: bool = False) -> dict[str, Any]:
-    field: dict[str, Any] = {
+    """Chinese IK on the root field + English / Vietnamese subfields for multilingual BM25."""
+    fields: dict[str, Any] = {
+        "en": {"type": "text", "analyzer": EN_ANALYZER},
+        "vi": {"type": "text", "analyzer": VI_ANALYZER},
+    }
+    if with_raw:
+        fields["raw"] = {"type": "keyword", "ignore_above": 1024}
+    return {
         "type": "text",
         "analyzer": INDEX_ANALYZER,
         "search_analyzer": SEARCH_ANALYZER,
+        "fields": fields,
     }
-    if with_raw:
-        field["fields"] = {"raw": {"type": "keyword", "ignore_above": 1024}}
-    return field
 
 
 def mapping_properties() -> dict[str, Any]:
@@ -79,6 +88,13 @@ def index_template(alias: str, *, shards: int, replicas: int, synonyms_path: str
                             "type": "custom",
                             "tokenizer": "ik_smart",
                             "filter": ["lowercase", "ekb_synonym"],
+                        },
+                        EN_ANALYZER: {"type": "english"},
+                        # Latin-script Vietnamese: tokenise on whitespace/punctuation.
+                        VI_ANALYZER: {
+                            "type": "custom",
+                            "tokenizer": "standard",
+                            "filter": ["lowercase"],
                         },
                     },
                 },

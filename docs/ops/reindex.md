@@ -29,6 +29,7 @@ $DC exec backend python -m app.cli index generations     # 查看所有代及状
 | Outbox 出现死信（dead） | 查看错误原因并修复依赖后，在“索引同步”页“重试全部死信” |
 | Qdrant / OpenSearch 数据丢失或损坏 | 全量重建（第 4 节） |
 | 修改了 OpenSearch mapping / 分词器（IK 词典除外） | 全量重建 |
+| 新增多语种 BM25 子字段（`title/content/heading_path` 的 `.en` / `.vi`） | **全量重建**（mapping 不可原地改；检索默认已对 `.en`/`.vi` 加权） |
 | 只修改了同义词词典 | `index reload-synonyms`，无需重建（第 6 节） |
 | 更换 embedding 模型或维度 | 见 [更换 embedding 模型](embedding-migration.md) |
 | 修改了切分参数（`CHUNK_*`）或解析器 | 需要重新解析文档（第 5 节），重建索引不会改变 chunk |

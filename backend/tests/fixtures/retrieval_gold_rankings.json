@@ -1,0 +1,8 @@
+{
+  "zh-annual-leave": ["doc-leave-policy", "doc-expense-policy", "doc-onboarding"],
+  "zh-leave-apply": ["doc-leave-policy", "doc-onboarding"],
+  "en-pto-days": ["doc-expense-policy", "doc-leave-policy", "doc-onboarding"],
+  "en-expense": ["doc-expense-policy", "doc-leave-policy"],
+  "vi-leave-days": ["doc-onboarding", "doc-leave-policy", "doc-expense-policy"],
+  "vi-onboarding": ["doc-onboarding", "doc-leave-policy"]
+}

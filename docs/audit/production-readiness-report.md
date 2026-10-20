@@ -15,7 +15,7 @@
 | 文档业务生命周期（草稿→废止） | **低** | 仅有入库状态机；`effective_*` 不参与检索过滤（缺陷） |
 | 数据分类 / 外发模型策略 | 低 | 有防护字段与可选 PII，无密级模型 |
 | 灾备与告警闭环 | 中低 | 有日备脚本与手册；无 PITR；Alertmanager 缺失；server 栈无观测 profile |
-| RAG 质控与评测平台 | 中高 | 拒答/引用/RRF 有测；金标门禁与多语种 BM25 不足 |
+| RAG 质控与评测平台 | 中高 | 拒答/引用/RRF 有测；金标门禁（`pytest -m gold`）与多语 BM25 子字段已落地，生产需 rebuild |
 
 **生产试运行建议**：可在受控内网试运行（单一组织、人工运维），但进入多工厂 / 正式制度库前须完成下文 **P0** 项。
 
@@ -95,7 +95,7 @@ flowchart TB
 | `preview-text` | 有 `_doc(READ)`，缺 ACL 回归用例 |
 | API Key 轮换 | create+revoke，无单接口 rotate |
 | Chat 流式中途撤销权限 | Evidence ACL 仅生成前一次 |
-| 多语种 BM25 | OpenSearch 仅 IK |
+| 多语种 BM25 | IK 主字段 + `.en`/`.vi` multi-field（越文暂用 standard；需全量 rebuild） |
 | Embedding/Rerank failover | 无第二端点；rerank 可 degrade |
 | Rebuild HTTP API | 仅 CLI |
 | Server 部署观测 | `prod.server.yml` 无 prometheus profile |
@@ -119,7 +119,7 @@ flowchart TB
 | 文档密级 / 分类 ABAC | 无 classification 字段 |
 | 显式 ACL DENY | 仅 allow-list |
 | 索引任务 PARSING 僵尸 watchdog | 崩溃后可永久卡住 |
-| 软删后 MinIO/chunk 物理清理 | 索引已清，对象残留 |
+| 软删后 MinIO/chunk 物理清理 | `RETENTION_DELETED_DOCUMENT_DAYS`（默认 30）日批清理对象与 chunk；可选硬删行 |
 | Alertmanager 告警投递 | 仅有 `alerts.yml` 规则 |
 | PITR / 异地备份自动化 | 文档建议未落地；日 dump ≈ RPO 24h |
 
@@ -179,7 +179,7 @@ flowchart TB
 
 ### P1
 
-Gap 分派 SLA、评测金标门禁、多语种分析器、僵尸任务 watchdog、对象清理。
+Gap 分派 SLA、评测金标门禁、多语种分析器、僵尸任务 watchdog、对象清理——**本批已落地代码与单测**；生产需 OpenSearch 全量 rebuild + 确认 retention 配置。
 
 ### P2
 

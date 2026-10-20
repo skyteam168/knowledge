@@ -142,9 +142,13 @@ def test_opensearch_template_uses_ik_and_reloadable_synonyms() -> None:
     assert "ekb_synonym" not in analysis["analyzer"]["ekb_index"]["filter"]
     assert analysis["filter"]["ekb_synonym"]["updateable"] is True
     props = body["template"]["mappings"]["properties"]
+    assert analysis["analyzer"]["ekb_en"]["type"] == "english"
+    assert analysis["analyzer"]["ekb_vi"]["tokenizer"] == "standard"
     for field in ("content", "title", "heading_path"):
         assert props[field]["analyzer"] == "ekb_index"
         assert props[field]["search_analyzer"] == "ekb_search"
+        assert props[field]["fields"]["en"]["analyzer"] == "ekb_en"
+        assert props[field]["fields"]["vi"]["analyzer"] == "ekb_vi"
     for field in ("org_id", "kb_id", "document_id", "acl_read_principals", "tags"):
         assert props[field] == {"type": "keyword"}
     assert props["created_at"] == {"type": "date"}

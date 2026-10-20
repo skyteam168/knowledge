@@ -125,7 +125,7 @@ $DC exec -T opensearch curl -s -XPUT "localhost:9200/_snapshot/ekb/snap-$(date +
 
 ### 3.2 单个文档 / 知识库误删
 
-知识库和文档的删除是软删除（`deleted_at`）+ outbox 事件（删除索引条目）。PG 中记录还在时，清空 `deleted_at` 后执行第 4 步即可；记录已被清理时：
+知识库和文档的删除是软删除（`deleted_at`）+ outbox 事件（删除索引条目）。日批 retention（`RETENTION_DELETED_DOCUMENT_DAYS`，默认 30）会清理 MinIO 对象与 chunk 文本，并清空 `minio_key`（可选用 `RETENTION_PURGE_DELETED_DOCUMENT_ROWS=true` 硬删行）。**在清理窗口内**，清空 `deleted_at` 后执行第 4 步即可恢复；对象已被 purge 时：
 
 1. 把备份恢复到临时库：`createdb ekb_restore && pg_restore -d ekb_restore ...`。
 2. 从临时库导出相关行（`knowledge_bases`、`documents`、`document_versions`、`chunks`、`resource_acl` 等，按 `kb_id` / `document_id` 过滤），导入生产库。

@@ -9,6 +9,7 @@ from sqlalchemy import ColumnElement, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import Settings
+from app.core.storage import ObjectStorage
 from app.models import (
     ApiCallLog,
     AuditLog,
@@ -19,6 +20,7 @@ from app.models import (
     RetrievalTrace,
 )
 from app.models.base import utcnow
+from app.services.maintenance.document_purge import SoftDeletedDocumentPurger
 
 logger = logging.getLogger(__name__)
 
@@ -38,10 +40,14 @@ class RetentionResult:
 
 class RetentionService:
     def __init__(
-        self, session_factory: async_sessionmaker[AsyncSession], settings: Settings
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        settings: Settings,
+        storage: ObjectStorage | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.settings = settings
+        self.storage = storage
 
     def rules(self) -> list[RetentionRule]:
         s = self.settings
@@ -68,6 +74,14 @@ class RetentionService:
                 continue
             cutoff = now - timedelta(days=rule.days)
             result.deleted[rule.name] = await self._purge(rule, cutoff)
+        if self.storage is not None and self.settings.retention_deleted_document_days > 0:
+            purged = await SoftDeletedDocumentPurger(
+                self.session_factory, self.storage, self.settings
+            ).run_once(now)
+            result.deleted["soft_deleted_documents"] = purged.documents
+            result.deleted["soft_deleted_objects"] = purged.objects
+            if purged.rows:
+                result.deleted["soft_deleted_rows"] = purged.rows
         logger.info("retention_purged", extra={"deleted": result.deleted})
         return result
 
