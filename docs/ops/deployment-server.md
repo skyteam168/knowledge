@@ -234,10 +234,12 @@ $DC logs --tail=100 keycloak | grep -E "LOGIN_ERROR|error="
 ```bash
 cd /www/wwwroot/flyknit-knowledge/deploy
 grep ^METRICS_TOKEN= .env.prod.server | cut -d= -f2- > observability/metrics-token
-# 在 .env.prod.server 中设置 GRAFANA_ADMIN_PASSWORD；可选 ALERTMANAGER_WEBHOOK_URL
+# 启用前建议在 .env.prod.server 设置 GRAFANA_ADMIN_PASSWORD（未设则默认为 changeme）
+# 可选：ALERTMANAGER_WEBHOOK_URL
 DC="docker compose -f docker-compose.prod.server.yml --env-file .env.prod.server"
 $DC --profile observability up -d
 ```
+
 
 - Prometheus `127.0.0.1:9090`、Alertmanager `127.0.0.1:9093`、Grafana `127.0.0.1:3001`、Jaeger `127.0.0.1:16686`（仅本机或经 `OBS_BIND`）。
 - 备份容器会把成功/失败指标写到 `$BACKUP_DIR/metrics/`，由 node-exporter 暴露；规则见 `observability/alerts.yml` 的 `BackupJobFailed` / `BackupJobStale`。
