@@ -56,6 +56,8 @@ def _gap_snapshot(gap: KnowledgeGap) -> dict[str, Any]:
         "status": gap.status,
         "kb_id": gap.kb_id,
         "assignee_id": gap.assignee_id,
+        "priority": gap.priority,
+        "due_at": gap.due_at,
         "duplicate_of_id": gap.duplicate_of_id,
         "resolution": gap.resolution,
     }
@@ -115,6 +117,8 @@ class GapService(BaseService):
                     cluster_size=cluster.gap_count if cluster else None,
                     top_score=g.top_score,
                     assignee=users.get(g.assignee_id or ""),
+                    priority=g.priority or "normal",  # type: ignore[arg-type]
+                    due_at=g.due_at,
                     user_id=g.user_id,
                     conversation_id=g.conversation_id,
                     message_id=g.message_id,
@@ -356,6 +360,10 @@ class GapService(BaseService):
                     link=f"/curation/gaps/{gap.id}",
                 )
             await refresh_cluster_stats(self.session, gap.cluster_id)
+        if "priority" in fields and data.priority is not None:
+            gap.priority = data.priority
+        if "due_at" in fields:
+            gap.due_at = data.due_at
         await self.session.flush()
         await self._record("gap.update", gap, before)
         (out,) = await self._outs([gap])

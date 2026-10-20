@@ -21,6 +21,9 @@ class UserRef(BaseModel):
 # ---- gaps ------------------------------------------------------------------------------
 
 
+GapPriorityName = Literal["low", "normal", "high", "urgent"]
+
+
 class GapOut(BaseModel):
     id: str
     gap_type: GapType
@@ -38,6 +41,8 @@ class GapOut(BaseModel):
     cluster_size: int | None = None
     top_score: float | None
     assignee: UserRef | None = None
+    priority: GapPriorityName = "normal"
+    due_at: datetime | None = None
     user_id: str | None
     conversation_id: str | None
     message_id: str | None
@@ -100,6 +105,8 @@ class GapDetailOut(GapOut):
 class GapPatch(BaseModel):
     assignee_id: str | None = Field(default=None, max_length=32)
     kb_id: str | None = Field(default=None, max_length=32)
+    priority: GapPriorityName | None = None
+    due_at: datetime | None = None
 
 
 class GapLinkDocumentsIn(BaseModel):

@@ -63,6 +63,13 @@ class GapStatus(StrEnum):
     DUPLICATE = "duplicate"
 
 
+class GapPriority(StrEnum):
+    LOW = "low"
+    NORMAL = "normal"
+    HIGH = "high"
+    URGENT = "urgent"
+
+
 ACTIVE_GAP_STATUSES = (GapStatus.OPEN.value, GapStatus.IN_REVIEW.value)
 
 
@@ -145,6 +152,10 @@ class KnowledgeGap(IdMixin, TenantMixin, TimestampMixin, Base):
     occurrences: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     last_seen_at: Mapped[datetime] = created_at_column()
     assignee_id: Mapped[str | None] = mapped_column(String(32), index=True)
+    priority: Mapped[str] = mapped_column(
+        String(16), default=GapPriority.NORMAL.value, nullable=False
+    )
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     duplicate_of_id: Mapped[str | None] = mapped_column(String(32), index=True)
     # {action: ko | retrieval_issue | rejected | duplicate, ko_id, document_ids, note, ...}
     resolution: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict, nullable=False)

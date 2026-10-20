@@ -5,12 +5,14 @@ import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import Settings
+from app.models import ACTIVE_GAP_STATUSES, KnowledgeGap
 from app.models.base import utcnow
 from app.repositories.curation_repo import KnowledgeObjectRepository
-from app.services.curation.common import system_audit_ctx
+from app.services.curation.common import RESOURCE_GAP, system_audit_ctx
 from app.services.curation.lifecycle import KoLifecycle, ko_link
 from app.services.curation.notifications import NotificationKind, notify
 from app.services.knowledge.access import RESOURCE_DOCUMENT, RESOURCE_KO
@@ -36,6 +38,7 @@ class ExpiryResult:
     ko_reminders: int = 0
     document_reminders: int = 0
     review_reminders: int = 0
+    gap_overdue: int = 0
 
 
 class ExpiryMonitor:
@@ -113,6 +116,34 @@ class ExpiryMonitor:
                     dedupe_key=f"doc-review:{doc.id}:{due:%Y%m%d}:{stage}",
                 )
                 doc.review_reminder = stage
+
+            overdue_gaps = (
+                await session.execute(
+                    select(KnowledgeGap)
+                    .where(
+                        KnowledgeGap.status.in_(list(ACTIVE_GAP_STATUSES)),
+                        KnowledgeGap.due_at.is_not(None),
+                        KnowledgeGap.due_at <= now,
+                        KnowledgeGap.assignee_id.is_not(None),
+                    )
+                    .order_by(KnowledgeGap.due_at)
+                    .limit(BATCH)
+                )
+            ).scalars()
+            for gap in overdue_gaps:
+                assert gap.due_at is not None
+                result.gap_overdue += await notify(
+                    session,
+                    gap.org_id,
+                    [gap.assignee_id],
+                    kind=NotificationKind.GAP_OVERDUE,
+                    title=f"知识缺口已逾期：{gap.query[:80]}",
+                    body=f"处理时限 {_day(_aware(gap.due_at))}，请尽快补齐或关闭。",
+                    resource_type=RESOURCE_GAP,
+                    resource_id=gap.id,
+                    link=f"/curation/gaps/{gap.id}",
+                    dedupe_key=f"gap-due:{gap.id}:{gap.due_at:%Y%m%d}",
+                )
             await session.commit()
         if any(result.__dict__.values()):
             logger.info("expiry_checked", extra=result.__dict__)

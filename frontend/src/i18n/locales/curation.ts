@@ -67,6 +67,8 @@ export default {
       version: '版本',
       owner: '负责人',
       assignee: '负责人',
+      priority: '优先级',
+      dueAt: '处理时限',
       source: '来源',
       document: '文档',
       note: '备注',
@@ -76,6 +78,12 @@ export default {
       reject: '驳回',
       rejected: '已驳回',
       query: '查询',
+    },
+    priority: {
+      low: '低',
+      normal: '普通',
+      high: '高',
+      urgent: '紧急',
     },
     gapBoard: {
       statOpen: '待处理',
@@ -328,6 +336,8 @@ export default {
       version: 'Version',
       owner: 'Owner',
       assignee: 'Assignee',
+      priority: 'Priority',
+      dueAt: 'Due by',
       source: 'Source',
       document: 'Document',
       note: 'Note',
@@ -337,6 +347,12 @@ export default {
       reject: 'Reject',
       rejected: 'Rejected',
       query: 'Search',
+    },
+    priority: {
+      low: 'Low',
+      normal: 'Normal',
+      high: 'High',
+      urgent: 'Urgent',
     },
     gapBoard: {
       statOpen: 'Open',

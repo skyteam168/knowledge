@@ -46,6 +46,8 @@ async function load(): Promise<void> {
     gap.value = await getGap(props.gapId)
     assignee.value = gap.value.assignee?.id ?? null
     kbId.value = gap.value.kb_id
+    priority.value = gap.value.priority ?? 'normal'
+    dueAt.value = gap.value.due_at
   } finally {
     loading.value = false
   }
@@ -55,13 +57,20 @@ async function load(): Promise<void> {
 
 const assignee = ref<string | null>(null)
 const kbId = ref<string | null>(null)
+const priority = ref<'low' | 'normal' | 'high' | 'urgent'>('normal')
+const dueAt = ref<string | null>(null)
 const saving = ref(false)
 
 async function saveTriage(): Promise<void> {
   if (!gap.value) return
   saving.value = true
   try {
-    await patchGap(gap.value.id, { assignee_id: assignee.value, kb_id: kbId.value })
+    await patchGap(gap.value.id, {
+      assignee_id: assignee.value,
+      kb_id: kbId.value,
+      priority: priority.value,
+      due_at: dueAt.value,
+    })
     ElMessage.success(t('common.saved'))
     await load()
   } finally {
@@ -338,6 +347,25 @@ onMounted(async () => {
               <el-select v-model="kbId" clearable filterable style="width: 100%">
                 <el-option v-for="kb in kbOptions" :key="kb.id" :label="kb.name" :value="kb.id" />
               </el-select>
+            </el-form-item>
+            <el-form-item :label="t('curation.field.priority')">
+              <el-select v-model="priority" style="width: 100%">
+                <el-option
+                  v-for="p in (['low', 'normal', 'high', 'urgent'] as const)"
+                  :key="p"
+                  :label="t(`curation.priority.${p}`)"
+                  :value="p"
+                />
+              </el-select>
+            </el-form-item>
+            <el-form-item :label="t('curation.field.dueAt')">
+              <el-date-picker
+                v-model="dueAt"
+                type="datetime"
+                value-format="YYYY-MM-DDTHH:mm:ss[Z]"
+                style="width: 100%"
+                clearable
+              />
             </el-form-item>
             <el-button type="primary" :loading="saving" @click="saveTriage">{{
               t('common.save')

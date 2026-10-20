@@ -62,6 +62,9 @@ class Settings(BaseSettings):
     chunk_child_overlap_tokens: int = 60
 
     ingest_max_retries: int = 3
+    # Documents stuck in parsing/indexing longer than this are marked failed (worker crash).
+    ingest_stuck_timeout_seconds: int = 1800
+    ingest_watchdog_interval_seconds: float = 300.0
 
     qdrant_url: str = "http://localhost:6333"
     qdrant_api_key: str | None = None

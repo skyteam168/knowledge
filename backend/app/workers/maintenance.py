@@ -29,3 +29,14 @@ def get_session_factory() -> async_sessionmaker[AsyncSession]:
 @dramatiq.actor(queue_name=MAINTENANCE_QUEUE, max_retries=0, time_limit=2 * 60 * 60 * 1000)
 async def purge_expired_data() -> None:
     await RetentionService(get_session_factory(), settings).run_once()
+
+
+@dramatiq.actor(queue_name=MAINTENANCE_QUEUE, max_retries=0, time_limit=10 * 60 * 1000)
+async def reclaim_stuck_ingest() -> None:
+    from app.services.ingest.watchdog import IngestWatchdog
+
+    result = await IngestWatchdog(get_session_factory(), settings).run_once()
+    if result.failed:
+        logger.warning("ingest_watchdog_reclaimed", extra=result.__dict__)
+    else:
+        logger.info("ingest_watchdog_ok", extra=result.__dict__)

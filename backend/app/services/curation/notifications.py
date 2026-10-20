@@ -22,6 +22,7 @@ class NotificationKind:
     COMMENT_MENTION = "comment_mention"
     GAP_ASSIGNED = "gap_assigned"
     GAP_RESOLVED = "gap_resolved"
+    GAP_OVERDUE = "gap_overdue"
     REVIEW_REQUESTED = "review_requested"
 
 

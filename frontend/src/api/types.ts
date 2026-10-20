@@ -1055,6 +1055,8 @@ export interface UserRef {
   name: string
 }
 
+export type GapPriority = 'low' | 'normal' | 'high' | 'urgent'
+
 export interface Gap {
   id: string
   gap_type: GapType
@@ -1070,6 +1072,8 @@ export interface Gap {
   cluster_size: number | null
   top_score: number | null
   assignee: UserRef | null
+  priority: GapPriority
+  due_at: string | null
   user_id: string | null
   conversation_id: string | null
   message_id: string | null
@@ -1137,6 +1141,8 @@ export interface GapQuery extends PageParams {
 export interface GapPatch {
   assignee_id?: string | null
   kb_id?: string | null
+  priority?: GapPriority | null
+  due_at?: string | null
 }
 
 export interface GapDraftBody {
