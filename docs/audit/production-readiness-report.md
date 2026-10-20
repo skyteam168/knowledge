@@ -14,7 +14,7 @@
 | 权限（站内检索/问答/文档 API / Open API） | 中高 | 服务端强制；签名 URL 与流式中途撤销有窗口 |
 | 文档业务生命周期（草稿→废止） | **低** | 仅有入库状态机；`effective_*` 不参与检索过滤（缺陷） |
 | 数据分类 / 外发模型策略 | 低 | 有防护字段与可选 PII，无密级模型 |
-| 灾备与告警闭环 | 中低 | 有日备脚本与手册；无 PITR；Alertmanager 缺失；server 栈无观测 profile |
+| 灾备与告警闭环 | 中 | 有日备脚本与手册；Alertmanager + server observability profile + 备份 textfile 告警已落地；仍无 PITR / 异地强制 / 演练签字 |
 | RAG 质控与评测平台 | 中高 | 拒答/引用/RRF 有测；金标门禁（`pytest -m gold`）与多语 BM25 子字段已落地，生产需 rebuild |
 
 **生产试运行建议**：可在受控内网试运行（单一组织、人工运维），但进入多工厂 / 正式制度库前须完成下文 **P0** 项。
@@ -28,7 +28,7 @@
 | D3 | 文档删除 bump 检索缓存 | `indexing/handlers.on_document_deleted` |
 | P0-2 | `lifecycle_status` / 状态机 API / 前端操作 | 迁移 `0021`, `POST .../lifecycle`, DocumentDetailView |
 | P0-3 | `classification`；Open API 对 confidential+ 截断导出 | 模型 + `open_service.py` |
-| P0-4 | RPO/RTO 诚实文档 | `docs/operations/backup-recovery.md` |
+| P0-4 | RPO/RTO 诚实文档；Alertmanager + server 观测 profile；备份失败可观测 | `backup-recovery.md`；`deploy/observability`；`prod.server.yml` profile |
 
 ---
 
@@ -98,7 +98,7 @@ flowchart TB
 | 多语种 BM25 | IK 主字段 + `.en`/`.vi` multi-field（越文暂用 standard；需全量 rebuild） |
 | Embedding/Rerank failover | 无第二端点；rerank 可 degrade |
 | Rebuild HTTP API | 仅 CLI |
-| Server 部署观测 | `prod.server.yml` 无 prometheus profile |
+| Server 部署观测 | `prod.server.yml` 已含 `--profile observability`（Prometheus / Alertmanager / Grafana） |
 | PII 脱敏 | 实现完整，默认关闭 |
 
 ### 2.3 缺陷
@@ -120,7 +120,7 @@ flowchart TB
 | 显式 ACL DENY | 仅 allow-list |
 | 索引任务 PARSING 僵尸 watchdog | 崩溃后可永久卡住 |
 | 软删后 MinIO/chunk 物理清理 | `RETENTION_DELETED_DOCUMENT_DAYS`（默认 30）日批清理对象与 chunk；可选硬删行 |
-| Alertmanager 告警投递 | 仅有 `alerts.yml` 规则 |
+| Alertmanager 告警投递 | `--profile observability` 含 Alertmanager；需配置 `ALERTMANAGER_WEBHOOK_URL` |
 | PITR / 异地备份自动化 | 文档建议未落地；日 dump ≈ RPO 24h |
 
 ---
@@ -162,7 +162,7 @@ flowchart TB
 | --- | --- |
 | TLS 网关 / compose | `implemented-no-tests`；server 默认 `0.0.0.0` 暴露面偏大 |
 | 日备 PG+MinIO | `implemented-no-tests`；有效 RPO≈24h |
-| 指标 | `implemented+tests`；告警通道 `missing` |
+| 指标 | `implemented+tests`；Alertmanager webhook 通道已接好（需配置 URL） |
 | OpenSearch 关安全插件 | 内网风险 `defect` |
 | 备份演练 | 手册有，无演练记录 → `unverifiable` |
 
@@ -175,7 +175,7 @@ flowchart TB
 1. **P0-1** 签名页资产 ACL 重验；删除 bump 检索缓存；补 preview-text / 撤销窗口测试说明  
 2. **P0-2** 文档生效窗口进入 hydrate；引入兼容的 `lifecycle_status`（存量默认 published）与状态机  
 3. **P0-3** `classification` + 外发/导出策略钩子；日志敏感字段审查说明  
-4. **P0-4** 固化 RPO/RTO 与恢复验证文档；告警与 server 观测差距清单  
+4. **P0-4** 固化 RPO/RTO 与恢复验证文档；Alertmanager + server 观测 profile + 备份 textfile 告警（收尾已落地；PITR/演练仍属运维待办）  
 
 ### P1
 

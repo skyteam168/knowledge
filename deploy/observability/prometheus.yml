@@ -5,6 +5,11 @@ global:
 rule_files:
   - /etc/prometheus/alerts.yml
 
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
 scrape_configs:
   - job_name: ekb-backend
     metrics_path: /metrics
@@ -27,3 +32,7 @@ scrape_configs:
   - job_name: otel-collector
     static_configs:
       - targets: ["otel-collector:8888"]
+
+  - job_name: ekb-backup-metrics
+    static_configs:
+      - targets: ["node-exporter:9100"]

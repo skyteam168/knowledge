@@ -480,6 +480,36 @@ services:
       - prometheus_data:/prometheus
     ports:
       - "${OBS_BIND:-127.0.0.1}:9090:9090"
+    depends_on:
+      - alertmanager
+      - node-exporter
+
+  alertmanager:
+    <<: [*restart, *logging]
+    profiles: ["observability"]
+    image: prom/alertmanager:v0.28.1
+    entrypoint: ["/bin/sh", "/etc/alertmanager/alertmanager-entrypoint.sh"]
+    environment:
+      ALERTMANAGER_WEBHOOK_URL: ${ALERTMANAGER_WEBHOOK_URL:-http://127.0.0.1:9}
+    volumes:
+      - ./observability/alertmanager.yml.tmpl:/etc/alertmanager/alertmanager.yml.tmpl:ro
+      - ./observability/alertmanager-entrypoint.sh:/etc/alertmanager/alertmanager-entrypoint.sh:ro
+      - alertmanager_data:/alertmanager
+    ports:
+      - "${OBS_BIND:-127.0.0.1}:9093:9093"
+
+  # Textfile-only: scrapes /backups/metrics/*.prom written by backup-postgres / backup-minio.
+  node-exporter:
+    <<: [*restart, *logging]
+    profiles: ["observability"]
+    image: prom/node-exporter:v1.9.1
+    command:
+      - --path.textfile.directory=/textfile
+      - --collector.disable-defaults
+      - --collector.textfile
+      - --web.listen-address=:9100
+    volumes:
+      - ${BACKUP_DIR:-./backups}/metrics:/textfile:ro
 
   grafana:
     <<: [*restart, *logging]
@@ -503,3 +533,4 @@ volumes:
   clamav_data:
   prometheus_data:
   grafana_data:
+  alertmanager_data:

@@ -1,0 +1,31 @@
+# Template: __WEBHOOK_URL__ is replaced at container start from ALERTMANAGER_WEBHOOK_URL.
+# Default sink is http://127.0.0.1:9 (discard). Point the env at your enterprise webhook
+# (企业微信/钉钉/飞书机器人、PagerDuty 等兼容 Alertmanager webhook 的网关).
+
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: webhook
+  group_by: [alertname, severity]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers:
+        - severity = critical
+      receiver: webhook
+      continue: false
+
+receivers:
+  - name: webhook
+    webhook_configs:
+      - url: "__WEBHOOK_URL__"
+        send_resolved: true
+
+inhibit_rules:
+  - source_matchers:
+      - severity = critical
+    target_matchers:
+      - severity = warning
+    equal: [alertname]

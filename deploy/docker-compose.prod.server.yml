@@ -6,6 +6,9 @@
 #   # create DBs: CREATE DATABASE ekb; CREATE DATABASE keycloak;
 #   # HTTPS (self-signed): put cert.pem + key.pem in SSL_CERT_DIR (default ./certs)
 #   docker compose -f docker-compose.prod.server.yml --env-file .env.prod.server up -d --build --wait
+# Optional metrics/alerts:
+#   grep ^METRICS_TOKEN= .env.prod.server | cut -d= -f2- > observability/metrics-token
+#   docker compose -f docker-compose.prod.server.yml --env-file .env.prod.server --profile observability up -d
 #
 # host.docker.internal -> host gateway (Docker 20.10+). Point POSTGRES_HOST/REDIS_HOST at it
 # when PG/Redis listen on the host, or use the LAN IP if they listen on 10.10.130.170.
@@ -380,7 +383,88 @@ services:
       minio:
         condition: service_healthy
 
+  # ---- observability (--profile observability) -----------------------------------------
+  # Same stack as docker-compose.prod.yml. Enable with:
+  #   docker compose -f docker-compose.prod.server.yml --env-file .env.prod.server --profile observability up -d
+
+  otel-collector:
+    <<: [*restart, *logging]
+    profiles: ["observability"]
+    image: otel/opentelemetry-collector-contrib:0.120.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./observability/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+
+  jaeger:
+    <<: [*restart, *logging]
+    profiles: ["observability"]
+    image: jaegertracing/all-in-one:1.66.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "${OBS_BIND:-127.0.0.1}:16686:16686"
+
+  prometheus:
+    <<: [*restart, *logging]
+    profiles: ["observability"]
+    image: prom/prometheus:v3.2.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-15d}
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - ./observability/metrics-token:/etc/prometheus/metrics-token:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "${OBS_BIND:-127.0.0.1}:9090:9090"
+    depends_on:
+      - alertmanager
+      - node-exporter
+
+  alertmanager:
+    <<: [*restart, *logging]
+    profiles: ["observability"]
+    image: prom/alertmanager:v0.28.1
+    entrypoint: ["/bin/sh", "/etc/alertmanager/alertmanager-entrypoint.sh"]
+    environment:
+      ALERTMANAGER_WEBHOOK_URL: ${ALERTMANAGER_WEBHOOK_URL:-http://127.0.0.1:9}
+    volumes:
+      - ./observability/alertmanager.yml.tmpl:/etc/alertmanager/alertmanager.yml.tmpl:ro
+      - ./observability/alertmanager-entrypoint.sh:/etc/alertmanager/alertmanager-entrypoint.sh:ro
+      - alertmanager_data:/alertmanager
+    ports:
+      - "${OBS_BIND:-127.0.0.1}:9093:9093"
+
+  node-exporter:
+    <<: [*restart, *logging]
+    profiles: ["observability"]
+    image: prom/node-exporter:v1.9.1
+    command:
+      - --path.textfile.directory=/textfile
+      - --collector.disable-defaults
+      - --collector.textfile
+      - --web.listen-address=:9100
+    volumes:
+      - ${BACKUP_DIR:-./backups}/metrics:/textfile:ro
+
+  grafana:
+    <<: [*restart, *logging]
+    profiles: ["observability"]
+    image: grafana/grafana:11.5.2
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./observability/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "${OBS_BIND:-127.0.0.1}:3001:3000"
+
 volumes:
   minio_data:
   qdrant_data:
   os_data:
+  prometheus_data:
+  grafana_data:
+  alertmanager_data:

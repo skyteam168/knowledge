@@ -24,16 +24,26 @@
 
 ---
 
-## 2. 仍未覆盖
+## 2. P0-4 收尾（告警 / 观测）
+
+| 项 | 结果 |
+| --- | --- |
+| `prod.yml` + `--profile observability` compose config | 通过（含 alertmanager / node-exporter） |
+| `prod.server.yml` + observability profile | 通过（服务列表含 prometheus/grafana/alertmanager/…） |
+| Alertmanager webhook 模板 | `observability/alertmanager.yml.tmpl` + entrypoint |
+| 备份 textfile 指标 + `BackupJob*` 规则 | 脚本与 `alerts.yml` 已落地；未在本机起全栈验 firing |
+
+## 3. 仍未覆盖
 
 | 项 | 状态 |
 | --- | --- |
 | 全量 pytest / 前端 vitest | 未跑 |
 | 生产备份恢复演练 / 异地副本 | 未做 |
 | 越文专用分词插件 | 暂用 standard+lowercase |
+| 真实 webhook 投递（企微/钉钉） | 需配置 `ALERTMANAGER_WEBHOOK_URL` 后验证 |
 
 ---
 
-## 3. 结论
+## 4. 结论
 
-本地真实栈上 **P1 多语 BM25 + 软删清理可用**。生产上线前务必：`index rebuild`、确认 retention 与备份窗口、推送含 `495c869` 的镜像。
+本地真实栈上 **P1 多语 BM25 + 软删清理可用**；**P0-4 告警/观测收尾**已合入 compose 与文档。生产上线前务必：`index rebuild`、确认 retention 与备份窗口、按需 `--profile observability` 并配置 webhook。

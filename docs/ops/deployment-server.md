@@ -227,7 +227,23 @@ $DC logs --tail=100 keycloak | grep -E "LOGIN_ERROR|error="
 
 想彻底去掉警告：把 `cert.pem` 导入客户端的“受信任的根证书颁发机构”，或换成内网 CA 签发的证书（SAN 必须包含访问用的 IP / 域名）。
 
-## 6. 更新升级
+## 6. 可观测性（可选）
+
+与全容器版相同的 Prometheus / Alertmanager / Grafana / Jaeger 栈：
+
+```bash
+cd /www/wwwroot/flyknit-knowledge/deploy
+grep ^METRICS_TOKEN= .env.prod.server | cut -d= -f2- > observability/metrics-token
+# 在 .env.prod.server 中设置 GRAFANA_ADMIN_PASSWORD；可选 ALERTMANAGER_WEBHOOK_URL
+DC="docker compose -f docker-compose.prod.server.yml --env-file .env.prod.server"
+$DC --profile observability up -d
+```
+
+- Prometheus `127.0.0.1:9090`、Alertmanager `127.0.0.1:9093`、Grafana `127.0.0.1:3001`、Jaeger `127.0.0.1:16686`（仅本机或经 `OBS_BIND`）。
+- 备份容器会把成功/失败指标写到 `$BACKUP_DIR/metrics/`，由 node-exporter 暴露；规则见 `observability/alerts.yml` 的 `BackupJobFailed` / `BackupJobStale`。
+- 细节见 [部署说明 §5](deployment.md#5-可观测性可选)。
+
+## 7. 更新升级
 
 ```bash
 cd /www/wwwroot/flyknit-knowledge && git pull && cd deploy
@@ -243,7 +259,7 @@ $DC up -d --build --wait
 - 只改 `tls-gateway.conf` 或更换证书：`$DC restart tls-gateway`。
 - 重建过 `frontend` / `keycloak` / `minio` 后若出现 502，先 `$DC up -d --force-recreate tls-gateway`（旧版 nginx 会缓存上游 IP；新版配置已用 Docker DNS 动态解析）。
 
-## 7. 迁移到新服务器
+## 8. 迁移到新服务器
 
 1. 按第 2 节准备 PG（建库、`pg_hba`）、Redis、端口、防火墙。
 2. 克隆代码，复制旧服务器的 `.env.prod.server`，把其中的 IP 全部替换：
@@ -257,7 +273,7 @@ $DC up -d --build --wait
 5. `$DC up -d --build --wait`，按 3.5 验证。
 6. 恢复了 keycloak 库时按 4.1 把回调地址改成新 IP；全新 keycloak 库则按 4.2 创建管理员。
 
-## 8. 常见问题
+## 9. 常见问题
 
 | 现象 | 原因 / 处理 |
 |---|---|

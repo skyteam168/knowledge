@@ -71,12 +71,15 @@ $DC up -d           # migrate 先执行数据库迁移，再滚动重建应用�
 ## 5. 可观测性（可选）
 
 ```bash
+# 先写入与 METRICS_TOKEN 相同的 token 文件（勿提交 Git）
+grep ^METRICS_TOKEN= .env.prod | cut -d= -f2- > observability/metrics-token
 $DC --profile observability up -d
 ```
 
-- Prometheus `127.0.0.1:9090`：抓取 backend `/metrics`（Bearer `METRICS_TOKEN`）、worker `:9191`、Keycloak；告警规则 `observability/alerts.yml`（错误率、慢请求、首 token、模型错误、队列 / outbox 积压）。
+- Prometheus `127.0.0.1:9090`：抓取 backend `/metrics`（Bearer `METRICS_TOKEN`）、worker `:9191`、Keycloak、备份 textfile（node-exporter）；告警规则 `observability/alerts.yml`（错误率、慢请求、首 token、模型错误、队列 / outbox 积压、`BackupJobFailed` / `BackupJobStale`）。
+- Alertmanager `127.0.0.1:9093`：接收 Prometheus 告警；设置 `ALERTMANAGER_WEBHOOK_URL` 指向企业微信 / 钉钉 / 飞书等 webhook 网关（未设则丢弃到 `127.0.0.1:9`）。
 - Jaeger `127.0.0.1:16686`：设置 `OTEL_ENABLED=true` 后，API（FastAPI / SQLAlchemy / httpx）与 worker 的链路经 otel-collector 导出；collector 会删除 LLM span 上的提示词 / 回答内容。
-- Grafana `127.0.0.1:3001`：已预置 Prometheus、Jaeger 数据源。
+- Grafana `127.0.0.1:3001`：已预置 Prometheus、Jaeger 数据源（需 `GRAFANA_ADMIN_PASSWORD`）。
 - Langfuse：设置 `LANGFUSE_HOST`、`LANGFUSE_PUBLIC_KEY`、`LANGFUSE_SECRET_KEY` 后，模型调用 span 直接导出到 Langfuse（与 OTLP 导出相互独立）。
 
 ## 6. 可选组件

@@ -60,16 +60,17 @@
 
 ---
 
-## 5. 单点与告警缺口
+## 5. 单点与告警
 
 | 风险 | 状态 |
 | --- | --- |
 | 单机 compose / 宿主机 PG | 无自动 failover；评估后再上 HA |
 | 备份与数据同盘 | 盘损可双丢；须异地副本 |
-| Prometheus `alerts.yml` | 规则存在于 `deploy/observability`；**无 Alertmanager** |
-| `prod.server.yml` | **无** observability profile |
+| Prometheus + Alertmanager | `deploy/observability`；`--profile observability` 启动；`ALERTMANAGER_WEBHOOK_URL` 对接企业通知 |
+| `prod.server.yml` | 已含 observability profile（与 `prod.yml` 对齐） |
+| 备份任务失败 / 过期 | `backup-*.sh` 写 `/backups/metrics/*.prom` → node-exporter → `BackupJobFailed` / `BackupJobStale`（默认 48h） |
 
-建议告警：HTTP 5xx、队列积压、outbox 滞后、LLM 错误率、备份任务失败（需外接通知）。
+应用侧告警仍覆盖：HTTP 5xx、队列积压、outbox 滞后、LLM 错误率（见 `alerts.yml`）。
 
 ---
 
