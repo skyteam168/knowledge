@@ -36,6 +36,7 @@ from app.services.chat.conversation_service import DEFAULT_TITLE, RESOURCE_CONVE
 from app.services.chat.ko_source import PublishedKnowledgeObjects
 from app.services.context import BaseService, RequestContext
 from app.services.knowledge.access import KnowledgeAccess
+from app.services.knowledge.document_effect import restricts_external_export
 from app.services.knowledge.protection import (
     CONTROLLED_EXPORT_HINT,
     limit_export_text,
@@ -185,7 +186,9 @@ class OpenApiService(BaseService):
                     doc, kb = pair
                     perm = await access.document_permission(self.ctx.user, doc, kb)
                     protection = protection_of(kb, doc)
-                    if protection.limits_export(perm.value if perm else None):
+                    if protection.limits_export(perm.value if perm else None) or (
+                        restricts_external_export(doc.classification)
+                    ):
                         copy_protect = True
             if copy_protect:
                 truncated = len(body.strip()) > controlled_limit

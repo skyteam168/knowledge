@@ -15,12 +15,14 @@ import {
   restoreVersion,
   reviewDocument,
   searchPrincipals,
+  transitionDocumentLifecycle,
   updateDocument,
 } from '@/api/knowledge'
 import type {
   AclPermission,
   Chunk,
   DocumentDetail,
+  DocumentLifecycleAction,
   DocumentVersion,
   Preview,
   PrincipalOption,
@@ -75,6 +77,24 @@ let timer: ReturnType<typeof setTimeout> | null = null
 const status = computed(() => (doc.value ? documentStatus(doc.value) : null))
 const canEdit = computed(() => auth.can('doc:upload') && atLeast(doc.value?.my_permission, 'edit'))
 const canManage = computed(() => atLeast(doc.value?.my_permission, 'manage'))
+const lifecycleActions = computed((): DocumentLifecycleAction[] => {
+  const s = doc.value?.lifecycle_status
+  if (!s || !canEdit.value) return []
+  if (s === 'draft') return canManage.value ? ['submit', 'archive'] : ['submit']
+  if (s === 'in_review') return canManage.value ? ['approve', 'reject', 'archive'] : ['reject']
+  if (s === 'published') return canManage.value ? ['retire', 'archive'] : []
+  if (s === 'retired' || s === 'archived') return canManage.value ? ['reopen'] : []
+  return []
+})
+
+async function onLifecycle(action: DocumentLifecycleAction) {
+  if (!doc.value) return
+  doc.value = {
+    ...doc.value,
+    ...(await transitionDocumentLifecycle(doc.value.id, { action })),
+  } as DocumentDetail
+  ElMessage.success(t(`knowledge.doc.lifecycleAction.${action}`))
+}
 const protection = computed(() => doc.value?.protection ?? null)
 const isProtected = computed(
   () =>
@@ -485,6 +505,25 @@ onBeforeUnmount(() => {
                     tag
                   }}</el-tag>
                   <span v-if="!doc.tags.length">-</span>
+                </el-descriptions-item>
+                <el-descriptions-item :label="t('knowledge.doc.lifecycle')">
+                  {{ t(`knowledge.doc.lifecycleStatus.${doc.lifecycle_status || 'published'}`) }}
+                  <template v-if="lifecycleActions.length">
+                    <el-button
+                      v-for="action in lifecycleActions"
+                      :key="action"
+                      size="small"
+                      class="tag-gap"
+                      @click="onLifecycle(action)"
+                    >
+                      {{ t(`knowledge.doc.lifecycleAction.${action}`) }}
+                    </el-button>
+                  </template>
+                </el-descriptions-item>
+                <el-descriptions-item :label="t('knowledge.doc.classification')">
+                  {{
+                    t(`knowledge.doc.classificationLabel.${doc.classification || 'internal'}`)
+                  }}
                 </el-descriptions-item>
                 <el-descriptions-item :label="t('knowledge.doc.effectiveTime')">
                   {{ formatDateTime(doc.effective_from) }} ~ {{ formatDateTime(doc.effective_to) }}

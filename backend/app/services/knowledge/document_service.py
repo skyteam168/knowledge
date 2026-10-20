@@ -23,6 +23,7 @@ from app.core.exceptions import (
 from app.core.storage import STAGING_PREFIX, ObjectStorage
 from app.models import (
     Document,
+    DocumentLifecycle,
     DocumentStatus,
     DocumentVersion,
     KnowledgeBase,
@@ -46,6 +47,7 @@ from app.schemas.knowledge import (
     DocumentContentOut,
     DocumentContentUpdate,
     DocumentDetail,
+    DocumentLifecycleIn,
     DocumentOut,
     DocumentReviewIn,
     DocumentUpdate,
@@ -88,6 +90,50 @@ MAX_FILENAME_LENGTH = 255
 TICKET_PREFIX = "upload:"
 ReviewFilter = Literal["due_soon", "overdue", "attention"]
 ONLINE_EXTENSIONS = frozenset({".md", ".markdown", ".txt"})
+
+# (action, from_status) -> (to_status, required permission)
+_LIFECYCLE: dict[str, dict[str, tuple[str, AclPermission]]] = {
+    "submit": {
+        DocumentLifecycle.DRAFT.value: (DocumentLifecycle.IN_REVIEW.value, AclPermission.EDIT),
+    },
+    "approve": {
+        DocumentLifecycle.IN_REVIEW.value: (
+            DocumentLifecycle.PUBLISHED.value,
+            AclPermission.MANAGE,
+        ),
+    },
+    "reject": {
+        DocumentLifecycle.IN_REVIEW.value: (DocumentLifecycle.DRAFT.value, AclPermission.EDIT),
+    },
+    "retire": {
+        DocumentLifecycle.PUBLISHED.value: (
+            DocumentLifecycle.RETIRED.value,
+            AclPermission.MANAGE,
+        ),
+    },
+    "archive": {
+        DocumentLifecycle.PUBLISHED.value: (
+            DocumentLifecycle.ARCHIVED.value,
+            AclPermission.MANAGE,
+        ),
+        DocumentLifecycle.RETIRED.value: (
+            DocumentLifecycle.ARCHIVED.value,
+            AclPermission.MANAGE,
+        ),
+        DocumentLifecycle.DRAFT.value: (
+            DocumentLifecycle.ARCHIVED.value,
+            AclPermission.MANAGE,
+        ),
+        DocumentLifecycle.IN_REVIEW.value: (
+            DocumentLifecycle.ARCHIVED.value,
+            AclPermission.MANAGE,
+        ),
+    },
+    "reopen": {
+        DocumentLifecycle.RETIRED.value: (DocumentLifecycle.DRAFT.value, AclPermission.MANAGE),
+        DocumentLifecycle.ARCHIVED.value: (DocumentLifecycle.DRAFT.value, AclPermission.MANAGE),
+    },
+}
 
 
 def _extension(filename: str) -> str:
@@ -828,6 +874,10 @@ class DocumentService(BaseService):
             doc.effective_from = data.effective_from
         if "effective_to" in fields:
             doc.effective_to = data.effective_to
+        if "classification" in fields and data.classification is not None:
+            if perm.level < AclPermission.MANAGE.level:
+                raise PermissionDeniedError("Changing classification needs manage permission")
+            doc.classification = data.classification
         if "owner_id" in fields and data.owner_id != doc.owner_id:
             if data.owner_id is not None:
                 await self._check_owner(doc, kb, data.owner_id)
@@ -861,6 +911,37 @@ class DocumentService(BaseService):
                 code="OWNER_NO_EDIT",
                 detail={"owner_id": owner_id},
             )
+
+    async def transition_lifecycle(
+        self, document_id: str, data: DocumentLifecycleIn
+    ) -> DocumentOut:
+        """Apply a business lifecycle action (draft / review / publish / retire / archive)."""
+        doc, kb, _ = await self._doc(document_id, AclPermission.EDIT)
+        routes = _LIFECYCLE.get(data.action)
+        if routes is None:
+            raise ValidationAppError("Unknown lifecycle action", code="LIFECYCLE_UNKNOWN")
+        target = routes.get(doc.lifecycle_status)
+        if target is None:
+            raise ValidationAppError(
+                f"Cannot {data.action} from status '{doc.lifecycle_status}'",
+                code="LIFECYCLE_INVALID",
+                detail={"from": doc.lifecycle_status, "action": data.action},
+            )
+        new_status, required = target
+        perm = await self.access.require_document(self.ctx.user, doc, kb, required)
+        before = snapshot({"lifecycle_status": doc.lifecycle_status})
+        doc.lifecycle_status = new_status
+        await self.session.flush()
+        await self.audit.record(
+            self.audit_ctx,
+            f"document.lifecycle.{data.action}",
+            RESOURCE_DOCUMENT,
+            doc.id,
+            before,
+            snapshot({"lifecycle_status": doc.lifecycle_status, "reason": data.reason}),
+        )
+        (out,) = await self._with_owner_names([self._out(doc, perm, kb)])
+        return out
 
     async def review(self, document_id: str, data: DocumentReviewIn) -> DocumentOut:
         """Confirm the document is still accurate: the review clock starts again."""

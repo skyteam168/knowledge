@@ -10,6 +10,7 @@ from app.schemas.knowledge import (
     DocumentContentOut,
     DocumentContentUpdate,
     DocumentDetail,
+    DocumentLifecycleIn,
     DocumentOut,
     DocumentReviewIn,
     DocumentUpdate,
@@ -71,6 +72,18 @@ async def review_document(
     document_id: str, data: DocumentReviewIn, service: ServiceDep
 ) -> DocumentOut:
     return await service.review(document_id, data)
+
+
+@router.post(
+    "/{document_id}/lifecycle",
+    response_model=DocumentOut,
+    dependencies=CanUpload,
+)
+async def document_lifecycle(
+    document_id: str, data: DocumentLifecycleIn, service: ServiceDep
+) -> DocumentOut:
+    """Business lifecycle: submit / approve / reject / retire / archive / reopen."""
+    return await service.transition_lifecycle(document_id, data)
 
 
 @router.post("/{document_id}/reprocess", response_model=DocumentOut, dependencies=CanUpload)

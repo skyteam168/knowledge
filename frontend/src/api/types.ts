@@ -330,6 +330,20 @@ export interface KnowledgeBaseUpdate extends Partial<Protection> {
 }
 
 export type ReviewState = 'none' | 'ok' | 'due_soon' | 'overdue'
+export type DocumentLifecycle =
+  | 'draft'
+  | 'in_review'
+  | 'published'
+  | 'retired'
+  | 'archived'
+export type DocumentClassification = 'internal' | 'confidential' | 'restricted' | 'secret'
+export type DocumentLifecycleAction =
+  | 'submit'
+  | 'approve'
+  | 'reject'
+  | 'retire'
+  | 'archive'
+  | 'reopen'
 
 export interface KbDocument {
   id: string
@@ -341,6 +355,9 @@ export interface KbDocument {
   sha256: string
   version: number
   status: DocumentStatus
+  /** Business publication lifecycle (independent of ingest status). */
+  lifecycle_status: DocumentLifecycle
+  classification: DocumentClassification
   error_message: string | null
   tags: string[]
   metadata: Record<string, unknown>
@@ -470,11 +487,17 @@ export interface DocumentUpdate {
   metadata?: Record<string, unknown>
   effective_from?: string | null
   effective_to?: string | null
+  classification?: DocumentClassification | null
   watermark?: boolean | null
   copy_protect?: boolean | null
   download_permission?: AclPermission | null
   owner_id?: string | null
   review_interval_days?: number | null
+}
+
+export interface DocumentLifecycleIn {
+  action: DocumentLifecycleAction
+  reason?: string | null
 }
 
 export interface DocumentQuery extends PageParams {

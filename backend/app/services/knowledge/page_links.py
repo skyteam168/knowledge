@@ -21,6 +21,9 @@ from app.core.config import Settings
 from app.core.exceptions import NotFoundError, PermissionDeniedError
 from app.core.storage import ObjectStorage
 from app.models import Document, DocumentPageAsset, KnowledgeBase, User
+from app.services.authz.acting import current_user_of
+from app.services.authz.cache import AuthzCache
+from app.services.knowledge.access import KnowledgeAccess
 from app.services.knowledge.protection import Protection, protection_of
 from app.services.knowledge.watermark import watermark_png
 
@@ -76,14 +79,28 @@ async def render_watermarked_page(
     viewer_id: str,
     expires: int,
     signature: str,
+    authz_cache: AuthzCache,
 ) -> bytes:
-    """The page image of a valid signed link, with the viewer's watermark burned in."""
+    """The page image of a valid signed link, with the viewer's watermark burned in.
+
+    Signature proves the link was issued to ``viewer_id``; we still re-check that the
+    viewer can *currently* read the document so ACL revocation takes effect before expiry.
+    """
     if not verify_asset_link(settings, asset_id, viewer_id, expires, signature):
         raise PermissionDeniedError("Link expired or invalid", code="ASSET_LINK_INVALID")
     asset = await session.get(DocumentPageAsset, asset_id)
     viewer = await session.get(User, viewer_id)
     if asset is None or viewer is None or viewer.org_id != asset.org_id or not viewer.is_active:
         raise NotFoundError("Page not found")
+    doc = await session.get(Document, asset.document_id)
+    if doc is None or doc.deleted_at is not None or doc.org_id != asset.org_id:
+        raise NotFoundError("Page not found")
+    kb = await session.get(KnowledgeBase, doc.kb_id)
+    if kb is None or kb.deleted_at is not None or kb.org_id != asset.org_id:
+        raise NotFoundError("Page not found")
+    as_viewer = await current_user_of(session, authz_cache, viewer)
+    if await KnowledgeAccess(session).document_permission(as_viewer, doc, kb) is None:
+        raise PermissionDeniedError("No access to this document", code="ASSET_ACL_DENIED")
     data = await storage.get_bytes(asset.minio_key)
     return await asyncio.to_thread(watermark_png, data, watermark_lines(viewer, settings))
 

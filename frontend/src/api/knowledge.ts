@@ -7,6 +7,7 @@ import type {
   DocumentAclUpdate,
   DocumentContent,
   DocumentDetail,
+  DocumentLifecycleIn,
   DocumentQuery,
   DocumentUpdate,
   KbAcl,
@@ -92,6 +93,8 @@ export const saveDocumentContent = (id: string, content: string, baseVersion: nu
   )
 export const reviewDocument = (id: string, note?: string) =>
   post<KbDocument>(`/documents/${id}/review`, { note: note || null })
+export const transitionDocumentLifecycle = (id: string, body: DocumentLifecycleIn) =>
+  post<KbDocument>(`/documents/${id}/lifecycle`, body)
 export const listChunks = (id: string) => get<Chunk[]>(`/documents/${id}/chunks`)
 export const getPreviewUrl = (id: string) => get<Preview>(`/documents/${id}/preview-url`)
 export const getDownloadUrl = (id: string) => get<Preview>(`/documents/${id}/download-url`)

@@ -8,6 +8,9 @@ AclPermissionName = Literal["read", "edit", "manage"]
 GrantablePrincipal = Literal["user", "group", "role", "dept"]
 ReviewDays = Annotated[int, Field(ge=1, le=3650)]
 ReviewStateName = Literal["none", "ok", "due_soon", "overdue"]
+LifecycleStatusName = Literal["draft", "in_review", "published", "retired", "archived"]
+ClassificationName = Literal["internal", "confidential", "restricted", "secret"]
+LifecycleActionName = Literal["submit", "approve", "reject", "retire", "archive", "reopen"]
 
 
 class ORMModel(BaseModel):
@@ -110,6 +113,8 @@ class DocumentOut(ORMModel):
     sha256: str
     version: int
     status: str
+    lifecycle_status: LifecycleStatusName = "published"
+    classification: ClassificationName = "internal"
     error_message: str | None
     tags: list[str]
     metadata: dict[str, Any] = Field(validation_alias=AliasChoices("meta", "metadata"))
@@ -191,6 +196,7 @@ class DocumentUpdate(BaseModel):
     metadata: dict[str, Any] | None = None
     effective_from: datetime | None = None
     effective_to: datetime | None = None
+    classification: ClassificationName | None = None
     # Protection overrides (manage permission); null = as the knowledge base.
     watermark: bool | None = None
     copy_protect: bool | None = None
@@ -206,6 +212,11 @@ class DocumentUpdate(BaseModel):
         if tags is None:
             return None
         return list(dict.fromkeys(t.strip() for t in tags if t.strip()))
+
+
+class DocumentLifecycleIn(BaseModel):
+    action: LifecycleActionName
+    reason: str | None = Field(default=None, max_length=500)
 
 
 MAX_ONLINE_CHARS = 500_000

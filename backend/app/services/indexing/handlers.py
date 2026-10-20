@@ -44,6 +44,8 @@ class IndexEventHandlers:
 
     async def on_document_deleted(self, event: EventEnvelope) -> None:
         await self.indexer.delete_document(str(event.require("document_id")))
+        if self.result_cache is not None:
+            await self.result_cache.invalidate_org(event.org_id)
 
     async def on_ko_published(self, event: EventEnvelope) -> None:
         await self.ko_indexer.index(str(event.require("ko_id")), int(event.require("version")))

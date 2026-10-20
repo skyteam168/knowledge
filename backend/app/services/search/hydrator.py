@@ -12,6 +12,7 @@ from collections.abc import Sequence
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Document, KnowledgeBase
+from app.models.base import utcnow
 from app.repositories.indexing_repo import INDEXED_CHUNK_LEVEL
 from app.repositories.search_repo import SearchRepository
 from app.retrieval.pipeline import KO_DOC_TYPE, DocumentInfo, HydrationResult, Passage
@@ -19,6 +20,7 @@ from app.services.authz import CurrentUser
 from app.services.indexing.indexer import document_type
 from app.services.indexing.ko_indexer import KO_CHUNK_TYPE, ko_entry_text
 from app.services.knowledge.access import KnowledgeAccess
+from app.services.knowledge.document_effect import in_effect, lifecycle_retrievable
 from app.services.knowledge.ko_access import KoAccess, LiveEntry
 
 
@@ -41,12 +43,17 @@ class PassageHydrator:
         dropped.update(ko_dropped)
         dropped["not_found"] += len(ids) - len(rows) - len(ko_entries) - sum(ko_dropped.values())
 
+        now = utcnow()
         live = []
         for chunk, doc, kb in rows:
             if doc.deleted_at is not None or kb.deleted_at is not None:
                 dropped["deleted"] += 1
             elif chunk.document_version != doc.version or chunk.level != INDEXED_CHUNK_LEVEL:
                 dropped["stale_version"] += 1
+            elif not lifecycle_retrievable(doc):
+                dropped["not_published"] += 1
+            elif not in_effect(doc, now):
+                dropped["not_in_effect"] += 1
             else:
                 live.append((chunk, doc, kb))
 

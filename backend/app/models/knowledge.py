@@ -27,12 +27,33 @@ class KbVisibility(StrEnum):
 
 
 class DocumentStatus(StrEnum):
+    """Ingest pipeline status (not the business publication lifecycle)."""
+
     UPLOADED = "uploaded"
     PARSING = "parsing"
     PARSED = "parsed"
     INDEXING = "indexing"
     INDEXED = "indexed"
     FAILED = "failed"
+
+
+class DocumentLifecycle(StrEnum):
+    """Business publication lifecycle; independent of DocumentStatus."""
+
+    DRAFT = "draft"
+    IN_REVIEW = "in_review"
+    PUBLISHED = "published"
+    RETIRED = "retired"
+    ARCHIVED = "archived"
+
+
+class DocumentClassification(StrEnum):
+    """Data classification for export / external-model policy."""
+
+    INTERNAL = "internal"
+    CONFIDENTIAL = "confidential"
+    RESTRICTED = "restricted"
+    SECRET = "secret"
 
 
 class ChunkType(StrEnum):
@@ -76,6 +97,7 @@ class Document(IdMixin, TenantMixin, TimestampMixin, Base):
         Index("ix_documents_kb_sha256", "org_id", "kb_id", "sha256"),
         Index("ix_documents_kb_filename", "org_id", "kb_id", "filename"),
         Index("ix_documents_kb_status", "org_id", "kb_id", "status"),
+        Index("ix_documents_kb_lifecycle", "org_id", "kb_id", "lifecycle_status"),
         Index("ix_documents_review_due", "review_due_at"),
     )
 
@@ -91,6 +113,12 @@ class Document(IdMixin, TenantMixin, TimestampMixin, Base):
     version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     status: Mapped[str] = mapped_column(
         String(16), default=DocumentStatus.UPLOADED.value, nullable=False
+    )
+    lifecycle_status: Mapped[str] = mapped_column(
+        String(16), default=DocumentLifecycle.PUBLISHED.value, nullable=False
+    )
+    classification: Mapped[str] = mapped_column(
+        String(16), default=DocumentClassification.INTERNAL.value, nullable=False
     )
     error_message: Mapped[str | None] = mapped_column(Text)
     tags: Mapped[list[str]] = mapped_column(JsonType, default=list, nullable=False)
