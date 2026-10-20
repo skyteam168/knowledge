@@ -151,5 +151,5 @@
   "resetPasswordAllowed": false,
   "rememberMe": true,
   "ssoSessionIdleTimeoutRememberMe": 604800,
-  "ssoSessionMaxLifespanRememberMe": 2592000,
+  "ssoSessionMaxLifespanRememberMe": 2592000
 }
