@@ -307,6 +307,8 @@ export interface KnowledgeBase extends Protection {
   name: string
   description: string | null
   visibility: KbVisibility
+  /** Default periodic review of its documents in days; null = none. */
+  review_interval_days: number | null
   created_by: string | null
   created_at: string
   updated_at: string
@@ -318,12 +320,16 @@ export interface KnowledgeBaseCreate extends Partial<Protection> {
   name: string
   description?: string | null
   visibility?: KbVisibility
+  review_interval_days?: number | null
 }
 
 export interface KnowledgeBaseUpdate extends Partial<Protection> {
   name?: string
   description?: string | null
+  review_interval_days?: number | null
 }
+
+export type ReviewState = 'none' | 'ok' | 'due_soon' | 'overdue'
 
 export interface KbDocument {
   id: string
@@ -355,6 +361,17 @@ export interface KbDocument {
   /** Effective protection (knowledge base + document). */
   protection: Protection
   can_download: boolean
+  /** Responsible person; reminders fall back to the uploader. */
+  owner_id: string | null
+  owner_name: string | null
+  /** Own review interval: null = as the knowledge base, 0 = never. */
+  review_interval_days: number | null
+  /** Effective interval in days, null = no periodic review. */
+  review_interval: number | null
+  reviewed_at: string | null
+  reviewed_by: string | null
+  review_due_at: string | null
+  review_state: ReviewState
 }
 
 export interface DocumentVersion {
@@ -398,6 +415,7 @@ export interface VersionCompare {
 
 export interface DocumentDetail extends KbDocument {
   kb_name: string
+  kb_review_interval_days: number | null
   versions: DocumentVersion[]
 }
 
@@ -410,11 +428,17 @@ export interface DocumentUpdate {
   watermark?: boolean | null
   copy_protect?: boolean | null
   download_permission?: AclPermission | null
+  owner_id?: string | null
+  review_interval_days?: number | null
 }
 
 export interface DocumentQuery extends PageParams {
   status?: DocumentStatus
   keyword?: string
+  /** attention = due soon or overdue. */
+  review?: 'due_soon' | 'overdue' | 'attention'
+  /** Only documents I am responsible for. */
+  mine?: boolean
 }
 
 export interface UploadInit {

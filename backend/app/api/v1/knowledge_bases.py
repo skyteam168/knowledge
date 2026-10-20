@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile
 
@@ -93,9 +93,17 @@ async def list_documents(
     size: Annotated[int, Query(ge=1, le=200)] = 20,
     status: DocumentStatus | None = None,
     keyword: str | None = None,
+    review: Literal["due_soon", "overdue", "attention"] | None = None,
+    mine: bool = False,
 ) -> Page[DocumentOut]:
     return await service.search(
-        kb_id, page=page, size=size, status=status.value if status else None, keyword=keyword
+        kb_id,
+        page=page,
+        size=size,
+        status=status.value if status else None,
+        keyword=keyword,
+        review=review,
+        mine=mine,
     )
 
 

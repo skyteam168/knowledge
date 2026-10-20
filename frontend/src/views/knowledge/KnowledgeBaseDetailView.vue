@@ -11,7 +11,7 @@ import DocumentUploader from '@/components/knowledge/DocumentUploader.vue'
 import KbAclDialog from '@/components/knowledge/KbAclDialog.vue'
 import KbFormDialog from '@/components/knowledge/KbFormDialog.vue'
 import { useAuthStore } from '@/stores/auth'
-import { atLeast, documentStatus, permissionLabel } from '@/utils/document'
+import { atLeast, documentStatus, permissionLabel, reviewStatus } from '@/utils/document'
 import { formatBytes } from '@/utils/file'
 import { formatDateTime } from '@/utils/format'
 
@@ -28,8 +28,18 @@ const STATUS_OPTIONS = computed<{ value: DocumentStatus; label: string }[]>(() =
   { value: 'failed', label: t('knowledge.docStatus.failed') },
 ])
 
+const REVIEW_FILTERS = ['attention', 'due_soon', 'overdue'] as const
+type ReviewFilter = (typeof REVIEW_FILTERS)[number]
+
 const kb = ref<KnowledgeBase | null>(null)
-const query = reactive({ keyword: '', status: '' as DocumentStatus | '', page: 1, size: 20 })
+const query = reactive({
+  keyword: '',
+  status: '' as DocumentStatus | '',
+  review: '' as ReviewFilter | '',
+  mine: false,
+  page: 1,
+  size: 20,
+})
 const rows = ref<KbDocument[]>([])
 const total = ref(0)
 const loading = ref(false)
@@ -51,6 +61,8 @@ async function loadDocuments(silent = false): Promise<void> {
       size: query.size,
       keyword: query.keyword || undefined,
       status: query.status || undefined,
+      review: query.review || undefined,
+      mine: query.mine || undefined,
     })
     rows.value = page.items
     total.value = page.total
@@ -83,6 +95,10 @@ const docAcl = reactive({ visible: false, document: null as KbDocument | null })
 function openDocAcl(doc: KbDocument): void {
   docAcl.document = doc
   docAcl.visible = true
+}
+
+async function onKbSaved(): Promise<void> {
+  await Promise.all([loadKb(), loadDocuments(true)])
 }
 
 function onUploaded(): void {
@@ -197,6 +213,32 @@ onBeforeUnmount(() => {
           </el-select>
         </el-form-item>
         <el-form-item>
+          <el-select
+            v-model="query.review"
+            :placeholder="t('knowledge.review.filter')"
+            clearable
+            style="width: 140px"
+            data-test="review-filter"
+            @change="search"
+          >
+            <el-option
+              v-for="r in REVIEW_FILTERS"
+              :key="r"
+              :label="
+                r === 'attention'
+                  ? t('knowledge.review.attention')
+                  : t(`knowledge.review.state.${r}`)
+              "
+              :value="r"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item>
+          <el-checkbox v-model="query.mine" data-test="review-mine" @change="search">{{
+            t('knowledge.review.mine')
+          }}</el-checkbox>
+        </el-form-item>
+        <el-form-item>
           <el-button type="primary" native-type="submit">{{ t('knowledge.kb.query') }}</el-button>
           <el-button @click="loadDocuments()">{{ t('common.refresh') }}</el-button>
         </el-form-item>
@@ -261,6 +303,24 @@ onBeforeUnmount(() => {
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column :label="t('knowledge.review.column')" width="150">
+          <template #default="{ row }">
+            <div class="owner">{{ (row as KbDocument).owner_name ?? '-' }}</div>
+            <el-tooltip
+              v-if="(row as KbDocument).review_due_at"
+              :content="`${t('knowledge.review.nextReview')} ${formatDateTime((row as KbDocument).review_due_at)}`"
+              placement="top"
+            >
+              <el-tag
+                :type="reviewStatus((row as KbDocument).review_state).type"
+                size="small"
+                effect="plain"
+                data-test="review-state"
+                >{{ reviewStatus((row as KbDocument).review_state).label }}</el-tag
+              >
+            </el-tooltip>
+          </template>
+        </el-table-column>
         <el-table-column :label="t('knowledge.doc.permission')" width="90">
           <template #default="{ row }">
             <span class="sub">{{
@@ -323,7 +383,7 @@ onBeforeUnmount(() => {
     <el-dialog v-model="uploadVisible" :title="t('knowledge.doc.upload')" width="640px">
       <DocumentUploader :kb-id="kbId" @uploaded="onUploaded" />
     </el-dialog>
-    <KbFormDialog v-model="kbForm" :kb="kb" @saved="loadKb" />
+    <KbFormDialog v-model="kbForm" :kb="kb" @saved="onKbSaved" />
     <KbAclDialog v-model="kbAcl" :kb="kb" @saved="loadKb" />
     <DocumentAclDialog
       v-model="docAcl.visible"
@@ -380,6 +440,10 @@ onBeforeUnmount(() => {
 }
 .tag {
   margin: 0 4px 4px 0;
+}
+.owner {
+  font-size: 13px;
+  margin-bottom: 2px;
 }
 .pager {
   margin-top: 16px;

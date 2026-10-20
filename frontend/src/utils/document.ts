@@ -1,4 +1,4 @@
-import type { AclPermission, KbDocument, PrincipalType } from '@/api/types'
+import type { AclPermission, KbDocument, PrincipalType, ReviewState } from '@/api/types'
 import { t } from '@/i18n'
 import { fileExtension } from '@/utils/file'
 
@@ -72,6 +72,24 @@ export function documentStatus(doc: Pick<KbDocument, 'status' | 'chunk_count'>):
         active: false,
       }
   }
+}
+
+/** Review interval presets in days (monthly, quarterly, half-yearly, yearly). */
+export const REVIEW_INTERVALS = [30, 90, 180, 365]
+
+export function reviewIntervalLabel(days: number | null | undefined): string {
+  return days ? t('knowledge.review.every', { n: days }) : t('knowledge.review.intervalNone')
+}
+
+const REVIEW_TAGS: Record<ReviewState, TagType> = {
+  none: 'info',
+  ok: 'success',
+  due_soon: 'warning',
+  overdue: 'danger',
+}
+
+export function reviewStatus(state: ReviewState): { label: string; type: TagType } {
+  return { label: t(`knowledge.review.state.${state}`), type: REVIEW_TAGS[state] }
 }
 
 const PERMISSIONS: AclPermission[] = ['read', 'edit', 'manage']

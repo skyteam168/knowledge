@@ -16,6 +16,7 @@ from app.services.authz import AclPermission
 from app.services.context import BaseService
 from app.services.knowledge.access import RESOURCE_KB, KnowledgeAccess
 from app.services.knowledge.directory import PrincipalDirectory
+from app.services.knowledge.review import refresh_due
 from app.services.outbox_service import ACL_CHANGED, OutboxService
 
 
@@ -74,6 +75,7 @@ class KnowledgeBaseService(BaseService):
                 watermark=data.watermark,
                 copy_protect=data.copy_protect,
                 download_permission=data.download_permission,
+                review_interval_days=data.review_interval_days,
                 created_by=self.ctx.user.id,
             )
         )
@@ -102,6 +104,13 @@ class KnowledgeBaseService(BaseService):
             kb.copy_protect = data.copy_protect
         if data.download_permission is not None:
             kb.download_permission = data.download_permission
+        if (
+            "review_interval_days" in data.model_fields_set
+            and data.review_interval_days != kb.review_interval_days
+        ):
+            kb.review_interval_days = data.review_interval_days
+            for doc in await DocumentRepository(self.session).inheriting_review(self.org_id, kb.id):
+                refresh_due(kb, doc)
         await self.session.flush()
         await self.audit.record(
             self.audit_ctx, "kb.update", RESOURCE_KB, kb.id, before, snapshot(kb)

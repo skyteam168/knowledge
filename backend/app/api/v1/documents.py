@@ -9,6 +9,7 @@ from app.schemas.knowledge import (
     DocumentAclUpdate,
     DocumentDetail,
     DocumentOut,
+    DocumentReviewIn,
     DocumentUpdate,
     PreviewOut,
     VersionCompareOut,
@@ -40,6 +41,13 @@ async def update_document(
 async def delete_document(document_id: str, service: ServiceDep) -> Response:
     await service.delete(document_id)
     return Response(status_code=204)
+
+
+@router.post("/{document_id}/review", response_model=DocumentOut, dependencies=CanUpload)
+async def review_document(
+    document_id: str, data: DocumentReviewIn, service: ServiceDep
+) -> DocumentOut:
+    return await service.review(document_id, data)
 
 
 @router.post("/{document_id}/reprocess", response_model=DocumentOut, dependencies=CanUpload)

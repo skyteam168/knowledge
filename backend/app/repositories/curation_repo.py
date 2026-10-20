@@ -375,7 +375,7 @@ class KnowledgeObjectRepository:
             select(Document)
             .where(
                 Document.deleted_at.is_(None),
-                Document.created_by.is_not(None),
+                or_(Document.owner_id.is_not(None), Document.created_by.is_not(None)),
                 Document.effective_to.is_not(None),
                 Document.effective_to > now,
                 Document.effective_to <= until,
@@ -392,6 +392,23 @@ class KnowledgeObjectRepository:
                 .exists(),
             )
             .order_by(Document.effective_to)
+            .limit(limit)
+        )
+        return list((await self.session.execute(stmt)).scalars())
+
+    async def review_reminders(self, now: datetime, until: datetime, limit: int) -> list[Document]:
+        """Documents due for review by `until` (not yet reminded) or overdue (not yet told)."""
+        stmt = (
+            select(Document)
+            .where(
+                Document.deleted_at.is_(None),
+                Document.review_due_at.is_not(None),
+                or_(
+                    (Document.review_due_at <= until) & (Document.review_reminder < 1),
+                    (Document.review_due_at <= now) & (Document.review_reminder < 2),
+                ),
+            )
+            .order_by(Document.review_due_at)
             .limit(limit)
         )
         return list((await self.session.execute(stmt)).scalars())

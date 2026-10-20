@@ -1,8 +1,9 @@
-"""Periodic expiry handling: deprecate expired KOs, remind owners before KOs / documents expire."""
+"""Periodic expiry handling: deprecate expired KOs, remind owners before KOs / documents expire
+and when documents are due (or overdue) for their periodic review."""
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -13,6 +14,7 @@ from app.services.curation.common import system_audit_ctx
 from app.services.curation.lifecycle import KoLifecycle, ko_link
 from app.services.curation.notifications import NotificationKind, notify
 from app.services.knowledge.access import RESOURCE_DOCUMENT, RESOURCE_KO
+from app.services.knowledge.review import REMINDER_OVERDUE, REMINDER_SOON, review_recipient
 
 logger = logging.getLogger(__name__)
 
@@ -24,11 +26,16 @@ def _day(value: datetime) -> str:
     return value.strftime("%Y-%m-%d")
 
 
+def _aware(value: datetime) -> datetime:
+    return value if value.tzinfo else value.replace(tzinfo=UTC)
+
+
 @dataclass
 class ExpiryResult:
     deprecated: int = 0
     ko_reminders: int = 0
     document_reminders: int = 0
+    review_reminders: int = 0
 
 
 class ExpiryMonitor:
@@ -71,7 +78,7 @@ class ExpiryMonitor:
                 result.document_reminders += await notify(
                     session,
                     doc.org_id,
-                    [doc.created_by],
+                    [review_recipient(doc)],
                     kind=NotificationKind.DOCUMENT_EXPIRING,
                     title=f"文档即将失效：{doc.title[:80]}",
                     body=f"失效时间 {_day(doc.effective_to)}，请确认是否需要更新。",
@@ -80,7 +87,33 @@ class ExpiryMonitor:
                     link=f"/knowledge/{doc.kb_id}/documents/{doc.id}",
                     dedupe_key=f"doc-expiry:{doc.id}:{doc.version}",
                 )
+
+            for doc in await repo.review_reminders(now, until, BATCH):
+                assert doc.review_due_at is not None
+                due = _aware(doc.review_due_at)
+                overdue = due <= now
+                stage = REMINDER_OVERDUE if overdue else REMINDER_SOON
+                result.review_reminders += await notify(
+                    session,
+                    doc.org_id,
+                    [review_recipient(doc)],
+                    kind=NotificationKind.DOCUMENT_REVIEW,
+                    title=(
+                        f"文档复核已逾期：{doc.title[:80]}"
+                        if overdue
+                        else f"文档即将到复核期：{doc.title[:80]}"
+                    ),
+                    body=(
+                        f"复核截止 {_day(due)}。请确认内容仍然准确，"
+                        "在文档详情点「确认复核」，或上传新版本。"
+                    ),
+                    resource_type=RESOURCE_DOCUMENT,
+                    resource_id=doc.id,
+                    link=f"/knowledge/{doc.kb_id}/documents/{doc.id}",
+                    dedupe_key=f"doc-review:{doc.id}:{due:%Y%m%d}:{stage}",
+                )
+                doc.review_reminder = stage
             await session.commit()
-        if result.deprecated or result.ko_reminders or result.document_reminders:
+        if any(result.__dict__.values()):
             logger.info("expiry_checked", extra=result.__dict__)
         return result

@@ -1,11 +1,13 @@
 from datetime import datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 Visibility = Literal["org", "restricted"]
 AclPermissionName = Literal["read", "edit", "manage"]
 GrantablePrincipal = Literal["user", "group", "role", "dept"]
+ReviewDays = Annotated[int, Field(ge=1, le=3650)]
+ReviewStateName = Literal["none", "ok", "due_soon", "overdue"]
 
 
 class ORMModel(BaseModel):
@@ -60,6 +62,7 @@ class KnowledgeBaseCreate(BaseModel):
     watermark: bool = False
     copy_protect: bool = False
     download_permission: AclPermissionName = "read"
+    review_interval_days: ReviewDays | None = None
 
 
 class KnowledgeBaseUpdate(BaseModel):
@@ -68,6 +71,8 @@ class KnowledgeBaseUpdate(BaseModel):
     watermark: bool | None = None
     copy_protect: bool | None = None
     download_permission: AclPermissionName | None = None
+    # null = no periodic review (only applied when sent).
+    review_interval_days: ReviewDays | None = None
 
 
 class KnowledgeBaseOut(ORMModel):
@@ -78,6 +83,7 @@ class KnowledgeBaseOut(ORMModel):
     watermark: bool = False
     copy_protect: bool = False
     download_permission: AclPermissionName = "read"
+    review_interval_days: int | None = None
     created_by: str | None
     created_at: datetime
     updated_at: datetime
@@ -114,6 +120,15 @@ class DocumentOut(ORMModel):
     watermark: bool | None = None
     copy_protect: bool | None = None
     download_permission: AclPermissionName | None = None
+    owner_id: str | None = None
+    owner_name: str | None = None
+    # Own review interval (None = as the knowledge base, 0 = never) and the effective one.
+    review_interval_days: int | None = None
+    review_interval: int | None = None
+    reviewed_at: datetime | None = None
+    reviewed_by: str | None = None
+    review_due_at: datetime | None = None
+    review_state: ReviewStateName = "none"
     chunk_count: int | None
     parsed_at: datetime | None
     chunked_at: datetime | None
@@ -166,6 +181,7 @@ class VersionCompareOut(BaseModel):
 
 class DocumentDetail(DocumentOut):
     kb_name: str
+    kb_review_interval_days: int | None = None
     versions: list[DocumentVersionOut]
 
 
@@ -179,6 +195,10 @@ class DocumentUpdate(BaseModel):
     watermark: bool | None = None
     copy_protect: bool | None = None
     download_permission: AclPermissionName | None = None
+    # Applied when sent: owner null = none (the uploader gets reminders);
+    # review interval null = as the knowledge base, 0 = never.
+    owner_id: str | None = Field(default=None, max_length=32)
+    review_interval_days: int | None = Field(default=None, ge=0, le=3650)
 
     @field_validator("tags")
     @classmethod
@@ -186,6 +206,10 @@ class DocumentUpdate(BaseModel):
         if tags is None:
             return None
         return list(dict.fromkeys(t.strip() for t in tags if t.strip()))
+
+
+class DocumentReviewIn(BaseModel):
+    note: str | None = Field(default=None, max_length=500)
 
 
 class UploadInit(BaseModel):

@@ -64,6 +64,8 @@ class KnowledgeBase(IdMixin, TenantMixin, TimestampMixin, Base):
     watermark: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     copy_protect: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     download_permission: Mapped[str] = mapped_column(String(16), default="read", nullable=False)
+    # Default periodic review of its documents in days; NULL = no periodic review.
+    review_interval_days: Mapped[int | None] = mapped_column(Integer)
     created_by: Mapped[str | None] = mapped_column(String(32))
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
@@ -74,6 +76,7 @@ class Document(IdMixin, TenantMixin, TimestampMixin, Base):
         Index("ix_documents_kb_sha256", "org_id", "kb_id", "sha256"),
         Index("ix_documents_kb_filename", "org_id", "kb_id", "filename"),
         Index("ix_documents_kb_status", "org_id", "kb_id", "status"),
+        Index("ix_documents_review_due", "review_due_at"),
     )
 
     kb_id: Mapped[str] = mapped_column(
@@ -100,6 +103,15 @@ class Document(IdMixin, TenantMixin, TimestampMixin, Base):
     watermark: Mapped[bool | None] = mapped_column(Boolean)
     copy_protect: Mapped[bool | None] = mapped_column(Boolean)
     download_permission: Mapped[str | None] = mapped_column(String(16))
+    # Responsible person (reminders go here; falls back to the uploader).
+    owner_id: Mapped[str | None] = mapped_column(String(32))
+    # Periodic review: NULL = as the knowledge base, 0 = never. A new version counts as a review.
+    review_interval_days: Mapped[int | None] = mapped_column(Integer)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reviewed_by: Mapped[str | None] = mapped_column(String(32))
+    review_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Reminders sent for the current due date: 0 none, 1 due soon, 2 overdue.
+    review_reminder: Mapped[int] = mapped_column(SmallInteger, default=0, nullable=False)
     chunk_count: Mapped[int | None] = mapped_column(Integer)
     parsed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     chunked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

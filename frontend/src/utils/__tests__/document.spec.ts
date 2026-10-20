@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { atLeast, documentStatus } from '@/utils/document'
+import { atLeast, documentStatus, reviewIntervalLabel, reviewStatus } from '@/utils/document'
 import { formatBytes, isAcceptedFile } from '@/utils/file'
 
 describe('documentStatus', () => {
@@ -21,6 +21,16 @@ describe('documentStatus', () => {
       active: false,
     })
     expect(documentStatus({ status: 'uploaded', chunk_count: null }).active).toBe(true)
+  })
+})
+
+describe('review helpers', () => {
+  it('labels states and intervals', () => {
+    expect(reviewStatus('overdue')).toEqual({ label: '复核已逾期', type: 'danger' })
+    expect(reviewStatus('due_soon').type).toBe('warning')
+    expect(reviewIntervalLabel(90)).toBe('每 90 天')
+    expect(reviewIntervalLabel(null)).toBe('不定期复核')
+    expect(reviewIntervalLabel(0)).toBe('不定期复核')
   })
 })
 

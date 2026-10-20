@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { createKnowledgeBase, updateKnowledgeBase } from '@/api/knowledge'
 import type { AclPermission, KbVisibility, KnowledgeBase } from '@/api/types'
+import { REVIEW_INTERVALS, reviewIntervalLabel } from '@/utils/document'
 
 const props = defineProps<{ kb?: KnowledgeBase | null }>()
 const visible = defineModel<boolean>({ required: true })
@@ -19,6 +20,8 @@ const form = reactive({
   watermark: false,
   copy_protect: false,
   download_permission: 'read' as AclPermission,
+  /** 0 = no periodic review (options cannot be null). */
+  review_interval_days: 0,
 })
 const rules = computed<FormRules>(() => ({
   name: [{ required: true, message: t('knowledge.kb.nameRequired'), trigger: 'blur' }],
@@ -32,6 +35,7 @@ watch(visible, (open) => {
   form.watermark = props.kb?.watermark ?? false
   form.copy_protect = props.kb?.copy_protect ?? false
   form.download_permission = props.kb?.download_permission ?? 'read'
+  form.review_interval_days = props.kb?.review_interval_days ?? 0
 })
 
 async function submit(): Promise<void> {
@@ -43,6 +47,7 @@ async function submit(): Promise<void> {
       watermark: form.watermark,
       copy_protect: form.copy_protect,
       download_permission: form.download_permission,
+      review_interval_days: form.review_interval_days || null,
     }
     const kb = props.kb
       ? await updateKnowledgeBase(props.kb.id, { name: form.name, description, ...protection })
@@ -97,6 +102,19 @@ async function submit(): Promise<void> {
         </el-select>
       </el-form-item>
       <div class="hint hint--block">{{ t('knowledge.protect.kbHint') }}</div>
+      <el-divider content-position="left">{{ t('knowledge.review.kbTitle') }}</el-divider>
+      <el-form-item :label="t('knowledge.review.interval')">
+        <el-select v-model="form.review_interval_days" data-test="kb-review-interval">
+          <el-option :label="t('knowledge.review.intervalNone')" :value="0" />
+          <el-option
+            v-for="days in REVIEW_INTERVALS"
+            :key="days"
+            :label="reviewIntervalLabel(days)"
+            :value="days"
+          />
+        </el-select>
+      </el-form-item>
+      <div class="hint hint--block">{{ t('knowledge.review.kbHint') }}</div>
     </el-form>
     <template #footer>
       <el-button @click="visible = false">{{ t('common.cancel') }}</el-button>

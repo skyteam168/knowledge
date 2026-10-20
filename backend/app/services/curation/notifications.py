@@ -17,6 +17,7 @@ class NotificationKind:
     KO_DEPRECATED = "ko_deprecated"
     KO_EXPIRING = "ko_expiring"
     DOCUMENT_EXPIRING = "document_expiring"
+    DOCUMENT_REVIEW = "document_review"
     GAP_ASSIGNED = "gap_assigned"
     GAP_RESOLVED = "gap_resolved"
     REVIEW_REQUESTED = "review_requested"

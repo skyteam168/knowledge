@@ -1,4 +1,5 @@
 from collections.abc import Iterable, Sequence
+from datetime import datetime
 
 from sqlalchemy import ColumnElement, Select, delete, func, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -95,16 +96,40 @@ class DocumentRepository:
         status: str | None = None,
         keyword: str | None = None,
         visible: ColumnElement[bool] | None = None,
+        review_due: tuple[datetime | None, datetime | None] | None = None,
+        owner_id: str | None = None,
     ) -> Select[Document]:
+        """`review_due` = (from, until): due dates in [from, until]; either end may be open."""
         stmt = self._active(org_id).where(Document.kb_id == kb_id)
         if visible is not None:
             stmt = stmt.where(visible)
         if status:
             stmt = stmt.where(Document.status == status)
+        if review_due is not None:
+            start, until = review_due
+            stmt = stmt.where(Document.review_due_at.is_not(None))
+            if start is not None:
+                stmt = stmt.where(Document.review_due_at >= start)
+            if until is not None:
+                stmt = stmt.where(Document.review_due_at <= until)
+        if owner_id:
+            stmt = stmt.where(
+                or_(
+                    Document.owner_id == owner_id,
+                    (Document.owner_id.is_(None)) & (Document.created_by == owner_id),
+                )
+            )
         if keyword:
             like = f"%{keyword.strip()}%"
             stmt = stmt.where(or_(Document.title.ilike(like), Document.filename.ilike(like)))
         return stmt.order_by(Document.updated_at.desc(), Document.id)
+
+    async def inheriting_review(self, org_id: str, kb_id: str) -> list[Document]:
+        """Documents that follow the knowledge base's review interval."""
+        stmt = self._active(org_id).where(
+            Document.kb_id == kb_id, Document.review_interval_days.is_(None)
+        )
+        return list((await self.session.execute(stmt)).scalars())
 
     async def count_active(self, org_id: str, kb_id: str) -> int:
         stmt = select(func.count()).where(

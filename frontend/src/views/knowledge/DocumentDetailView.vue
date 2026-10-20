@@ -12,15 +12,32 @@ import {
   listChunks,
   reprocessDocument,
   restoreVersion,
+  reviewDocument,
+  searchPrincipals,
   updateDocument,
 } from '@/api/knowledge'
-import type { AclPermission, Chunk, DocumentDetail, DocumentVersion, Preview } from '@/api/types'
+import type {
+  AclPermission,
+  Chunk,
+  DocumentDetail,
+  DocumentVersion,
+  Preview,
+  PrincipalOption,
+} from '@/api/types'
 import ChunkViewer from '@/components/knowledge/ChunkViewer.vue'
 import ProtectedArea from '@/components/knowledge/ProtectedArea.vue'
 import VersionCompareDialog from '@/components/knowledge/VersionCompareDialog.vue'
 import VersionViewDialog from '@/components/knowledge/VersionViewDialog.vue'
 import { useAuthStore } from '@/stores/auth'
-import { atLeast, documentStatus, inlinePreviewable, isHtmlFile } from '@/utils/document'
+import {
+  REVIEW_INTERVALS,
+  atLeast,
+  documentStatus,
+  inlinePreviewable,
+  isHtmlFile,
+  reviewIntervalLabel,
+  reviewStatus,
+} from '@/utils/document'
 import { fileExtension, formatBytes } from '@/utils/file'
 import { formatDateTime } from '@/utils/format'
 
@@ -121,6 +138,26 @@ async function reprocess(): Promise<void> {
   await loadDocument()
 }
 
+// ---- review ------------------------------------------------------------------------
+
+const review = computed(() => (doc.value ? reviewStatus(doc.value.review_state) : null))
+const needsReview = computed(() =>
+  ['due_soon', 'overdue'].includes(doc.value?.review_state ?? 'none'),
+)
+
+async function confirmReview(): Promise<void> {
+  const { value } = await ElMessageBox.prompt(
+    t('knowledge.review.confirmPrompt'),
+    t('knowledge.review.confirm'),
+    { inputPlaceholder: t('knowledge.review.notePlaceholder'), inputValidator: () => true },
+  )
+  const updated = await reviewDocument(props.docId, value)
+  ElMessage.success(
+    t('knowledge.review.confirmed', { date: formatDateTime(updated.review_due_at) }),
+  )
+  await loadDocument()
+}
+
 // ---- versions ----------------------------------------------------------------------
 
 const viewing = ref<DocumentVersion | null>(null)
@@ -170,12 +207,38 @@ const editor = reactive({
   watermark: INHERIT as typeof INHERIT | 'on',
   copyProtect: INHERIT as typeof INHERIT | 'on',
   download: INHERIT as typeof INHERIT | AclPermission,
+  ownerId: '',
+  /** inherit = as the knowledge base, 0 = never, otherwise days. */
+  reviewInterval: INHERIT as typeof INHERIT | number,
 })
+const ownerOptions = ref<PrincipalOption[]>([])
+const searchingOwner = ref(false)
+
+async function searchOwner(keyword: string): Promise<void> {
+  searchingOwner.value = true
+  try {
+    ownerOptions.value = await searchPrincipals('user', keyword || undefined)
+  } finally {
+    searchingOwner.value = false
+  }
+}
 
 function openEditor(): void {
   if (!doc.value) return
   editor.title = doc.value.title
   editor.tags = [...doc.value.tags]
+  editor.ownerId = doc.value.owner_id ?? ''
+  ownerOptions.value = doc.value.owner_id
+    ? [
+        {
+          type: 'user',
+          id: doc.value.owner_id,
+          name: doc.value.owner_name ?? doc.value.owner_id,
+          description: null,
+        },
+      ]
+    : []
+  editor.reviewInterval = doc.value.review_interval_days ?? INHERIT
   editor.watermark = doc.value.watermark ? 'on' : INHERIT
   editor.copyProtect = doc.value.copy_protect ? 'on' : INHERIT
   editor.download = doc.value.download_permission ?? INHERIT
@@ -194,6 +257,8 @@ async function saveEditor(): Promise<void> {
       tags: editor.tags,
       effective_from: editor.effective?.[0] ?? null,
       effective_to: editor.effective?.[1] ?? null,
+      owner_id: editor.ownerId || null,
+      review_interval_days: editor.reviewInterval === INHERIT ? null : editor.reviewInterval,
       ...(canManage.value
         ? {
             watermark: editor.watermark === 'on' ? true : null,
@@ -248,8 +313,18 @@ onBeforeUnmount(() => {
               t('knowledge.protect.tag')
             }}</el-tag>
           </el-tooltip>
+          <el-tag v-if="needsReview && review" :type="review.type" data-test="doc-review-state">{{
+            review.label
+          }}</el-tag>
         </div>
         <div class="actions">
+          <el-button
+            v-if="canEdit && doc?.review_interval"
+            :type="needsReview ? 'warning' : 'default'"
+            data-test="doc-confirm-review"
+            @click="confirmReview"
+            >{{ t('knowledge.review.confirm') }}</el-button
+          >
           <el-button v-if="canEdit" @click="openEditor">{{
             t('knowledge.doc.editInfo')
           }}</el-button>
@@ -341,6 +416,24 @@ onBeforeUnmount(() => {
                 </el-descriptions-item>
                 <el-descriptions-item :label="t('knowledge.doc.effectiveTime')">
                   {{ formatDateTime(doc.effective_from) }} ~ {{ formatDateTime(doc.effective_to) }}
+                </el-descriptions-item>
+                <el-descriptions-item :label="t('knowledge.review.owner')">
+                  {{ doc.owner_name ?? t('knowledge.review.ownerNone') }}
+                </el-descriptions-item>
+                <el-descriptions-item :label="t('knowledge.review.interval')">
+                  {{ reviewIntervalLabel(doc.review_interval) }}
+                </el-descriptions-item>
+                <el-descriptions-item :label="t('knowledge.review.lastReviewed')">
+                  {{ formatDateTime(doc.reviewed_at) }}
+                </el-descriptions-item>
+                <el-descriptions-item
+                  v-if="doc.review_due_at"
+                  :label="t('knowledge.review.nextReview')"
+                >
+                  {{ formatDateTime(doc.review_due_at) }}
+                  <el-tag v-if="review" :type="review.type" size="small" class="tag-gap">{{
+                    review.label
+                  }}</el-tag>
                 </el-descriptions-item>
                 <el-descriptions-item :label="t('knowledge.doc.permission')">
                   {{ doc.acl_inherit ? t('knowledge.acl.inheritKb') : t('knowledge.acl.custom') }}
@@ -486,6 +579,49 @@ onBeforeUnmount(() => {
             :end-placeholder="t('knowledge.doc.effectiveTo')"
           />
         </el-form-item>
+        <el-divider content-position="left">{{ t('knowledge.review.title') }}</el-divider>
+        <el-form-item :label="t('knowledge.review.owner')">
+          <el-select
+            v-model="editor.ownerId"
+            filterable
+            remote
+            clearable
+            :remote-method="searchOwner"
+            :loading="searchingOwner"
+            :placeholder="t('knowledge.review.ownerPlaceholder')"
+            style="width: 100%"
+            data-test="doc-owner"
+          >
+            <el-option v-for="o in ownerOptions" :key="o.id" :label="o.name" :value="o.id">
+              <span>{{ o.name }}</span>
+              <span v-if="o.description" class="option-sub">{{ o.description }}</span>
+            </el-option>
+          </el-select>
+        </el-form-item>
+        <el-form-item :label="t('knowledge.review.interval')">
+          <el-select
+            v-model="editor.reviewInterval"
+            style="width: 100%"
+            data-test="doc-review-interval"
+          >
+            <el-option
+              :label="
+                t('knowledge.review.inherit', {
+                  label: reviewIntervalLabel(doc?.kb_review_interval_days),
+                })
+              "
+              :value="INHERIT"
+            />
+            <el-option :label="t('knowledge.review.never')" :value="0" />
+            <el-option
+              v-for="days in REVIEW_INTERVALS"
+              :key="days"
+              :label="reviewIntervalLabel(days)"
+              :value="days"
+            />
+          </el-select>
+        </el-form-item>
+        <div class="protect-hint">{{ t('knowledge.review.ownerHint') }}</div>
         <template v-if="canManage">
           <el-divider content-position="left">{{ t('knowledge.protect.title') }}</el-divider>
           <el-form-item :label="t('knowledge.protect.watermark')">
@@ -599,6 +735,11 @@ onBeforeUnmount(() => {
 }
 .tag-gap {
   margin-left: 6px;
+}
+.option-sub {
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 .version-time {
   font-size: 12px;

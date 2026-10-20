@@ -2,11 +2,11 @@ import asyncio
 import hashlib
 import json
 import secrets
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import asdict
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import PurePosixPath
-from typing import Any
+from typing import Any, Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -45,6 +45,7 @@ from app.schemas.knowledge import (
     DocumentAclUpdate,
     DocumentDetail,
     DocumentOut,
+    DocumentReviewIn,
     DocumentUpdate,
     DocumentVersionOut,
     PagePreviewOut,
@@ -58,7 +59,13 @@ from app.schemas.knowledge import (
     VersionTextOut,
 )
 from app.services.audit_service import snapshot
-from app.services.authz import AclPermission, AuthzCache
+from app.services.authz import (
+    AclPermission,
+    AuthzCache,
+    CurrentUser,
+    PermissionResolver,
+    PrincipalResolver,
+)
 from app.services.context import BaseService, RequestContext
 from app.services.ingest.parsers.base import FileKind, canonical_mime, detect_kind
 from app.services.ingest.pipeline import parsed_key
@@ -68,6 +75,12 @@ from app.services.knowledge.access import RESOURCE_DOCUMENT, RESOURCE_KB, Knowle
 from app.services.knowledge.directory import PrincipalDirectory
 from app.services.knowledge.page_links import PageLinks
 from app.services.knowledge.protection import protection_of
+from app.services.knowledge.review import (
+    mark_reviewed,
+    refresh_due,
+    review_interval,
+    review_state,
+)
 from app.services.knowledge.version_diff import diff_lines, document_lines
 from app.services.outbox_service import ACL_CHANGED, DOCUMENT_DELETED, OutboxService
 from app.services.security.file_guard import FileGuard
@@ -75,6 +88,7 @@ from app.services.security.pii import PiiMasker
 
 MAX_FILENAME_LENGTH = 255
 TICKET_PREFIX = "upload:"
+ReviewFilter = Literal["due_soon", "overdue", "attention"]
 
 
 class UnsupportedFileError(AppError):
@@ -99,7 +113,9 @@ def clean_filename(filename: str) -> str:
     return name
 
 
-def to_document_out(doc: Document, perm: AclPermission | None, kb: KnowledgeBase) -> DocumentOut:
+def to_document_out(
+    doc: Document, perm: AclPermission | None, kb: KnowledgeBase, *, notice_days: int
+) -> DocumentOut:
     protection = protection_of(kb, doc)
     permission = perm.value if perm else None
     return DocumentOut.model_validate(doc).model_copy(
@@ -107,6 +123,8 @@ def to_document_out(doc: Document, perm: AclPermission | None, kb: KnowledgeBase
             "my_permission": permission,
             "protection": ProtectionOut(**asdict(protection)),
             "can_download": protection.can_download(permission),
+            "review_interval": review_interval(kb, doc),
+            "review_state": review_state(doc, utcnow(), notice_days),
         }
     )
 
@@ -160,6 +178,21 @@ class DocumentService(BaseService):
     def access(self) -> KnowledgeAccess:
         return KnowledgeAccess(self.session)
 
+    def _out(self, doc: Document, perm: AclPermission | None, kb: KnowledgeBase) -> DocumentOut:
+        return to_document_out(doc, perm, kb, notice_days=self.settings.expiry_notice_days)
+
+    async def _user_names(self, ids: Iterable[str | None]) -> dict[str, str]:
+        wanted = sorted({i for i in ids if i})
+        users = await UserRepository(self.session).list_by_ids(self.org_id, wanted)
+        return {u.id: u.display_name or u.username for u in users}
+
+    async def _with_owner_names(self, outs: list[DocumentOut]) -> list[DocumentOut]:
+        names = await self._user_names(o.owner_id for o in outs)
+        return [
+            o.model_copy(update={"owner_name": names.get(o.owner_id)}) if o.owner_id else o
+            for o in outs
+        ]
+
     # ---- loading + permission checks ----
 
     async def _kb(self, kb_id: str, required: AclPermission) -> tuple[KnowledgeBase, AclPermission]:
@@ -202,9 +235,7 @@ class DocumentService(BaseService):
         perm = await self.access.document_permission(self.ctx.user, doc, kb)
         if perm is None:
             raise ConflictError("An identical file already exists in this knowledge base")
-        return UploadResult(
-            document=to_document_out(doc, perm, kb), duplicate=True, new_version=False
-        )
+        return UploadResult(document=self._out(doc, perm, kb), duplicate=True, new_version=False)
 
     async def create_upload(self, kb_id: str, data: UploadInit) -> UploadInitOut:
         kb, _ = await self._kb(kb_id, AclPermission.EDIT)
@@ -361,6 +392,7 @@ class DocumentService(BaseService):
                 acl_inherit=True,
                 created_by=self.ctx.user.id,
             )
+        mark_reviewed(kb, doc, self.ctx.user.id, utcnow())
         final_key = self._file_key(doc, filename)
         await self.storage.copy(source_key, final_key)
         await self.storage.delete(source_key)
@@ -392,7 +424,7 @@ class DocumentService(BaseService):
         self._enqueue_parse(doc)
         perm = await self.access.document_permission(self.ctx.user, doc, kb)
         return UploadResult(
-            document=to_document_out(doc, perm, kb), duplicate=False, new_version=new_version
+            document=self._out(doc, perm, kb), duplicate=False, new_version=new_version
         )
 
     @staticmethod
@@ -426,34 +458,47 @@ class DocumentService(BaseService):
         size: int,
         status: str | None = None,
         keyword: str | None = None,
+        review: ReviewFilter | None = None,
+        mine: bool = False,
     ) -> Page[DocumentOut]:
+        """`review`: due_soon (within the notice period), overdue, or attention (both)."""
         kb, kb_perm = await self._kb(kb_id, AclPermission.READ)
+        now = utcnow()
+        soon = now + timedelta(days=self.settings.expiry_notice_days)
+        windows: dict[ReviewFilter, tuple[datetime | None, datetime | None]] = {
+            "due_soon": (now, soon),
+            "overdue": (None, now),
+            "attention": (None, soon),
+        }
         stmt = self.repo.search_stmt(
             self.org_id,
             kb.id,
             status=status,
             keyword=keyword,
             visible=self.access.visible_document_clause(self.ctx.user, kb_perm),
+            review_due=windows[review] if review else None,
+            owner_id=self.ctx.user.id if mine else None,
         )
+        if review:
+            stmt = stmt.order_by(None).order_by(Document.review_due_at, Document.id)
         docs, total = await paginate(self.session, stmt, page, size)
         perms = await self.access.document_permissions(self.ctx.user, docs, kb_perm)
-        items = [to_document_out(d, perms.get(d.id), kb) for d in docs]
+        items = await self._with_owner_names([self._out(d, perms.get(d.id), kb) for d in docs])
         return Page(items=items, total=total, page=page, size=size)
 
     async def get(self, document_id: str) -> DocumentDetail:
         doc, kb, perm = await self._doc(document_id, AclPermission.READ)
         versions = await self.repo.versions(doc.id)
-        base = to_document_out(doc, perm, kb)
+        (base,) = await self._with_owner_names([self._out(doc, perm, kb)])
         return DocumentDetail(
             **base.model_dump(),
             kb_name=kb.name,
+            kb_review_interval_days=kb.review_interval_days,
             versions=await self._version_outs(versions),
         )
 
     async def _version_outs(self, rows: Sequence[DocumentVersion]) -> list[DocumentVersionOut]:
-        ids = sorted({r.created_by for r in rows if r.created_by})
-        users = await UserRepository(self.session).list_by_ids(self.org_id, ids)
-        names = {u.id: u.display_name or u.username for u in users}
+        names = await self._user_names(r.created_by for r in rows)
         return [
             DocumentVersionOut.model_validate(r).model_copy(
                 update={"created_by_name": names.get(r.created_by or "")}
@@ -642,6 +687,7 @@ class DocumentService(BaseService):
             raise NotFoundError("The file of this version is no longer stored")
         before = snapshot(doc)
         self._advance(doc, mime_type=row.mime_type, size_bytes=row.size_bytes, sha256=row.sha256)
+        mark_reviewed(kb, doc, self.ctx.user.id, utcnow())
         doc.minio_key = self._file_key(doc, row.filename)
         await self.storage.copy(row.minio_key, doc.minio_key)
         await self.repo.add_version(
@@ -669,7 +715,7 @@ class DocumentService(BaseService):
             {**after, "restored_from": version} if after else None,
         )
         self._enqueue_parse(doc)
-        return to_document_out(doc, perm, kb)
+        return self._out(doc, perm, kb)
 
     # ---- write ----
 
@@ -694,6 +740,13 @@ class DocumentService(BaseService):
             doc.effective_from = data.effective_from
         if "effective_to" in fields:
             doc.effective_to = data.effective_to
+        if "owner_id" in fields and data.owner_id != doc.owner_id:
+            if data.owner_id is not None:
+                await self._check_owner(doc, kb, data.owner_id)
+            doc.owner_id = data.owner_id
+        if "review_interval_days" in fields:
+            doc.review_interval_days = data.review_interval_days
+            refresh_due(kb, doc)
         if (
             doc.effective_from
             and doc.effective_to
@@ -704,7 +757,57 @@ class DocumentService(BaseService):
         await self.audit.record(
             self.audit_ctx, "document.update", RESOURCE_DOCUMENT, doc.id, before, snapshot(doc)
         )
-        return to_document_out(doc, perm, kb)
+        (out,) = await self._with_owner_names([self._out(doc, perm, kb)])
+        return out
+
+    async def _check_owner(self, doc: Document, kb: KnowledgeBase, owner_id: str) -> None:
+        """The owner must be an active member who can edit the document."""
+        owner = await UserRepository(self.session).get(self.org_id, owner_id)
+        if owner is None or not owner.is_active:
+            raise ValidationAppError("Owner not found", code="OWNER_INVALID")
+        principals = await PrincipalResolver(self.session, self.authz_cache).resolve(
+            self.org_id, owner.id
+        )
+        as_owner = CurrentUser(
+            id=owner.id,
+            org_id=self.org_id,
+            username=owner.username,
+            display_name=owner.display_name,
+            principals=principals,
+            permissions=await PermissionResolver(self.session, self.authz_cache).resolve(
+                principals
+            ),
+        )
+        perm = await self.access.document_permission(as_owner, doc, kb)
+        if perm is None or perm.level < AclPermission.EDIT.level:
+            raise ValidationAppError(
+                "The owner needs edit permission on this document",
+                code="OWNER_NO_EDIT",
+                detail={"owner_id": owner_id},
+            )
+
+    async def review(self, document_id: str, data: DocumentReviewIn) -> DocumentOut:
+        """Confirm the document is still accurate: the review clock starts again."""
+        doc, kb, perm = await self._doc(document_id, AclPermission.EDIT)
+        before = {"reviewed_at": doc.reviewed_at, "review_due_at": doc.review_due_at}
+        mark_reviewed(kb, doc, self.ctx.user.id, utcnow())
+        await self.session.flush()
+        await self.audit.record(
+            self.audit_ctx,
+            "document.review",
+            RESOURCE_DOCUMENT,
+            doc.id,
+            snapshot(before),
+            snapshot(
+                {
+                    "reviewed_at": doc.reviewed_at,
+                    "review_due_at": doc.review_due_at,
+                    "note": data.note,
+                }
+            ),
+        )
+        (out,) = await self._with_owner_names([self._out(doc, perm, kb)])
+        return out
 
     async def delete(self, document_id: str) -> None:
         doc, kb, _ = await self._doc(document_id, AclPermission.EDIT)
@@ -735,7 +838,7 @@ class DocumentService(BaseService):
             self.audit_ctx, "document.reprocess", RESOURCE_DOCUMENT, doc.id, before, snapshot(doc)
         )
         self._enqueue_parse(doc)
-        return to_document_out(doc, perm, kb)
+        return self._out(doc, perm, kb)
 
     # ---- ACL ----
 

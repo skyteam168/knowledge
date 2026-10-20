@@ -75,6 +75,8 @@ export const updateDocument = (id: string, body: DocumentUpdate) =>
   put<KbDocument>(`/documents/${id}`, body)
 export const deleteDocument = (id: string) => del<void>(`/documents/${id}`)
 export const reprocessDocument = (id: string) => post<KbDocument>(`/documents/${id}/reprocess`)
+export const reviewDocument = (id: string, note?: string) =>
+  post<KbDocument>(`/documents/${id}/review`, { note: note || null })
 export const listChunks = (id: string) => get<Chunk[]>(`/documents/${id}/chunks`)
 export const getPreviewUrl = (id: string) => get<Preview>(`/documents/${id}/preview-url`)
 export const getDownloadUrl = (id: string) => get<Preview>(`/documents/${id}/download-url`)
