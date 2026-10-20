@@ -182,6 +182,18 @@ $DC exec -T keycloak $K get users/$UID_ -r ekb --fields username,enabled,attribu
 
 - `set-password` 成功时无输出；报 `invalidPasswordMin...Message` 表示不符合密码策略，此时账号没有密码，登录一定提示“无效的用户名或密码”。
 - 最后一条应能看到 `"org_id" : [ "default" ]`。缺省时后端也会归到 `default` 组织。
+
+### 4.3 开启「记住我」（已部署环境）
+
+realm 只在首次启动时导入。已上线的环境需要手动打开：
+
+```bash
+$DC exec -T keycloak $K update realms/ekb -s rememberMe=true \
+  -s ssoSessionIdleTimeoutRememberMe=604800 \
+  -s ssoSessionMaxLifespanRememberMe=2592000
+```
+
+勾选「记住我」后：空闲约 7 天、最长约 30 天内无需重新输入账号密码（仍受 SSO Cookie 约束）。登录页主题（企微/钉钉图标、密码框样式）挂载在 `themes/ekb`，`git pull` 后重启 Keycloak 即可：`$DC up -d --force-recreate keycloak`。
 - 角色：`kb_admin` 全部权限；`kb_editor` 编辑；`kb_viewer` 只读（新用户首次登录无角色时默认）；`platform_admin` 跨组织，不需要可去掉。
 - 也可在 `https://<IP>:8444/admin` → 切换到 ekb realm → Users 中手动创建，Attributes 里加 `org_id = default`。
 

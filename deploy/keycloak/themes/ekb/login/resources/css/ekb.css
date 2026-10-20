@@ -327,15 +327,15 @@ html.login-pf,
 }
 
 .ekb-panel .pf-v5-c-form-control {
-    min-height: 42px;
+    min-height: 44px;
     background: #fff;
-    border-radius: 8px;
+    border-radius: 10px;
     transition: box-shadow 0.15s ease;
 }
 
 .ekb-panel .pf-v5-c-form-control::before {
     border: 1px solid var(--ekb-border);
-    border-radius: 8px;
+    border-radius: 10px;
 }
 
 .ekb-panel .pf-v5-c-form-control::after {
@@ -347,7 +347,7 @@ html.login-pf,
 }
 
 .ekb-panel .pf-v5-c-form-control:focus-within {
-    box-shadow: 0 0 0 3px rgba(51, 112, 255, 0.15);
+    box-shadow: 0 0 0 3px rgba(51, 112, 255, 0.18);
 }
 
 .ekb-panel .pf-v5-c-form-control:focus-within::before {
@@ -367,13 +367,21 @@ html.login-pf,
     outline: none;
 }
 
+/* Password: one capsule with the eye toggle inside the same border. */
 .ekb-panel .pf-v5-c-input-group {
     gap: 0;
+    border-radius: 10px;
+    transition: box-shadow 0.15s ease;
+}
+
+.ekb-panel .pf-v5-c-input-group:focus-within {
+    box-shadow: 0 0 0 3px rgba(51, 112, 255, 0.18);
 }
 
 .ekb-panel .pf-v5-c-input-group .pf-v5-c-form-control {
     border-top-right-radius: 0;
     border-bottom-right-radius: 0;
+    box-shadow: none !important;
 }
 
 .ekb-panel .pf-v5-c-input-group .pf-v5-c-form-control::before {
@@ -381,21 +389,46 @@ html.login-pf,
     border-bottom-right-radius: 0;
 }
 
+.ekb-panel .pf-v5-c-input-group:focus-within .pf-v5-c-form-control::before,
+.ekb-panel .pf-v5-c-input-group:focus-within .pf-v5-c-button.pf-m-control::after {
+    border-color: var(--ekb-primary);
+}
+
 .ekb-panel .pf-v5-c-button.pf-m-control {
     min-width: 44px;
     color: var(--ekb-text-3);
     background: #fff;
-    border-radius: 0 8px 8px 0;
+    border-radius: 0 10px 10px 0;
 }
 
 .ekb-panel .pf-v5-c-button.pf-m-control::after {
     border: 1px solid var(--ekb-border);
     border-left: 0;
-    border-radius: 0 8px 8px 0;
+    border-radius: 0 10px 10px 0;
 }
 
 .ekb-panel .pf-v5-c-button.pf-m-control:hover {
     color: var(--ekb-primary);
+}
+
+.ekb-panel .pf-v5-c-button.pf-m-control .fa-eye,
+.ekb-panel .pf-v5-c-button.pf-m-control .fa-eye-slash,
+.ekb-panel .pf-v5-c-button.pf-m-control i[class*="fa-eye"] {
+    font-size: 16px;
+}
+
+/* Remember me */
+.ekb-panel .pf-v5-c-check {
+    margin-top: 2px;
+}
+
+.ekb-panel .pf-v5-c-check__label {
+    font-size: 13px;
+    color: var(--ekb-text-2);
+}
+
+.ekb-panel .pf-v5-c-check__input:checked {
+    accent-color: var(--ekb-primary);
 }
 
 /* ---------- Buttons ---------- */
@@ -504,24 +537,23 @@ html.login-pf,
 }
 
 #kc-social-providers .pf-v5-c-button::before {
-    display: inline-grid;
-    place-items: center;
-    width: 22px;
-    height: 22px;
-    font-size: 12px;
-    font-weight: 700;
-    color: #fff;
-    border-radius: 6px;
+    display: inline-block;
+    width: 24px;
+    height: 24px;
+    content: "";
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: contain;
+    border-radius: 0;
+    flex: none;
 }
 
 #social-wecom::before {
-    content: "企";
-    background: linear-gradient(135deg, #2f8cff, #0067e0);
+    background-image: url("../img/wecom.png");
 }
 
 #social-dingtalk::before {
-    content: "钉";
-    background: linear-gradient(135deg, #3aa0ff, #1677ff);
+    background-image: url("../img/dingtalk.png");
 }
 
 /* ---------- Responsive ---------- */
