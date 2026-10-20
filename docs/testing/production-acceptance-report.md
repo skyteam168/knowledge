@@ -1,58 +1,39 @@
 # 生产验收测试报告（本阶段）
 
 > 日期：2026-10-20  
-> 环境：本地 `backend/.venv` + SQLite 测试夹具（与 CI 同类）。  
-> **未**在本机对生产 Rocky 主机执行恢复演练或全量 docker 回归。
+> 环境：本地 docker compose（`127.0.0.1:3000` / Keycloak / OpenSearch）+ 单测夹具。  
+> **未**对生产 Rocky 主机做恢复演练。
 
 ---
 
-## 1. 实际执行的命令与结果
+## 1. 真实栈验证（本轮）
 
-```bash
-cd backend
-.venv/Scripts/python.exe -m pytest \
-  tests/test_document_purge.py \
-  tests/test_retrieval_gold.py \
-  tests/test_index_backends.py \
-  tests/test_retention.py -q
-# 14 passed
+| 场景 | 结果 | 证据 |
+| --- | --- | --- |
+| 重建镜像并就绪 | 通过 | `/ready` 全绿；`retention_deleted_document_days=30` |
+| `index rebuild --strict` → v5 | 通过 | 37 docs / 1160 chunks；Qdrant=OS=PG |
+| OpenSearch mapping `.en`/`.vi` | 通过 | `kb_chunks_v5` content.fields=`['en','vi']` |
+| 中文站内搜索「发送邮件出错」 | 通过 | 命中 IT运维手册《发送邮件常见出错代码…》 |
+| 英文站内搜索 `Style Line Overlay tolerance` | 通过 | 命中 HO26-GF-VAPOR 检验标准；snippet 含 EN/VI |
+| OS `multi_match` 含 `title.en`/`content.en` | 通过 | top hit score≈26.9 → HO26 文档 |
+| 软删超期 purge（造数 + `SoftDeletedDocumentPurger`） | 通过 | MinIO 对象删除、chunk=0、墓碑 `minio_key=""` |
+| Gap 工作台页面 | 通过 | `/curation/gaps` 可打开（筛选/聚类控件可见） |
+| 旧索引原地 PUT mapping | 预期失败→已修 | bootstrap 跳过缺分析器升级；需 rebuild（`495c869`） |
 
-.venv/Scripts/python.exe -m pytest -m gold -q
-# gold gate green
-
-.venv/Scripts/ruff.exe check <changed app/test files>
-# All checks passed
-```
-
-| 套件 | 通过 | 失败 | 说明 |
-| --- | --- | --- | --- |
-| `test_document_purge` + retention | 含软删对象清理 | 0 | MinIO + chunk；墓碑保留 |
-| `test_retrieval_gold` (`-m gold`) | 3 | 0 | JSONL 金标门禁 + 多语 sparse 字段 |
-| `test_index_backends` OpenSearch mapping | 含 `.en`/`.vi` | 0 | 分析器断言 |
-| 全量 pytest | — | — | **本阶段未完整跑完** → `unverifiable` |
-| 前端 vitest | — | — | **未执行** |
-| 生产备份恢复演练 | — | — | **未执行** |
+单测回归：`test_document_purge` / `test_retrieval_gold` / `test_index_backends` / `test_retention` → 14 passed。
 
 ---
 
-## 2. 安全 / 运维相关（本阶段）
+## 2. 仍未覆盖
 
-| 项 | 结果 |
+| 项 | 状态 |
 | --- | --- |
-| 软删超期 MinIO / chunk 清理 | 通过；默认 30 天；可选硬删行 |
-| 多语 BM25 mapping | 代码落地；**生产需 `index rebuild`** |
-| 金标门禁 | 单元门禁通过；线上召回仍依赖真实索引评测 |
-| 过期 / 草稿文档不进 hydrate | 前期 P0 已测 |
+| 全量 pytest / 前端 vitest | 未跑 |
+| 生产备份恢复演练 / 异地副本 | 未做 |
+| 越文专用分词插件 | 暂用 standard+lowercase |
 
 ---
 
-## 3. 是否建议进入生产试运行
+## 3. 结论
 
-**有条件建议**：单组织内网试运行可以，须先：
-
-1. `alembic upgrade head`（含 lifecycle / gap SLA 迁移）  
-2. OpenSearch **全量 rebuild**（多语 multi-field）  
-3. 确认 `RETENTION_DELETED_DOCUMENT_DAYS` 与备份窗口协调（见 `docs/ops/backup-restore.md`）  
-4. 备份异地与告警仍为待办（见 `docs/operations/backup-recovery.md`）
-
-正式多工厂 / 强制审核制度库上线前，完成全量 pytest、vitest、备份演练。
+本地真实栈上 **P1 多语 BM25 + 软删清理可用**。生产上线前务必：`index rebuild`、确认 retention 与备份窗口、推送含 `495c869` 的镜像。
