@@ -241,6 +241,7 @@ $DC up -d --build --wait
 - 修改 `KEYCLOAK_PUBLIC_URL` 后必须重建前端（地址在构建时写入）：`$DC up -d --build frontend`。
 - 修改 `PUBLIC_URL` 后按 4.1 更新 Keycloak 客户端。
 - 只改 `tls-gateway.conf` 或更换证书：`$DC restart tls-gateway`。
+- 重建过 `frontend` / `keycloak` / `minio` 后若出现 502，先 `$DC up -d --force-recreate tls-gateway`（旧版 nginx 会缓存上游 IP；新版配置已用 Docker DNS 动态解析）。
 
 ## 7. 迁移到新服务器
 
@@ -267,6 +268,7 @@ $DC up -d --build --wait
 | 登录页报 `Web Crypto API is not available` | 用了 HTTP 访问，改用 `https://<IP>:8443` |
 | `no such service: tls-gateway` | 服务器上 compose 文件不是最新，`git pull` |
 | `curl` HTTPS 返回 `000` | tls-gateway 未启动或证书缺失，看 `$DC logs tls-gateway`（`cannot load certificate`） |
+| 登录后 / 页面 502，tls-gateway 日志 `connect() failed (111) ... upstream: "http://172.x.x.x:8080"` | frontend 等容器重建后 IP 变了，tls-gateway 仍用旧 IP；执行 `$DC up -d --force-recreate tls-gateway` |
 | 登录后报 `Invalid redirect uri` | `ekb-frontend` 回调地址未更新，按 4.1 |
 | kcadm `as user  of realm master` + `invalid_grant` | 宿主机 shell 里没有 `$KEYCLOAK_ADMIN`，改用容器内 `KC_BOOTSTRAP_ADMIN_*`（第 4 节） |
 | 终端停在 `>` 提示符 | 多行命令引号未闭合，补 `'` 回车或 Ctrl+C 后用单行命令 |
