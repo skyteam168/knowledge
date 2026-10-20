@@ -5,6 +5,7 @@ import type {
   DirectoryDepartment,
   DocumentAcl,
   DocumentAclUpdate,
+  DocumentContent,
   DocumentDetail,
   DocumentQuery,
   DocumentUpdate,
@@ -75,6 +76,17 @@ export const updateDocument = (id: string, body: DocumentUpdate) =>
   put<KbDocument>(`/documents/${id}`, body)
 export const deleteDocument = (id: string) => del<void>(`/documents/${id}`)
 export const reprocessDocument = (id: string) => post<KbDocument>(`/documents/${id}/reprocess`)
+export const createMarkdownDocument = (
+  kbId: string,
+  body: { title: string; content: string; tags?: string[] },
+) => post<UploadResult>(`/knowledge-bases/${kbId}/documents/markdown`, body, { silent: true })
+export const getDocumentContent = (id: string) => get<DocumentContent>(`/documents/${id}/content`)
+export const saveDocumentContent = (id: string, content: string, baseVersion: number) =>
+  put<UploadResult>(
+    `/documents/${id}/content`,
+    { content, base_version: baseVersion },
+    { silent: true },
+  )
 export const reviewDocument = (id: string, note?: string) =>
   post<KbDocument>(`/documents/${id}/review`, { note: note || null })
 export const listChunks = (id: string) => get<Chunk[]>(`/documents/${id}/chunks`)

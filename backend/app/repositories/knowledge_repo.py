@@ -26,6 +26,17 @@ class KnowledgeBaseRepository:
         )
         return (await self.session.execute(stmt)).scalar_one_or_none()
 
+    async def list_by_ids(self, org_id: str, ids: Iterable[str]) -> list[KnowledgeBase]:
+        wanted = list(dict.fromkeys(ids))
+        if not wanted:
+            return []
+        stmt = select(KnowledgeBase).where(
+            KnowledgeBase.org_id == org_id,
+            KnowledgeBase.id.in_(wanted),
+            KnowledgeBase.deleted_at.is_(None),
+        )
+        return list((await self.session.execute(stmt)).scalars())
+
     async def get_by_name(self, org_id: str, name: str) -> KnowledgeBase | None:
         stmt = select(KnowledgeBase).where(
             KnowledgeBase.org_id == org_id, KnowledgeBase.name == name

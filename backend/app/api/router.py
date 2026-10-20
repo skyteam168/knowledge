@@ -7,6 +7,7 @@ from app.api.v1 import (
     audit,
     auth,
     chat,
+    collab,
     curation,
     departments,
     directory,
@@ -54,3 +55,4 @@ api_router.include_router(open_admin.router)
 api_router.include_router(open_api.router)
 api_router.include_router(admin_agent.router)
 api_router.include_router(assets.router)
+api_router.include_router(collab.router)

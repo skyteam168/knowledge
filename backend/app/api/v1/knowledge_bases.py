@@ -12,6 +12,7 @@ from app.schemas.knowledge import (
     KnowledgeBaseCreate,
     KnowledgeBaseOut,
     KnowledgeBaseUpdate,
+    MarkdownCreate,
     UploadComplete,
     UploadInit,
     UploadInitOut,
@@ -115,6 +116,11 @@ async def create_upload(kb_id: str, data: UploadInit, service: DocServiceDep) ->
 @router.post("/{kb_id}/documents/complete", response_model=UploadResult, dependencies=CanUpload)
 async def complete_upload(kb_id: str, data: UploadComplete, service: DocServiceDep) -> UploadResult:
     return await service.complete_upload(kb_id, data)
+
+
+@router.post("/{kb_id}/documents/markdown", response_model=UploadResult, dependencies=CanUpload)
+async def create_markdown(kb_id: str, data: MarkdownCreate, service: DocServiceDep) -> UploadResult:
+    return await service.create_markdown(kb_id, data)
 
 
 @router.post("/{kb_id}/documents", response_model=UploadResult, dependencies=CanUpload)

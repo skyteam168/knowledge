@@ -170,6 +170,12 @@ export const menuRoutes: (RouteRecordRaw & MenuRoute)[] = [
     meta: { title: 'route.search', icon: 'Search', permission: 'search:use' },
   },
   {
+    path: '/favorites',
+    name: 'favorites',
+    component: () => import('@/views/FavoritesView.vue'),
+    meta: { title: 'route.favorites', icon: 'Star', permission: 'kb:read' },
+  },
+  {
     path: '/curation',
     name: 'curation',
     component: () => import('@/views/curation/CurationView.vue'),
@@ -216,6 +222,28 @@ export const routes: RouteRecordRaw[] = [
         component: () => import('@/views/knowledge/KnowledgeBaseDetailView.vue'),
         props: true,
         meta: { title: 'route.knowledgeBase', permission: 'kb:read', activeMenu: '/knowledge' },
+      },
+      {
+        path: '/knowledge/:kbId/documents/new',
+        name: 'knowledge-document-new',
+        component: () => import('@/views/knowledge/DocumentEditorView.vue'),
+        props: true,
+        meta: {
+          title: 'route.knowledgeDocumentNew',
+          permission: 'doc:upload',
+          activeMenu: '/knowledge',
+        },
+      },
+      {
+        path: '/knowledge/:kbId/documents/:docId/edit',
+        name: 'knowledge-document-edit',
+        component: () => import('@/views/knowledge/DocumentEditorView.vue'),
+        props: true,
+        meta: {
+          title: 'route.knowledgeDocumentEdit',
+          permission: 'doc:upload',
+          activeMenu: '/knowledge',
+        },
       },
       {
         path: '/knowledge/:kbId/documents/:docId',

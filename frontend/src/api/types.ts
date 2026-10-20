@@ -387,6 +387,51 @@ export interface DocumentVersion {
   created_at: string
 }
 
+export type SavedResourceType = 'document' | 'kb'
+
+/** A favorite or recently viewed item the caller can still read. */
+export interface SavedItem {
+  resource_type: SavedResourceType
+  resource_id: string
+  title: string
+  kb_id: string
+  kb_name: string
+  filename: string | null
+  link: string
+  at: string
+}
+
+export interface CommentMention {
+  id: string
+  name: string
+}
+
+export interface DocComment {
+  id: string
+  parent_id: string | null
+  author_id: string
+  author_name: string
+  body: string
+  mentions: CommentMention[]
+  document_version: number
+  created_at: string
+  edited: boolean
+  resolved_at: string | null
+  resolved_by_name: string | null
+  deleted: boolean
+  can_edit: boolean
+  can_delete: boolean
+  can_resolve: boolean
+  replies: DocComment[]
+}
+
+export interface DocumentContent {
+  version: number
+  filename: string
+  mime_type: string
+  content: string
+}
+
 export interface VersionText {
   version: number
   /** false: the version was never parsed (or its parse result is gone). */

@@ -43,11 +43,14 @@ from app.schemas.knowledge import (
     DiffLineOut,
     DocumentAclOut,
     DocumentAclUpdate,
+    DocumentContentOut,
+    DocumentContentUpdate,
     DocumentDetail,
     DocumentOut,
     DocumentReviewIn,
     DocumentUpdate,
     DocumentVersionOut,
+    MarkdownCreate,
     PagePreviewOut,
     PreviewOut,
     ProtectionOut,
@@ -59,13 +62,8 @@ from app.schemas.knowledge import (
     VersionTextOut,
 )
 from app.services.audit_service import snapshot
-from app.services.authz import (
-    AclPermission,
-    AuthzCache,
-    CurrentUser,
-    PermissionResolver,
-    PrincipalResolver,
-)
+from app.services.authz import AclPermission, AuthzCache
+from app.services.authz.acting import current_user_of
 from app.services.context import BaseService, RequestContext
 from app.services.ingest.parsers.base import FileKind, canonical_mime, detect_kind
 from app.services.ingest.pipeline import parsed_key
@@ -89,6 +87,11 @@ from app.services.security.pii import PiiMasker
 MAX_FILENAME_LENGTH = 255
 TICKET_PREFIX = "upload:"
 ReviewFilter = Literal["due_soon", "overdue", "attention"]
+ONLINE_EXTENSIONS = frozenset({".md", ".markdown", ".txt"})
+
+
+def _extension(filename: str) -> str:
+    return PurePosixPath(filename).suffix.lower()
 
 
 class UnsupportedFileError(AppError):
@@ -607,6 +610,66 @@ class DocumentService(BaseService):
         )
         return PreviewOut(url=url, filename=filename, mime_type=mime_type, expires_in=expires)
 
+    # ---- online documents ----
+
+    async def create_markdown(self, kb_id: str, data: MarkdownCreate) -> UploadResult:
+        filename = clean_filename(f"{data.title.strip()}.md")
+        if await self.repo.find_by_filename(self.org_id, kb_id, filename):
+            raise ConflictError("A document with this title already exists", code="DOCUMENT_EXISTS")
+        result = await self.upload_direct(
+            kb_id,
+            filename=filename,
+            content=data.content.encode("utf-8"),
+            mime_type="text/markdown",
+            tags=data.tags,
+        )
+        if not result.duplicate:
+            doc = await self.repo.get(self.org_id, result.document.id)
+            if doc is not None:
+                doc.title = data.title.strip()
+                await self.session.flush()
+                result.document.title = doc.title
+        return result
+
+    async def _editable(self, document_id: str) -> tuple[Document, KnowledgeBase, AclPermission]:
+        doc, kb, perm = await self._doc(document_id, AclPermission.EDIT)
+        if _extension(doc.filename) not in ONLINE_EXTENSIONS:
+            raise ValidationAppError(
+                "Only Markdown and text documents can be edited online", code="NOT_EDITABLE"
+            )
+        if not protection_of(kb, doc).can_download(perm.value):
+            raise PermissionDeniedError(
+                "Protected documents cannot be edited online", code="DOWNLOAD_FORBIDDEN"
+            )
+        return doc, kb, perm
+
+    async def content(self, document_id: str) -> DocumentContentOut:
+        doc, _, _ = await self._editable(document_id)
+        data = await self.storage.get_bytes(doc.minio_key)
+        try:
+            text = data.decode("utf-8-sig")
+        except UnicodeDecodeError as exc:
+            raise ValidationAppError("The file is not UTF-8 text", code="NOT_EDITABLE") from exc
+        return DocumentContentOut(
+            version=doc.version, filename=doc.filename, mime_type=doc.mime_type, content=text
+        )
+
+    async def save_content(self, document_id: str, data: DocumentContentUpdate) -> UploadResult:
+        """Save an online edit as a new version (unchanged content returns the current one)."""
+        doc, kb, _ = await self._editable(document_id)
+        if data.base_version != doc.version:
+            raise ConflictError(
+                "The document was updated after you started editing",
+                code="VERSION_CONFLICT",
+                detail={"current_version": doc.version},
+            )
+        return await self.upload_direct(
+            kb.id,
+            filename=doc.filename,
+            content=data.content.encode("utf-8"),
+            mime_type=doc.mime_type,
+        )
+
     # ---- versions ----
 
     async def _version_text(self, row: DocumentVersion) -> tuple[list[str], bool] | None:
@@ -765,19 +828,7 @@ class DocumentService(BaseService):
         owner = await UserRepository(self.session).get(self.org_id, owner_id)
         if owner is None or not owner.is_active:
             raise ValidationAppError("Owner not found", code="OWNER_INVALID")
-        principals = await PrincipalResolver(self.session, self.authz_cache).resolve(
-            self.org_id, owner.id
-        )
-        as_owner = CurrentUser(
-            id=owner.id,
-            org_id=self.org_id,
-            username=owner.username,
-            display_name=owner.display_name,
-            principals=principals,
-            permissions=await PermissionResolver(self.session, self.authz_cache).resolve(
-                principals
-            ),
-        )
+        as_owner = await current_user_of(self.session, self.authz_cache, owner)
         perm = await self.access.document_permission(as_owner, doc, kb)
         if perm is None or perm.level < AclPermission.EDIT.level:
             raise ValidationAppError(

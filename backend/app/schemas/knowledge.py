@@ -208,6 +208,28 @@ class DocumentUpdate(BaseModel):
         return list(dict.fromkeys(t.strip() for t in tags if t.strip()))
 
 
+MAX_ONLINE_CHARS = 500_000
+
+
+class MarkdownCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    content: str = Field(min_length=1, max_length=MAX_ONLINE_CHARS)
+    tags: list[str] = Field(default_factory=list, max_length=50)
+
+
+class DocumentContentOut(BaseModel):
+    version: int
+    filename: str
+    mime_type: str
+    content: str
+
+
+class DocumentContentUpdate(BaseModel):
+    content: str = Field(min_length=1, max_length=MAX_ONLINE_CHARS)
+    # The version the edit started from; a newer one means someone else saved first.
+    base_version: int = Field(ge=1)
+
+
 class DocumentReviewIn(BaseModel):
     note: str | None = Field(default=None, max_length=500)
 

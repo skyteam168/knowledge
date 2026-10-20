@@ -6,6 +6,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import { deleteDocument, getKnowledgeBase, listDocuments, reprocessDocument } from '@/api/knowledge'
 import type { DocumentStatus, KbDocument, KnowledgeBase } from '@/api/types'
+import { recordView } from '@/api/collab'
+import FavoriteButton from '@/components/collab/FavoriteButton.vue'
 import DocumentAclDialog from '@/components/knowledge/DocumentAclDialog.vue'
 import DocumentUploader from '@/components/knowledge/DocumentUploader.vue'
 import KbAclDialog from '@/components/knowledge/KbAclDialog.vue'
@@ -128,15 +130,21 @@ async function remove(doc: KbDocument): Promise<void> {
   await Promise.all([loadDocuments(), loadKb()])
 }
 
+function trackView(): void {
+  void recordView('kb', props.kbId).catch(() => undefined)
+}
+
 watch(
   () => props.kbId,
   async () => {
     query.page = 1
+    trackView()
     await Promise.all([loadKb(), loadDocuments()])
   },
 )
 
 onMounted(async () => {
+  trackView()
   await Promise.all([loadKb(), loadDocuments()])
 })
 
@@ -168,6 +176,14 @@ onBeforeUnmount(() => {
           </el-tag>
         </div>
         <div class="actions">
+          <FavoriteButton :id="kbId" type="kb" />
+          <el-button
+            v-if="canUpload"
+            data-test="new-online-doc"
+            @click="router.push({ name: 'knowledge-document-new', params: { kbId } })"
+          >
+            {{ t('collab.online.create') }}
+          </el-button>
           <el-button
             v-if="canUpload"
             type="primary"

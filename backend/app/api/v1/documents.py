@@ -7,11 +7,14 @@ from app.schemas.knowledge import (
     ChunkOut,
     DocumentAclOut,
     DocumentAclUpdate,
+    DocumentContentOut,
+    DocumentContentUpdate,
     DocumentDetail,
     DocumentOut,
     DocumentReviewIn,
     DocumentUpdate,
     PreviewOut,
+    UploadResult,
     VersionCompareOut,
     VersionTextOut,
 )
@@ -41,6 +44,18 @@ async def update_document(
 async def delete_document(document_id: str, service: ServiceDep) -> Response:
     await service.delete(document_id)
     return Response(status_code=204)
+
+
+@router.get("/{document_id}/content", response_model=DocumentContentOut, dependencies=CanUpload)
+async def document_content(document_id: str, service: ServiceDep) -> DocumentContentOut:
+    return await service.content(document_id)
+
+
+@router.put("/{document_id}/content", response_model=UploadResult, dependencies=CanUpload)
+async def save_document_content(
+    document_id: str, data: DocumentContentUpdate, service: ServiceDep
+) -> UploadResult:
+    return await service.save_content(document_id, data)
 
 
 @router.post("/{document_id}/review", response_model=DocumentOut, dependencies=CanUpload)

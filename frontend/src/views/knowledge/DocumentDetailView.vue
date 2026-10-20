@@ -24,6 +24,9 @@ import type {
   Preview,
   PrincipalOption,
 } from '@/api/types'
+import { recordView } from '@/api/collab'
+import DocumentComments from '@/components/collab/DocumentComments.vue'
+import FavoriteButton from '@/components/collab/FavoriteButton.vue'
 import ChunkViewer from '@/components/knowledge/ChunkViewer.vue'
 import ProtectedArea from '@/components/knowledge/ProtectedArea.vue'
 import VersionCompareDialog from '@/components/knowledge/VersionCompareDialog.vue'
@@ -53,7 +56,17 @@ const doc = ref<DocumentDetail | null>(null)
 const chunks = ref<Chunk[]>([])
 const preview = ref<Preview | null>(null)
 const loadingChunks = ref(false)
-const tab = ref('chunks')
+const tab = ref(route.query.tab === 'comments' ? 'comments' : 'chunks')
+const focusComment = computed(() =>
+  typeof route.query.comment === 'string' ? route.query.comment : null,
+)
+const openComments = ref(0)
+const onlineEditable = computed(
+  () =>
+    !!doc.value &&
+    ['.md', '.markdown', '.txt'].includes(fileExtension(doc.value.filename)) &&
+    doc.value.can_download,
+)
 let timer: ReturnType<typeof setTimeout> | null = null
 
 const status = computed(() => (doc.value ? documentStatus(doc.value) : null))
@@ -275,8 +288,27 @@ async function saveEditor(): Promise<void> {
   }
 }
 
-watch(() => props.docId, loadDocument)
-onMounted(loadDocument)
+function trackView(): void {
+  void recordView('document', props.docId).catch(() => undefined)
+}
+
+watch(
+  () => props.docId,
+  () => {
+    trackView()
+    void loadDocument()
+  },
+)
+watch(
+  () => route.query.comment,
+  (comment) => {
+    if (comment) tab.value = 'comments'
+  },
+)
+onMounted(() => {
+  trackView()
+  void loadDocument()
+})
 onBeforeUnmount(() => {
   if (timer) clearTimeout(timer)
 })
@@ -318,6 +350,15 @@ onBeforeUnmount(() => {
           }}</el-tag>
         </div>
         <div class="actions">
+          <FavoriteButton :id="docId" type="document" />
+          <el-button
+            v-if="canEdit && onlineEditable"
+            type="primary"
+            plain
+            data-test="doc-online-edit"
+            @click="router.push({ name: 'knowledge-document-edit', params: { kbId, docId } })"
+            >{{ t('collab.online.edit') }}</el-button
+          >
           <el-button
             v-if="canEdit && doc?.review_interval"
             :type="needsReview ? 'warning' : 'default'"
@@ -465,6 +506,20 @@ onBeforeUnmount(() => {
                   formatDateTime(doc.created_at)
                 }}</el-descriptions-item>
               </el-descriptions>
+            </el-tab-pane>
+            <el-tab-pane
+              :label="
+                openComments
+                  ? t('collab.comment.tabCount', { n: openComments })
+                  : t('collab.comment.tab')
+              "
+              name="comments"
+            >
+              <DocumentComments
+                :doc-id="docId"
+                :focus="focusComment"
+                @count="openComments = $event"
+              />
             </el-tab-pane>
             <el-tab-pane :label="t('knowledge.doc.versions')" name="versions">
               <div v-if="versions.length > 1" class="versions-bar">

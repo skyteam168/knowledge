@@ -18,6 +18,7 @@ from app.models.chat import (
     MessageStatus,
     QaTrace,
 )
+from app.models.collab import DocumentComment, Favorite, RecentView
 from app.models.curation import (
     GapCluster,
     KnowledgeObject,
@@ -120,6 +121,7 @@ __all__ = [
     "DirectorySourceType",
     "DirectorySyncRun",
     "Document",
+    "DocumentComment",
     "DocumentPageAsset",
     "DocumentStatus",
     "DocumentVersion",
@@ -129,6 +131,7 @@ __all__ = [
     "EvalResult",
     "EvalRun",
     "EvalRunStatus",
+    "Favorite",
     "FeedbackRating",
     "FeedbackReason",
     "GapCluster",
@@ -166,6 +169,7 @@ __all__ = [
     "PageAssetKind",
     "Permission",
     "QaTrace",
+    "RecentView",
     "ResourceAcl",
     "RetrievalProfile",
     "RetrievalTrace",

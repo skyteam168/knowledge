@@ -18,6 +18,8 @@ class NotificationKind:
     KO_EXPIRING = "ko_expiring"
     DOCUMENT_EXPIRING = "document_expiring"
     DOCUMENT_REVIEW = "document_review"
+    COMMENT_NEW = "comment_new"
+    COMMENT_MENTION = "comment_mention"
     GAP_ASSIGNED = "gap_assigned"
     GAP_RESOLVED = "gap_resolved"
     REVIEW_REQUESTED = "review_requested"
