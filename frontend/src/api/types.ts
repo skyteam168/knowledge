@@ -868,6 +868,8 @@ export interface Citation {
   /** Presigned page/slide preview when available (may expire). */
   image_url?: string | null
   image_mime_type?: string | null
+  /** Source document is copy-protected / download-restricted for the caller. */
+  copy_protect?: boolean
 }
 
 export interface MessageFeedback {
@@ -892,6 +894,8 @@ export interface ChatMessage {
   feedback: MessageFeedback | null
   knowledge_requested: boolean
   steps: ChatStep[]
+  /** Answer cites a copy-protected / download-restricted document. */
+  copy_protect?: boolean
 }
 
 export type ChatStepName = 'rewrite' | 'retrieve' | 'evidence' | 'generate'
@@ -1000,6 +1004,7 @@ export interface ChatDoneEvent {
   rewritten_query: string | null
   trace_id: string
   gap_id: string | null
+  copy_protect?: boolean
 }
 
 export interface ChatErrorEvent {

@@ -51,6 +51,14 @@ async def document_content(document_id: str, service: ServiceDep) -> DocumentCon
     return await service.content(document_id)
 
 
+@router.get(
+    "/{document_id}/preview-text", response_model=DocumentContentOut, dependencies=CanRead
+)
+async def document_preview_text(document_id: str, service: ServiceDep) -> DocumentContentOut:
+    """Rendered Markdown / text preview for readers (does not require edit or download)."""
+    return await service.preview_text(document_id)
+
+
 @router.put("/{document_id}/content", response_model=UploadResult, dependencies=CanUpload)
 async def save_document_content(
     document_id: str, data: DocumentContentUpdate, service: ServiceDep

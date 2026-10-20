@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { atLeast, documentStatus, reviewIntervalLabel, reviewStatus } from '@/utils/document'
+import {
+  atLeast,
+  documentStatus,
+  isMarkdownFile,
+  reviewIntervalLabel,
+  reviewStatus,
+} from '@/utils/document'
 import { formatBytes, isAcceptedFile } from '@/utils/file'
 
 describe('documentStatus', () => {
@@ -31,6 +37,15 @@ describe('review helpers', () => {
     expect(reviewIntervalLabel(90)).toBe('每 90 天')
     expect(reviewIntervalLabel(null)).toBe('不定期复核')
     expect(reviewIntervalLabel(0)).toBe('不定期复核')
+  })
+})
+
+describe('isMarkdownFile', () => {
+  it('recognizes markdown extensions', () => {
+    expect(isMarkdownFile('说明.md')).toBe(true)
+    expect(isMarkdownFile('README.markdown')).toBe(true)
+    expect(isMarkdownFile('notes.txt')).toBe(false)
+    expect(isMarkdownFile('a.pdf')).toBe(false)
   })
 })
 

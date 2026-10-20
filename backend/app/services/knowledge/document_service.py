@@ -654,6 +654,31 @@ class DocumentService(BaseService):
             version=doc.version, filename=doc.filename, mime_type=doc.mime_type, content=text
         )
 
+    async def preview_text(self, document_id: str) -> DocumentContentOut:
+        """Read-only Markdown / text body for rendered preview (not the editable endpoint)."""
+        doc, _, _ = await self._doc(document_id, AclPermission.READ)
+        if _extension(doc.filename) not in ONLINE_EXTENSIONS:
+            raise ValidationAppError(
+                "Only Markdown and text documents support rendered preview",
+                code="NOT_PREVIEWABLE",
+            )
+        data = await self.storage.get_bytes(doc.minio_key)
+        try:
+            text = data.decode("utf-8-sig")
+        except UnicodeDecodeError as exc:
+            raise ValidationAppError("The file is not UTF-8 text", code="NOT_PREVIEWABLE") from exc
+        await self.audit.record(
+            self.audit_ctx,
+            "document.preview_text",
+            RESOURCE_DOCUMENT,
+            doc.id,
+            None,
+            {"kb_id": doc.kb_id, "version": doc.version},
+        )
+        return DocumentContentOut(
+            version=doc.version, filename=doc.filename, mime_type=doc.mime_type, content=text
+        )
+
     async def save_content(self, document_id: str, data: DocumentContentUpdate) -> UploadResult:
         """Save an online edit as a new version (unchanged content returns the current one)."""
         doc, kb, _ = await self._editable(document_id)

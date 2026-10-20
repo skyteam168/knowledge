@@ -4,6 +4,8 @@
 以及运营分析看板、离线评测、可观测性、安全加固、压测与生产部署；已接入阿里云百炼真实模型（见下文）。
 近期补充：页/幻灯片附图入库、答案内嵌图与可视化、Open API / MCP 返回 `image_url`（见「文档附图与答案可视化」）；
 AI 管理助手（见「AI 管理助手」）；问答入口更名为「知识库问答专家」（原「AI 助手」）。
+**2026-10 文档治理与协作**：水印 / 下载控制、版本历史、负责人与定期复核、收藏 / 评论 / Markdown 在线编辑
+（见「文档保护、版本与协作」；汇报口径见 [docs/system-overview.md](docs/system-overview.md)）。
 
 | 阶段 | 名称 | 主要内容 |
 | --- | --- | --- |
@@ -162,12 +164,37 @@ rerank 最高分分布：
 
 两次运行（「真实模型基线（默认阈值 0.2/0.5）」和「真实模型基线（阈值 0.45/0.7）」）都可以在前端「离线评测」页面的对比视图中查看逐题差异。
 
+## 文档保护、版本与协作
+
+迁移 `0017`～`0020` 由 `migrate` 服务自动执行，一般**无需新增环境变量**。生产升级见
+[docs/ops/deployment-server.md](docs/ops/deployment-server.md) §6。
+
+| 能力 | 说明 |
+| --- | --- |
+| 文档保护 | 知识库策略：水印、禁止复制、下载原文件所需最低权限（`viewer` / `editor` / `admin`）；单篇文档只能加严。无下载权则只返回带查看人水印的页图签名 URL；水印由服务端烧录，链接绑定查看人。截屏无法阻止。 |
+| 版本历史 | 每次重新上传或在线保存生成新版本；详情页可查看、对比（解析文本行 diff）、下载、恢复。恢复写入新版本并重新解析索引。 |
+| 负责人与复核 | `owner_id`；知识库 `default_review_interval_days` 或文档覆盖；定时任务到期前 / 逾期各提醒一次；上传新版或「确认复核」重置计时。 |
+| 收藏 / 最近浏览 | 收藏文档与知识库；自动记最近浏览；「我的收藏」入口；列表按当前 ACL 过滤。 |
+| 文档评论 | 一楼回复、@ 提醒（仅有权读者）、已解决；评论与提及写入通知。 |
+| 在线 Markdown | 知识库内新建 / 编辑 `.md` / `.txt`；保存走 `upload_direct` 新版本路径；并发保存有版本冲突。 |
+| Markdown 排版预览 | 详情页 / 版本查看对 `.md` 走 `GET /documents/{id}/preview-text` + 前端渲染，不再用 iframe 纯文本流。 |
+| 受控导出 | 引用受控文档时：问答前端禁复制（`copy_protect`）；引用 quote / 抽屉正文 / Open API `content` 按 `CONTROLLED_*_MAX_CHARS` 截断。 |
+
+页图与受控预览：PDF / PPT 直接光栅；Word / Excel 经 LibreOffice 转 PDF 后再出页图（容器需 `soffice`）。
+已入库但无页图的 Office 文档，可在保护策略开启后「重新处理」生成。
+
+```dotenv
+# 受控文档对外文本上限（可选；有默认值）
+CONTROLLED_EXPORT_MAX_CHARS=200
+CONTROLLED_QUOTE_MAX_CHARS=120
+```
+
 ## 文档附图与答案可视化
 
 入库与解析：
 
-- 常见 PDF / PPT(X) / Word；**`.doc`** 经 LibreOffice（容器内需 `soffice`）转 docx 再解析；**`jpg` / `png`** 经 RapidOCR 抽取文字。
-- 解析时可生成页或幻灯片光栅图，落入 `document_page_assets` 与 MinIO（配置 `PAGE_IMAGE_*`）。页图不进向量索引，供预览与配图。
+- 常见 PDF / PPT(X) / Word / Excel；**`.doc`** 经 LibreOffice（容器内需 `soffice`）转 docx 再解析；**`jpg` / `png`** 经 RapidOCR 抽取文字。
+- 解析时可生成页或幻灯片光栅图，落入 `document_page_assets` 与 MinIO（配置 `PAGE_IMAGE_*`）。页图不进向量索引，供预览、配图与受控水印预览。
 - PDF 后端：`PDF_PARSER=auto|docling|mineru|basic`；选 `mineru` 时需部署 MinerU 服务并配置 `MINERU_API_URL`。
 
 知识库问答专家的回答：
@@ -343,3 +370,5 @@ ruff、mypy 无问题；前端 vitest 51 项通过，vue-tsc、eslint、prettier
 - 前端 vitest 51 项通过。
 - 2026-10-19（含 AI 管理助手）：后端 pytest 389 项（管理助手 25 项）、前端 vitest 155 项通过；
   ruff、mypy（含 tests）、eslint、prettier、vue-tsc 无问题，GitHub CI 六项全部通过。
+- 2026-10-20（文档保护 / 版本 / 复核 / 协作）：后端 pytest **404** 项、前端 vitest **163** 项通过；
+  GitHub CI 六项全部通过（迁移至 `0020`）。

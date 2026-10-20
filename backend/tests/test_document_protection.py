@@ -57,6 +57,26 @@ def test_document_settings_can_only_tighten_the_knowledge_base() -> None:
     assert plain.raw_preview("read") and not p.raw_preview("manage")
 
 
+def test_controlled_export_limits_outward_text() -> None:
+    from app.services.knowledge.protection import limit_export_text
+
+    copy_on = protection_of(
+        KnowledgeBase(watermark=False, copy_protect=True, download_permission="read")
+    )
+    assert copy_on.limits_export("read")
+    no_download = protection_of(
+        KnowledgeBase(watermark=False, copy_protect=False, download_permission="edit")
+    )
+    assert no_download.limits_export("read") and not no_download.limits_export("edit")
+    plain = protection_of(
+        KnowledgeBase(watermark=False, copy_protect=False, download_permission="read")
+    )
+    assert not plain.limits_export("read")
+    assert limit_export_text("abcdefghij", 5) == "abcd…"
+    assert limit_export_text("short", 20) == "short"
+    assert limit_export_text("x", 0) == ""
+
+
 def test_watermark_is_burned_into_the_page() -> None:
     page = Image.new("RGB", (400, 300), "white")
     buf = io.BytesIO()

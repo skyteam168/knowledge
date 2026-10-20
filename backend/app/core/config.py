@@ -190,6 +190,9 @@ class Settings(BaseSettings):
     chat_temperature: float = 0.2
     chat_max_tokens: int = 1500
     chat_quote_max_chars: int = 300
+    # Controlled documents (copy-protect / no download): shorten outward text further.
+    controlled_export_max_chars: int = 200
+    controlled_quote_max_chars: int = 120
     # Answer phase 2: put presigned page/slide URLs into materials so the model can embed images.
     chat_answer_images_enabled: bool = True
     chat_answer_images_per_material: int = 2

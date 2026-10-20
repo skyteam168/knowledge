@@ -6,6 +6,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import {
   getDocument,
+  getDocumentPreviewText,
   getDownloadUrl,
   getPreviewUrl,
   getVersionDownloadUrl,
@@ -28,6 +29,7 @@ import { recordView } from '@/api/collab'
 import DocumentComments from '@/components/collab/DocumentComments.vue'
 import FavoriteButton from '@/components/collab/FavoriteButton.vue'
 import ChunkViewer from '@/components/knowledge/ChunkViewer.vue'
+import MarkdownPreview from '@/components/knowledge/MarkdownPreview.vue'
 import ProtectedArea from '@/components/knowledge/ProtectedArea.vue'
 import VersionCompareDialog from '@/components/knowledge/VersionCompareDialog.vue'
 import VersionViewDialog from '@/components/knowledge/VersionViewDialog.vue'
@@ -38,6 +40,7 @@ import {
   documentStatus,
   inlinePreviewable,
   isHtmlFile,
+  isMarkdownFile,
   reviewIntervalLabel,
   reviewStatus,
 } from '@/utils/document'
@@ -81,8 +84,11 @@ const isProtected = computed(
       protection.value.download_permission !== 'read'),
 )
 const pagesBox = ref<HTMLElement>()
+const markdownText = ref<string | null>(null)
+const markdownLoading = ref(false)
 const inlinePreview = computed(() => !!doc.value && inlinePreviewable(doc.value.filename))
 const isHtml = computed(() => !!doc.value && isHtmlFile(doc.value.filename))
+const isMarkdown = computed(() => !!doc.value && isMarkdownFile(doc.value.filename))
 // Deep links from search results: ?chunk=<id>&page=<n>
 const focusChunk = computed(() =>
   typeof route.query.chunk === 'string' ? route.query.chunk : null,
@@ -98,7 +104,10 @@ const previewSrc = computed(() => {
     ? `${preview.value.url}#page=${focusPage.value}`
     : preview.value.url
 })
-const showFile = computed(() => preview.value?.mode === 'file' && inlinePreview.value)
+const showFile = computed(
+  () => preview.value?.mode === 'file' && inlinePreview.value && !isMarkdown.value,
+)
+const showMarkdown = computed(() => isMarkdown.value && markdownText.value != null)
 const parseInfo = computed(
   () => (doc.value?.metadata?.parse as Record<string, unknown> | undefined) ?? null,
 )
@@ -127,6 +136,20 @@ async function loadChunks(): Promise<void> {
 
 async function loadPreview(): Promise<void> {
   preview.value = await getPreviewUrl(props.docId)
+  if (isMarkdown.value) {
+    markdownLoading.value = true
+    markdownText.value = null
+    try {
+      const body = await getDocumentPreviewText(props.docId)
+      markdownText.value = body.content
+    } catch {
+      markdownText.value = null
+    } finally {
+      markdownLoading.value = false
+    }
+  } else {
+    markdownText.value = null
+  }
   if (preview.value.mode === 'pages' && focusPage.value) {
     await nextTick()
     pagesBox.value
@@ -397,8 +420,16 @@ onBeforeUnmount(() => {
     <ProtectedArea class="body" :copy-protect="protection?.copy_protect">
       <el-card shadow="never" class="preview-card" body-class="preview-body">
         <template #header>{{ t('knowledge.doc.preview') }}</template>
+        <div
+          v-if="isMarkdown && (showMarkdown || markdownLoading)"
+          v-loading="markdownLoading"
+          class="preview-markdown"
+          data-test="preview-markdown"
+        >
+          <MarkdownPreview v-if="markdownText != null" :content="markdownText" />
+        </div>
         <iframe
-          v-if="preview && showFile"
+          v-else-if="preview && showFile"
           :key="previewSrc"
           :src="previewSrc"
           class="preview-frame"
@@ -754,6 +785,12 @@ onBeforeUnmount(() => {
   min-height: 480px;
   border: 0;
   display: block;
+}
+.preview-markdown {
+  height: calc(100vh - 260px);
+  min-height: 480px;
+  overflow: auto;
+  background: var(--el-bg-color);
 }
 .preview-pages {
   height: calc(100vh - 260px);

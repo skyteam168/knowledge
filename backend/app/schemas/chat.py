@@ -64,6 +64,8 @@ class CitationOut(BaseModel):
     # Presigned page/slide preview when available (expires; refresh via citation source API).
     image_url: str | None = None
     image_mime_type: str | None = None
+    # Source document is copy-protected / download-restricted for the caller.
+    copy_protect: bool = False
 
 
 class FeedbackOut(BaseModel):
@@ -90,6 +92,8 @@ class MessageOut(BaseModel):
     created_at: datetime
     feedback: FeedbackOut | None = None
     knowledge_requested: bool = False
+    # True when any citation came from a copy-protected / download-restricted document.
+    copy_protect: bool = False
 
 
 class ConversationDetailOut(ConversationOut):

@@ -16,6 +16,8 @@ const props = defineProps<{
   streaming?: boolean
   /** Server message id; used to load page images for citation hover preview. */
   messageId?: string | null
+  /** Controlled answer: disable code-block clipboard export. */
+  copyProtect?: boolean
 }>()
 
 const emit = defineEmits<{ cite: [n: number] }>()
@@ -106,6 +108,10 @@ function openHovered(): void {
 async function copyCode(target: EventTarget | null): Promise<boolean> {
   const hit = codeOfCopyButton(target)
   if (!hit) return false
+  if (props.copyProtect) {
+    ElMessage.warning(t('assistant.copyProtected'))
+    return true
+  }
   try {
     await navigator.clipboard.writeText(hit.code)
     hit.el.textContent = t('common.copied')

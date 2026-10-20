@@ -50,7 +50,7 @@ from app.services.context import BaseService, RequestContext
 from app.services.knowledge.access import RESOURCE_DOCUMENT, KnowledgeAccess
 from app.services.knowledge.ko_access import KoAccess
 from app.services.knowledge.page_links import PageLinks
-from app.services.knowledge.protection import protection_of
+from app.services.knowledge.protection import limit_export_text, protection_of
 
 DEFAULT_TITLE = "新对话"
 RESOURCE_CONVERSATION = "conversation"
@@ -62,6 +62,7 @@ PARENT_LEVEL = 1
 def message_out(
     message: Message, feedback: MessageFeedback | None = None, requested: bool = False
 ) -> MessageOut:
+    citations = [CitationOut.model_validate(c) for c in message.citations or []]
     return MessageOut(
         id=message.id,
         role=message.role,
@@ -70,13 +71,14 @@ def message_out(
         intent=message.intent,
         rewritten_query=message.rewritten_query,
         grounding=message.grounding,
-        citations=[CitationOut.model_validate(c) for c in message.citations or []],
+        citations=citations,
         steps=list(message.steps or []),
         trace_id=message.trace_id,
         error=message.error,
         created_at=message.created_at,
         feedback=FeedbackOut.model_validate(feedback) if feedback else None,
         knowledge_requested=requested,
+        copy_protect=any(c.copy_protect for c in citations),
     )
 
 
@@ -324,7 +326,7 @@ class ConversationService(BaseService):
         )
         if doc is None or kb is None:
             raise NotFoundError("Document not found")
-        await KnowledgeAccess(self.session).require_document(
+        perm = await KnowledgeAccess(self.session).require_document(
             self.ctx.user, doc, kb, AclPermission.READ
         )
         await self.audit.record(
@@ -370,6 +372,18 @@ class ConversationService(BaseService):
             page_start=cited.page_start,
         )
         protection = protection_of(kb, doc)
+        quote = cited.quote
+        if protection.limits_export(perm.value) and self.settings is not None:
+            cap = self.settings.controlled_export_max_chars
+            quote = limit_export_text(quote, self.settings.controlled_quote_max_chars)
+            segments = [
+                SourceSegmentOut(
+                    chunk_id=s.chunk_id,
+                    content=limit_export_text(s.content, cap),
+                    highlight=s.highlight,
+                )
+                for s in segments
+            ]
         return CitationSourceOut(
             n=n,
             document=SourceDocumentOut(
@@ -389,10 +403,10 @@ class ConversationService(BaseService):
             image_url=image_url,
             image_mime_type=image_mime,
             anchor_chunk_id=cited.chunk_id,
-            quote=cited.quote,
+            quote=quote,
             segments=segments,
             watermark=protection.watermark,
-            copy_protect=protection.copy_protect,
+            copy_protect=protection.copy_protect or protection.limits_export(perm.value),
         )
 
     async def _citation_image(
@@ -437,6 +451,13 @@ class ConversationService(BaseService):
             if s.get("document_id") in readable
         ]
         content = f"问题：{snap.question}\n\n{snap.answer}"
+        protection = protection_of(kb)
+        quote = cited.quote
+        # Knowledge objects inherit the KB policy; callers with read can always "download" KO text
+        # unless copy_protect is on — then shorten the drawer body.
+        if protection.copy_protect and self.settings is not None:
+            quote = limit_export_text(quote, self.settings.controlled_quote_max_chars)
+            content = limit_export_text(content, self.settings.controlled_export_max_chars)
         return CitationSourceOut(
             n=n,
             document=SourceDocumentOut(
@@ -452,8 +473,10 @@ class ConversationService(BaseService):
             page_start=None,
             page_end=None,
             anchor_chunk_id=cited.chunk_id,
-            quote=cited.quote,
+            quote=quote,
             segments=[SourceSegmentOut(chunk_id=cited.chunk_id, content=content, highlight=True)],
+            watermark=protection.watermark,
+            copy_protect=protection.copy_protect,
             is_ko=True,
             ko=KoCitationOut(
                 id=ko.id,

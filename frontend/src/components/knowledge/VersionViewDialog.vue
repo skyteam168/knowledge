@@ -3,8 +3,9 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getVersionPreviewUrl, getVersionText } from '@/api/knowledge'
 import type { DocumentVersion, Preview, Protection, VersionText } from '@/api/types'
+import MarkdownPreview from '@/components/knowledge/MarkdownPreview.vue'
 import ProtectedArea from '@/components/knowledge/ProtectedArea.vue'
-import { inlinePreviewable, isHtmlFile } from '@/utils/document'
+import { inlinePreviewable, isHtmlFile, isMarkdownFile } from '@/utils/document'
 
 /** One older version: its file (or watermarked page images) and its parsed text. */
 const props = defineProps<{
@@ -26,11 +27,16 @@ const visible = computed({
     if (!open) emit('close')
   },
 })
+const isMarkdown = computed(() => !!props.version && isMarkdownFile(props.version.filename))
 const showFile = computed(
   () =>
     preview.value?.mode === 'file' &&
     !!preview.value.url &&
-    inlinePreviewable(preview.value.filename),
+    inlinePreviewable(preview.value.filename) &&
+    !isMarkdown.value,
+)
+const markdownBody = computed(() =>
+  isMarkdown.value && text.value?.available ? text.value.lines.join('\n') : null,
 )
 
 watch(
@@ -45,7 +51,8 @@ watch(
         getVersionPreviewUrl(props.docId, version.version),
         getVersionText(props.docId, version.version),
       ])
-      tab.value = showFile.value || preview.value.mode === 'pages' ? 'preview' : 'text'
+      tab.value =
+        showFile.value || preview.value.mode === 'pages' || isMarkdown.value ? 'preview' : 'text'
     } finally {
       loading.value = false
     }
@@ -73,8 +80,11 @@ watch(
     >
       <el-tabs v-model="tab">
         <el-tab-pane :label="t('knowledge.version.tabPreview')" name="preview">
+          <div v-if="markdownBody != null" class="version-markdown" data-test="version-markdown">
+            <MarkdownPreview :content="markdownBody" />
+          </div>
           <iframe
-            v-if="preview && showFile"
+            v-else-if="preview && showFile"
             :src="preview.url ?? ''"
             class="version-frame"
             :sandbox="isHtmlFile(preview.filename) ? '' : undefined"
@@ -105,7 +115,12 @@ watch(
             :title="t('knowledge.version.truncated')"
           />
           <ProtectedArea v-if="text?.available" :watermark="protection?.watermark">
-            <pre class="version-text" data-test="version-text">{{ text.lines.join('\n') }}</pre>
+            <div v-if="isMarkdown" class="version-markdown" data-test="version-text">
+              <MarkdownPreview :content="text.lines.join('\n')" />
+            </div>
+            <pre v-else class="version-text" data-test="version-text">{{
+              text.lines.join('\n')
+            }}</pre>
           </ProtectedArea>
           <el-empty v-else-if="text" :description="t('knowledge.version.textUnavailable')" />
         </el-tab-pane>
@@ -120,9 +135,13 @@ watch(
 }
 .version-frame,
 .version-pages,
-.version-text {
+.version-text,
+.version-markdown {
   height: 70vh;
   width: 100%;
+}
+.version-markdown {
+  overflow: auto;
 }
 .version-frame {
   border: 0;

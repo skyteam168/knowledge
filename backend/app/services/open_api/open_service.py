@@ -36,6 +36,11 @@ from app.services.chat.conversation_service import DEFAULT_TITLE, RESOURCE_CONVE
 from app.services.chat.ko_source import PublishedKnowledgeObjects
 from app.services.context import BaseService, RequestContext
 from app.services.knowledge.access import KnowledgeAccess
+from app.services.knowledge.protection import (
+    CONTROLLED_EXPORT_HINT,
+    limit_export_text,
+    protection_of,
+)
 from app.services.open_api.auth import ApiCaller
 from app.services.search.search_service import SearchParams, SearchService
 from app.services.security.pii import PiiMasker
@@ -143,6 +148,7 @@ class OpenApiService(BaseService):
             )
         )
         limit = self.settings.open_api_content_max_chars
+        controlled_limit = self.settings.controlled_export_max_chars
         mask: Callable[[str], str] = (
             PiiMasker(self.settings.pii_types).mask
             if self.settings.pii_mask_on_output
@@ -153,6 +159,9 @@ class OpenApiService(BaseService):
             for r in (run.outcome.results if run.outcome else [])
             if r.passage.document.kb_id in self.caller.kb_ids
         ]
+        access = KnowledgeAccess(self.session)
+        doc_ids = [r.passage.document.id for r in results if not r.passage.is_ko]
+        readable = await access.readable_documents(self.ctx.user, doc_ids) if doc_ids else {}
         items: list[OpenChunkOut] = []
         for r in results:
             image_url, image_mime = (None, None)
@@ -168,6 +177,22 @@ class OpenApiService(BaseService):
                     viewer_id=self.ctx.user.id,
                     absolute=True,
                 )
+            body = r.passage.content
+            copy_protect = False
+            if not r.passage.is_ko:
+                pair = readable.get(r.passage.document.id)
+                if pair is not None:
+                    doc, kb = pair
+                    perm = await access.document_permission(self.ctx.user, doc, kb)
+                    protection = protection_of(kb, doc)
+                    if protection.limits_export(perm.value if perm else None):
+                        copy_protect = True
+            if copy_protect:
+                truncated = len(body.strip()) > controlled_limit
+                body = limit_export_text(body, controlled_limit) or CONTROLLED_EXPORT_HINT
+            else:
+                truncated = len(body) > limit
+                body = body[:limit]
             items.append(
                 OpenChunkOut(
                     rank=r.rank,
@@ -177,7 +202,7 @@ class OpenApiService(BaseService):
                     kb_id=r.passage.document.kb_id,
                     kb_name=r.passage.document.kb_name,
                     heading_path=list(r.passage.heading_path),
-                    content=mask(r.passage.content[:limit]),
+                    content=mask(body),
                     score=r.rerank_score,
                     page_start=r.passage.page_start,
                     page_end=r.passage.page_end,
@@ -185,6 +210,8 @@ class OpenApiService(BaseService):
                     is_ko=r.passage.is_ko,
                     image_url=image_url,
                     image_mime_type=image_mime,
+                    copy_protect=copy_protect,
+                    content_truncated=truncated,
                 )
             )
         if audit:

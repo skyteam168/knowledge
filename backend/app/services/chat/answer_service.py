@@ -58,6 +58,9 @@ from app.services.chat.expansion import (
 )
 from app.services.chat.rewriter import Intent, QueryRewriter, RewriteResult
 from app.services.context import BaseService, RequestContext
+from app.services.knowledge.access import KnowledgeAccess
+from app.services.knowledge.ko_access import KoAccess
+from app.services.knowledge.protection import limit_export_text, protection_of
 from app.services.search.search_service import SearchParams, SearchService
 from app.services.security.pii import PiiMasker, StreamMasker
 
@@ -631,6 +634,46 @@ class AnswerService(BaseService):
             total_ms=int(run.timings["total_ms"]),
         )
 
+    async def _apply_controlled_citations(
+        self, citations: list[dict[str, Any]]
+    ) -> tuple[list[dict[str, Any]], bool]:
+        """Mark / shorten citations from copy-protected or download-restricted sources."""
+        if not citations:
+            return citations, False
+        access = KnowledgeAccess(self.session)
+        doc_ids = [str(c["document_id"]) for c in citations if not c.get("is_ko")]
+        ko_ids = [str(c["document_id"]) for c in citations if c.get("is_ko")]
+        readable = await access.readable_documents(self.ctx.user, doc_ids) if doc_ids else {}
+        ko_live = (
+            await KoAccess(self.session).live_objects(self.ctx.user, ko_ids) if ko_ids else None
+        )
+        quote_cap = self.settings.controlled_quote_max_chars
+        out: list[dict[str, Any]] = []
+        any_protect = False
+        for cite in citations:
+            item = dict(cite)
+            protected = False
+            if cite.get("is_ko"):
+                obj = ko_live.objects.get(str(cite["document_id"])) if ko_live else None
+                if obj is not None and protection_of(obj.kb).copy_protect:
+                    protected = True
+            else:
+                pair = readable.get(str(cite["document_id"]))
+                if pair is not None:
+                    doc, kb = pair
+                    perm = await access.document_permission(self.ctx.user, doc, kb)
+                    protection = protection_of(kb, doc)
+                    if protection.limits_export(perm.value if perm else None):
+                        protected = True
+            if protected:
+                any_protect = True
+                item["copy_protect"] = True
+                item["quote"] = limit_export_text(str(item.get("quote") or ""), quote_cap)
+            else:
+                item["copy_protect"] = False
+            out.append(item)
+        return out, any_protect
+
     async def _finish(
         self, run: _Run, result: CitationResult, grounding: Grounding
     ) -> AsyncIterator[ChatEvent]:
@@ -639,6 +682,8 @@ class AnswerService(BaseService):
             "invalid": result.invalid,
             "count": len(result.citations),
         }
+        citations, copy_protect = await self._apply_controlled_citations(result.citations)
+        result = replace(result, citations=citations)
         if self.masker:
             masker = self.masker
             result = replace(
@@ -674,6 +719,7 @@ class AnswerService(BaseService):
                     dict.fromkeys(str(c["document_id"]) for c in result.citations)
                 ),
                 "context_document_ids": run.context_document_ids,
+                "copy_protect": copy_protect,
             },
         )
         await self.session.commit()
@@ -688,6 +734,7 @@ class AnswerService(BaseService):
                 "rewritten_query": answer.rewritten_query,
                 "trace_id": run.trace_id,
                 "gap_id": run.gap.id if run.gap else None,
+                "copy_protect": copy_protect,
             },
         )
 

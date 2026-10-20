@@ -81,6 +81,9 @@ export const createMarkdownDocument = (
   body: { title: string; content: string; tags?: string[] },
 ) => post<UploadResult>(`/knowledge-bases/${kbId}/documents/markdown`, body, { silent: true })
 export const getDocumentContent = (id: string) => get<DocumentContent>(`/documents/${id}/content`)
+/** Read-only Markdown / text body for rendered preview (requires kb:read only). */
+export const getDocumentPreviewText = (id: string) =>
+  get<DocumentContent>(`/documents/${id}/preview-text`)
 export const saveDocumentContent = (id: string, content: string, baseVersion: number) =>
   put<UploadResult>(
     `/documents/${id}/content`,

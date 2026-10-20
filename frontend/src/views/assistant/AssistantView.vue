@@ -40,6 +40,7 @@ import AnswerContent from '@/components/assistant/AnswerContent.vue'
 import CitationDrawer from '@/components/assistant/CitationDrawer.vue'
 import FeedbackDialog from '@/components/assistant/FeedbackDialog.vue'
 import ThinkingSteps from '@/components/assistant/ThinkingSteps.vue'
+import ProtectedArea from '@/components/knowledge/ProtectedArea.vue'
 import AppLogo from '@/components/layout/AppLogo.vue'
 import { formatDateTime } from '@/utils/format'
 import { hitLocation } from '@/utils/search'
@@ -310,6 +311,7 @@ async function send(text?: string): Promise<void> {
           reply.grounding = done.grounding
           reply.intent = done.intent
           reply.rewritten_query = done.rewritten_query
+          reply.copy_protect = !!done.copy_protect
           reply.status = 'done'
           scrollToBottom()
         },
@@ -364,7 +366,15 @@ function onInputKeydown(event: Event | KeyboardEvent): void {
   }
 }
 
+function isCopyProtected(message: UiMessage): boolean {
+  return !!message.copy_protect || message.citations.some((c) => c.copy_protect)
+}
+
 async function copyAnswer(message: UiMessage): Promise<void> {
+  if (isCopyProtected(message)) {
+    ElMessage.warning(t('assistant.copyProtected'))
+    return
+  }
   try {
     await navigator.clipboard.writeText(message.content)
     ElMessage.success(t('common.copied'))
@@ -598,14 +608,20 @@ onBeforeUnmount(stop)
                   >
                     <span /><span /><span />
                   </div>
-                  <AnswerContent
+                  <ProtectedArea
                     v-else-if="msg.content"
-                    :content="msg.content"
-                    :citations="msg.citations"
-                    :streaming="msg.status === 'streaming'"
-                    :message-id="msg.status === 'done' ? msg.id : null"
-                    @cite="(n) => openCitation(msg, n)"
-                  />
+                    :copy-protect="isCopyProtected(msg)"
+                    class="msg__answer"
+                  >
+                    <AnswerContent
+                      :content="msg.content"
+                      :citations="msg.citations"
+                      :streaming="msg.status === 'streaming'"
+                      :message-id="msg.status === 'done' ? msg.id : null"
+                      :copy-protect="isCopyProtected(msg)"
+                      @cite="(n) => openCitation(msg, n)"
+                    />
+                  </ProtectedArea>
                   <div v-if="msg.grounding === 'uncertain'" class="notice notice--warn">
                     {{ t('assistant.uncertain') }}
                   </div>
@@ -628,7 +644,7 @@ onBeforeUnmount(stop)
                       :key="c.n"
                       type="button"
                       class="source"
-                      :title="c.quote"
+                      :title="isCopyProtected(msg) ? c.title : c.quote"
                       @click="openCitation(msg, c.n)"
                     >
                       <span class="source__n">{{ c.n }}</span>
@@ -652,9 +668,14 @@ onBeforeUnmount(stop)
                 </div>
 
                 <div v-if="msg.status !== 'streaming'" class="msg__actions">
-                  <el-tooltip :content="t('common.copy')" placement="top">
+                  <el-tooltip
+                    :content="
+                      isCopyProtected(msg) ? t('assistant.copyProtected') : t('common.copy')
+                    "
+                    placement="top"
+                  >
                     <button
-                      v-if="msg.content"
+                      v-if="msg.content && !isCopyProtected(msg)"
                       type="button"
                       class="icon-btn icon-btn--sm"
                       @click="copyAnswer(msg)"

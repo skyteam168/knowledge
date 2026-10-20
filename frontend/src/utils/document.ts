@@ -25,6 +25,11 @@ export function isHtmlFile(filename: string): boolean {
   return ['.html', '.htm'].includes(fileExtension(filename))
 }
 
+/** Markdown documents: render with markdown-it instead of a raw-text iframe. */
+export function isMarkdownFile(filename: string): boolean {
+  return ['.md', '.markdown'].includes(fileExtension(filename))
+}
+
 export type TagType = 'primary' | 'success' | 'info' | 'warning' | 'danger'
 
 export interface StatusView {

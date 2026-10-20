@@ -229,6 +229,9 @@ class OpenChunkOut(BaseModel):
     # Presigned page/slide image when the document was rasterized at ingest.
     image_url: str | None = None
     image_mime_type: str | None = None
+    # Controlled document: content may be truncated for this caller.
+    copy_protect: bool = False
+    content_truncated: bool = False
 
 
 class OpenRetrieveOut(BaseModel):

@@ -149,6 +149,9 @@ async def test_online_markdown_documents_save_new_versions(api: httpx.AsyncClien
     content = (await api.get(f"{DOCS}/{doc['id']}/content", headers=BOB)).json()
     assert content["content"] == "# 规程\n\n戴手套" and content["version"] == 1
     assert (await api.get(f"{DOCS}/{doc['id']}/content", headers=CAROL)).status_code == 403
+    # Readers get rendered preview text without needing edit / download.
+    preview = (await api.get(f"{DOCS}/{doc['id']}/preview-text", headers=CAROL)).json()
+    assert preview["content"] == "# 规程\n\n戴手套" and preview["version"] == 1
 
     body = {"content": "# 规程\n\n戴手套和护目镜", "base_version": 1}
     saved = await api.put(f"{DOCS}/{doc['id']}/content", json=body, headers=BOB)
@@ -162,5 +165,8 @@ async def test_online_markdown_documents_save_new_versions(api: httpx.AsyncClien
         files={"file": ("图.pdf", make_pdf(), "application/pdf")},
         headers=BOB,
     )
-    not_text = await api.get(f"{DOCS}/{pdf.json()['document']['id']}/content", headers=BOB)
+    pdf_id = pdf.json()["document"]["id"]
+    not_text = await api.get(f"{DOCS}/{pdf_id}/content", headers=BOB)
     assert not_text.status_code == 422 and not_text.json()["code"] == "NOT_EDITABLE"
+    not_preview = await api.get(f"{DOCS}/{pdf_id}/preview-text", headers=BOB)
+    assert not_preview.status_code == 422 and not_preview.json()["code"] == "NOT_PREVIEWABLE"
