@@ -152,9 +152,11 @@ async def create_run(data: EvalRunCreate, service: ServiceDep) -> EvalRunOut:
 
 @router.get("/runs/compare", response_model=EvalCompareOut)
 async def compare_runs(
-    service: ServiceDep, run_ids: Annotated[list[str], Query(min_length=2, max_length=4)]
+    service: ServiceDep,
+    run_ids: Annotated[list[str], Query(min_length=2, max_length=4)],
+    baseline_run_id: Annotated[str | None, Query()] = None,
 ) -> EvalCompareOut:
-    return await service.compare(run_ids)
+    return await service.compare(run_ids, baseline_run_id=baseline_run_id)
 
 
 @router.get("/runs/{run_id}", response_model=EvalRunOut)

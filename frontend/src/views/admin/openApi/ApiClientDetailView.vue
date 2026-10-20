@@ -13,6 +13,7 @@ import {
   listApiKeys,
   previewApiClient,
   revokeApiKey,
+  rotateApiKey,
   updateApiClient,
 } from '@/api/openApi'
 import type {
@@ -189,6 +190,20 @@ async function revoke(key: ApiKey): Promise<void> {
   )
   await revokeApiKey(props.clientId, key.id)
   ElMessage.success(t('openApi.keys.revoked'))
+  await Promise.all([loadKeys(), loadClient()])
+}
+
+async function rotate(key: ApiKey): Promise<void> {
+  await ElMessageBox.confirm(
+    t('openApi.keys.rotateConfirm', { name: key.name, prefix: key.prefix }),
+    t('openApi.keys.rotateTitle'),
+    {
+      type: 'warning',
+      confirmButtonText: t('openApi.keys.rotate'),
+    },
+  )
+  issued.value = await rotateApiKey(props.clientId, key.id)
+  ElMessage.success(t('openApi.keys.rotated'))
   await Promise.all([loadKeys(), loadClient()])
 }
 
@@ -498,8 +513,16 @@ onMounted(async () => {
               <el-table-column :label="t('openApi.keys.colIssuedAt')" width="160">
                 <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
               </el-table-column>
-              <el-table-column :label="t('common.actions')" width="90" fixed="right">
+              <el-table-column :label="t('common.actions')" width="140" fixed="right">
                 <template #default="{ row }">
+                  <el-button
+                    v-if="row.status === 'active'"
+                    link
+                    type="primary"
+                    @click="rotate(row as ApiKey).catch(() => undefined)"
+                  >
+                    {{ t('openApi.keys.rotate') }}
+                  </el-button>
                   <el-button
                     v-if="row.status === 'active'"
                     link

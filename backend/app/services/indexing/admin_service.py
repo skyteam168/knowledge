@@ -13,6 +13,8 @@ from app.schemas.indexing import (
     IndexGenerationOut,
     OutboxEventOut,
     OutboxStatsOut,
+    RebuildQueuedOut,
+    RebuildRequest,
     RepairQueuedOut,
     RetryResultOut,
 )
@@ -133,6 +135,34 @@ class IndexAdminService(BaseService):
         org_id, queue = self.org_id, self.queue
         run_after_commit(self.session, lambda: queue.enqueue_index_repair(org_id, kb_id))
         return RepairQueuedOut(queued=True, kb_id=kb_id)
+
+    async def queue_rebuild(self, data: RebuildRequest) -> RebuildQueuedOut:
+        await self.audit.record(
+            self.audit_ctx,
+            "index.rebuild",
+            RESOURCE_INDEX,
+            None,
+            None,
+            {
+                "activate": data.activate,
+                "strict": data.strict,
+                "drop_old": data.drop_old,
+                "batch_size": data.batch_size,
+            },
+        )
+        queue = self.queue
+        run_after_commit(
+            self.session,
+            lambda: queue.enqueue_index_rebuild(
+                activate=data.activate,
+                strict=data.strict,
+                drop_old=data.drop_old,
+                batch_size=data.batch_size,
+            ),
+        )
+        return RebuildQueuedOut(
+            queued=True, activate=data.activate, strict=data.strict, drop_old=data.drop_old
+        )
 
     async def reload_synonyms(self) -> None:
         target = await self.runtime.registry.active() or await self.runtime.registry.bootstrap()

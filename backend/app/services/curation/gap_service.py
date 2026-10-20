@@ -10,6 +10,7 @@ from typing import Any
 
 from sqlalchemy import select
 
+from app.core.config import get_settings
 from app.core.exceptions import ConflictError, NotFoundError, ValidationAppError
 from app.models import (
     ACTIVE_GAP_STATUSES,
@@ -44,6 +45,7 @@ from app.services.context import BaseService
 from app.services.curation.clustering import refresh_cluster_stats
 from app.services.curation.common import RESOURCE_GAP, kb_names, readable_kb_scope, user_refs
 from app.services.curation.notifications import NotificationKind, notify
+from app.services.curation.sla import apply_gap_sla
 from app.services.knowledge.access import KnowledgeAccess
 from app.services.knowledge.ko_access import KoAccess
 
@@ -362,8 +364,12 @@ class GapService(BaseService):
             await refresh_cluster_stats(self.session, gap.cluster_id)
         if "priority" in fields and data.priority is not None:
             gap.priority = data.priority
+            if "due_at" not in fields:
+                apply_gap_sla(gap, get_settings(), force=True)
         if "due_at" in fields:
             gap.due_at = data.due_at
+        elif gap.due_at is None:
+            apply_gap_sla(gap, get_settings())
         await self.session.flush()
         await self._record("gap.update", gap, before)
         (out,) = await self._outs([gap])

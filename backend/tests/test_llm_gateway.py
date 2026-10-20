@@ -234,6 +234,8 @@ class BrokenChat(MockChatClient):
 
 
 async def test_chat_fallback_and_rerank_degradation(settings: Settings) -> None:
+    from app.llm.gateway import FallbackEmbeddingClient, FallbackRerankClient
+
     chat = FallbackChatClient(BrokenChat("primary"), MockChatClient("backup"))
     messages = [ChatMessage(role="user", content="问题")]
     assert (await chat.complete(messages)).model == "backup"
@@ -253,6 +255,17 @@ async def test_chat_fallback_and_rerank_degradation(settings: Settings) -> None:
     assert [(r.index, r.score) for r in degraded] == [(0, 0.0), (1, 0.0)]
     with pytest.raises(LLMError):
         await gateway.rerank("q", ["a"], degrade=False)
+
+    class BrokenEmbedding(MockEmbeddingClient):
+        async def embed(self, texts: Any) -> Any:
+            raise LLMError("down")
+
+    emb = FallbackEmbeddingClient(BrokenEmbedding(SPEC), MockEmbeddingClient(SPEC))
+    assert len((await emb.embed(["x"]))[0]) == SPEC.dim
+
+    rr = FallbackRerankClient(BrokenRerank(), MockRerankClient("backup-rr"))
+    ranked = await rr.rerank("q", ["a", "b"])
+    assert ranked and ranked[0].index == 0
 
 
 async def test_mock_gateway_is_deterministic_and_caches_clients(settings: Settings) -> None:

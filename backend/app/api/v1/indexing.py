@@ -17,6 +17,8 @@ from app.schemas.indexing import (
     IndexGenerationOut,
     OutboxEventOut,
     OutboxStatsOut,
+    RebuildQueuedOut,
+    RebuildRequest,
     RepairQueuedOut,
     RetryResultOut,
 )
@@ -89,6 +91,17 @@ async def check_kb(kb_id: str, service: ServiceDep) -> ConsistencyReportOut:
 )
 async def repair_kb(kb_id: str, service: ServiceDep) -> RepairQueuedOut:
     return await service.queue_repair(kb_id)
+
+
+@router.post(
+    "/rebuild",
+    response_model=RebuildQueuedOut,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_platform_admin)],
+)
+async def rebuild_index(data: RebuildRequest, service: ServiceDep) -> RebuildQueuedOut:
+    """Queue a full PG→Qdrant/OpenSearch rebuild (same as `python -m app.cli index rebuild`)."""
+    return await service.queue_rebuild(data)
 
 
 @router.post(

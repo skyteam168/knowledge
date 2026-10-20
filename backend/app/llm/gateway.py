@@ -85,6 +85,51 @@ class FallbackChatClient:
             yield token
 
 
+class FallbackEmbeddingClient:
+    """Uses `fallback` when `primary` fails. Fallback must share the same embedding dim."""
+
+    def __init__(self, primary: EmbeddingClient, fallback: EmbeddingClient) -> None:
+        self.primary = primary
+        self.fallback = fallback
+
+    @property
+    def spec(self) -> EmbeddingSpec:
+        return self.primary.spec
+
+    async def embed(self, texts: Sequence[str]) -> list[list[float]]:
+        try:
+            return await self.primary.embed(texts)
+        except LLMError as exc:
+            logger.warning(
+                "embedding_fallback",
+                extra={"model": self.primary.spec.model, "error": str(exc)},
+            )
+            return await self.fallback.embed(texts)
+
+
+class FallbackRerankClient:
+    """Uses `fallback` when `primary` fails (before gateway degrade)."""
+
+    def __init__(self, primary: RerankClient, fallback: RerankClient) -> None:
+        self.primary = primary
+        self.fallback = fallback
+
+    @property
+    def model(self) -> str:
+        return self.primary.model
+
+    async def rerank(
+        self, query: str, documents: Sequence[str], top_n: int | None = None
+    ) -> list[RerankResult]:
+        try:
+            return await self.primary.rerank(query, documents, top_n)
+        except LLMError as exc:
+            logger.warning(
+                "rerank_fallback", extra={"model": self.primary.model, "error": str(exc)}
+            )
+            return await self.fallback.rerank(query, documents, top_n)
+
+
 def _elapsed_ms(started: float) -> int:
     return round((time.perf_counter() - started) * 1000)
 
@@ -337,15 +382,28 @@ def build_llm_gateway(settings: Settings) -> LLMGateway:
         )
 
     def embedding_factory(spec: EmbeddingSpec) -> EmbeddingClient:
-        return InstrumentedEmbeddingClient(
-            OpenAIEmbeddingClient(
-                caller(spec.base_url, settings.embedding_timeout_seconds),
-                spec,
+        primary: EmbeddingClient = OpenAIEmbeddingClient(
+            caller(spec.base_url, settings.embedding_timeout_seconds),
+            spec,
+            batch_size=settings.embedding_batch_size,
+            concurrency=settings.embedding_concurrency,
+            send_dimensions=settings.embedding_send_dimensions,
+        )
+        if settings.embedding_fallback_base_url:
+            fb_spec = EmbeddingSpec(
+                model=settings.embedding_fallback_model or spec.model,
+                dim=spec.dim,
+                base_url=settings.embedding_fallback_base_url,
+            )
+            fallback: EmbeddingClient = OpenAIEmbeddingClient(
+                caller(fb_spec.base_url, settings.embedding_timeout_seconds),
+                fb_spec,
                 batch_size=settings.embedding_batch_size,
                 concurrency=settings.embedding_concurrency,
                 send_dimensions=settings.embedding_send_dimensions,
             )
-        )
+            primary = FallbackEmbeddingClient(primary, fallback)
+        return InstrumentedEmbeddingClient(primary)
 
     chat: ChatClient = OpenAIChatClient(
         caller(settings.chat_base_url, settings.llm_timeout_seconds),
@@ -365,17 +423,30 @@ def build_llm_gateway(settings: Settings) -> LLMGateway:
         )
         chat = FallbackChatClient(chat, fallback)
 
+    reranker: RerankClient = OpenAIRerankClient(
+        caller(settings.rerank_base_url, settings.rerank_timeout_seconds),
+        settings.rerank_model,
+        path=settings.rerank_path,
+        instruct=settings.rerank_instruct,
+    )
+    if settings.rerank_fallback_base_url or settings.rerank_fallback_model:
+        reranker = FallbackRerankClient(
+            reranker,
+            OpenAIRerankClient(
+                caller(
+                    settings.rerank_fallback_base_url or settings.rerank_base_url,
+                    settings.rerank_timeout_seconds,
+                ),
+                settings.rerank_fallback_model or settings.rerank_model,
+                path=settings.rerank_fallback_path or settings.rerank_path,
+                instruct=settings.rerank_instruct,
+            ),
+        )
+
     return LLMGateway(
         default_embedding=default_embedding_spec(settings),
         embedding_factory=embedding_factory,
-        reranker=InstrumentedRerankClient(
-            OpenAIRerankClient(
-                caller(settings.rerank_base_url, settings.rerank_timeout_seconds),
-                settings.rerank_model,
-                path=settings.rerank_path,
-                instruct=settings.rerank_instruct,
-            )
-        ),
+        reranker=InstrumentedRerankClient(reranker),
         chat=InstrumentedChatClient(chat, capture_content=settings.llm_trace_content),
         http=http,
     )

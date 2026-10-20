@@ -8,6 +8,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.db import run_after_commit
 from app.models import (
     ACTIVE_GAP_STATUSES,
     GapStatus,
@@ -31,6 +32,7 @@ from app.services.curation.clustering import refresh_cluster_stats
 from app.services.curation.common import RESOURCE_GAP, RESOURCE_KO_AUDIT
 from app.services.curation.notifications import NotificationKind, notify
 from app.services.indexing.ko_indexer import ko_entry_id
+from app.services.ingest.queue import TaskQueue
 from app.services.knowledge.access import RESOURCE_KO
 from app.services.outbox_service import KO_DEPRECATED, KO_PUBLISHED, OutboxService
 
@@ -55,11 +57,14 @@ def ko_snapshot(ko: KnowledgeObject) -> dict[str, Any]:
 
 
 class KoLifecycle:
-    def __init__(self, session: AsyncSession, audit_ctx: AuditContext) -> None:
+    def __init__(
+        self, session: AsyncSession, audit_ctx: AuditContext, queue: TaskQueue | None = None
+    ) -> None:
         self.session = session
         self.audit_ctx = audit_ctx
         self.audit = AuditService(session)
         self.repo = KnowledgeObjectRepository(session)
+        self.queue = queue
 
     async def publish(
         self, ko: KnowledgeObject, snapshot: KoVersion, actor_id: str | None
@@ -118,6 +123,12 @@ class KoLifecycle:
         await self.audit.record(
             self.audit_ctx, "ko.publish", RESOURCE_KO_AUDIT, ko.id, before, ko_snapshot(ko)
         )
+        if self.queue is not None and resolved:
+            org_id, ko_id, gap_ids = ko.org_id, ko.id, [g.id for g in resolved]
+            queue = self.queue
+            run_after_commit(
+                self.session, lambda: queue.enqueue_gap_verify(org_id, gap_ids, ko_id)
+            )
         return resolved
 
     async def _resolve_gaps(

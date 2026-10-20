@@ -34,6 +34,8 @@ export const createApiKey = (
 ) => post<ApiKeyCreated>(`${BASE}/clients/${clientId}/keys`, body)
 export const revokeApiKey = (clientId: string, keyId: string) =>
   post<ApiKey>(`${BASE}/clients/${clientId}/keys/${keyId}/revoke`)
+export const rotateApiKey = (clientId: string, keyId: string) =>
+  post<ApiKeyCreated>(`${BASE}/clients/${clientId}/keys/${keyId}/rotate`)
 
 export const listApiCallLogs = (
   clientId: string,

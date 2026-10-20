@@ -21,6 +21,14 @@ $DC exec backend python -m app.cli index generations     # 查看所有代及状
 
 管理端页面：管理 → 索引同步（Outbox 状态、死信重试、一致性校验与一键修复、索引代列表）。
 
+全量重建也可由平台管理员通过 HTTP 入队（异步 worker，与 CLI 等价）：
+
+```bash
+curl -X POST "$API/api/v1/admin/index/rebuild" \
+  -H "Authorization: Bearer <TOKEN>" -H "Content-Type: application/json" \
+  -d '{"activate": true, "strict": false, "drop_old": false}'
+```
+
 ## 2. 选择处理方式
 
 | 现象 | 处理 |

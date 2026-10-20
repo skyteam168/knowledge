@@ -153,6 +153,33 @@ async def test_create_rejects_unknown_kb_and_bad_cidr(
 # ---- authentication ----------------------------------------------------------------------
 
 
+async def test_rotate_key_revokes_old_and_returns_new_secret(
+    api: httpx.AsyncClient, agent: dict[str, Any]
+) -> None:
+    client_id = agent["client"]["id"]
+    old_id = agent["key"]["id"]
+    old_headers = agent["headers"]
+    assert (await retrieve(api, old_headers, query="年假")).status_code == 200
+
+    resp = await api.post(f"{ADMIN}/clients/{client_id}/keys/{old_id}/rotate", headers=ALICE)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["secret"] and body["id"] != old_id
+    assert body["status"] == "active"
+
+    revoked = await api.get(f"{ADMIN}/clients/{client_id}/keys", headers=ALICE)
+    assert revoked.status_code == 200
+    by_id = {k["id"]: k for k in revoked.json()}
+    assert by_id[old_id]["status"] == "revoked"
+    assert by_id[body["id"]]["status"] == "active"
+
+    assert (await retrieve(api, old_headers, query="年假")).status_code == 401
+    assert (await retrieve(api, key_headers(body["secret"]), query="年假")).status_code == 200
+
+    again = await api.post(f"{ADMIN}/clients/{client_id}/keys/{old_id}/rotate", headers=ALICE)
+    assert again.status_code == 422
+
+
 async def test_invalid_forged_revoked_expired_keys(
     api: httpx.AsyncClient, agent: dict[str, Any], engine: AsyncEngine
 ) -> None:

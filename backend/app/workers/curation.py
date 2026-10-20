@@ -51,3 +51,11 @@ async def cluster_gaps() -> None:
 async def check_expirations() -> None:
     result = await ExpiryMonitor(get_runtime().session_factory, settings).run_once()
     logger.info("expiry_check_finished", extra=result.__dict__)
+
+
+@dramatiq.actor(queue_name=CURATION_QUEUE, max_retries=2, time_limit=10 * 60 * 1000)
+async def verify_gap_resolutions(org_id: str, gap_ids: list[str], ko_id: str) -> None:
+    from app.services.curation.verify import run_gap_verify
+
+    result = await run_gap_verify(get_runtime().session_factory, org_id, gap_ids, ko_id)
+    logger.info("gap_verify_actor_finished", extra=result)

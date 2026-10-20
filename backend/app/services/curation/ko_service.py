@@ -71,6 +71,7 @@ from app.services.curation.compiler import KnowledgeCompiler, KoDraft, Material
 from app.services.curation.conflicts import ConflictDetector
 from app.services.curation.lifecycle import KoLifecycle, ko_link, ko_snapshot
 from app.services.curation.notifications import NotificationKind, notify
+from app.services.ingest.queue import TaskQueue
 from app.services.knowledge.access import RESOURCE_KB, RESOURCE_KO, KnowledgeAccess
 from app.services.knowledge.directory import PrincipalDirectory
 from app.services.outbox_service import ACL_CHANGED, OutboxService
@@ -102,6 +103,7 @@ class KnowledgeObjectService(BaseService):
         pipeline: RetrievalPipeline,
         gateway: LLMGateway,
         settings: Settings,
+        queue: TaskQueue | None = None,
     ) -> None:
         super().__init__(session, ctx, authz_cache)
         self.settings = settings
@@ -111,7 +113,7 @@ class KnowledgeObjectService(BaseService):
         self.access = KnowledgeAccess(session)
         self.search = SearchService(session, ctx, authz_cache, pipeline=pipeline, settings=settings)
         self.compiler = KnowledgeCompiler(gateway, settings)
-        self.lifecycle = KoLifecycle(session, ctx.audit)
+        self.lifecycle = KoLifecycle(session, ctx.audit, queue=queue)
 
     # ---- access ------------------------------------------------------------------------
 

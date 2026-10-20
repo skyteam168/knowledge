@@ -169,8 +169,21 @@ class EvalConfigDiffOut(BaseModel):
     values: dict[str, Any]
 
 
+class EvalMetricGateOut(BaseModel):
+    baseline_run_id: str
+    candidate_run_id: str
+    metric: str
+    baseline: float
+    candidate: float
+    delta: float
+    regress: bool
+
+
 class EvalCompareOut(BaseModel):
     runs: list[EvalRunOut]
     metric_keys: list[str]
     config_diff: list[EvalConfigDiffOut]
     cases: list[EvalCompareCaseOut]
+    # Present when `baseline_run_id` is passed to compare: any drop vs baseline is a regress.
+    gates: list[EvalMetricGateOut] = []
+    passed: bool | None = None

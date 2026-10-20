@@ -12,6 +12,7 @@ from app.models import KnowledgeObject
 from app.models.base import utcnow
 from app.services.curation.expiry import ExpiryMonitor
 from app.services.indexing.runtime import IndexingRuntime
+from app.services.ingest.queue import RecordingTaskQueue
 from tests.conftest import auth
 from tests.test_chat_api import ScriptedChat, ask, chat, corpus, gaps, new_conversation
 from tests.test_indexing import drain, me, pipeline
@@ -52,6 +53,7 @@ async def test_closed_loop_unanswered_question_becomes_published_ko(
     chat: ScriptedChat,
     indexing: IndexingRuntime,
     engine: AsyncEngine,
+    task_queue: RecordingTaskQueue,
 ) -> None:
     kb_id = corpus["public_kb"]["id"]
 
@@ -63,6 +65,8 @@ async def test_closed_loop_unanswered_question_becomes_published_ko(
     second = (await ask(api, ALICE, other["id"], "公司食堂周五供应什么菜"))["done"]
     assert second["gap_id"] and second["gap_id"] != first["gap_id"]
     assert chat.streams == []
+    created_gaps = await gaps(engine)
+    assert all(g.due_at is not None for g in created_gaps if g.id in {first["gap_id"], second["gap_id"]})
 
     # 2. Clustering folds the identical question into the first gap.
     assert (await api.get(f"{CURATION}/gaps", headers=CAROL)).status_code == 403
@@ -123,6 +127,9 @@ async def test_closed_loop_unanswered_question_becomes_published_ko(
     all_gaps = {g.id: g for g in await gaps(engine)}
     folded = all_gaps[second["gap_id"]]
     assert folded.status == "duplicate" and folded.resolution["ko_id"] == ko_id
+    assert task_queue.gap_verifies
+    assert task_queue.gap_verifies[-1][2] == ko_id
+    assert gap["id"] in task_queue.gap_verifies[-1][1]
 
     # 5. A similar question now hits the knowledge object and cites it.
     chat.answer = "每周五食堂供应红烧肉和清蒸鲈鱼[1]。"

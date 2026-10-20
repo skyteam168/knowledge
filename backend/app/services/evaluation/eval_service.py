@@ -48,6 +48,7 @@ from app.schemas.evaluation import (
     EvalDatasetUpdate,
     EvalImportIn,
     EvalImportOut,
+    EvalMetricGateOut,
     EvalResultOut,
     EvalRunCreate,
     EvalRunOut,
@@ -616,7 +617,11 @@ class EvalService(BaseService):
         ]
         return Page(items=items, total=total, page=page, size=size)
 
-    async def compare(self, run_ids: Sequence[str]) -> EvalCompareOut:
+    async def compare(
+        self, run_ids: Sequence[str], *, baseline_run_id: str | None = None
+    ) -> EvalCompareOut:
+        from app.services.evaluation.gold_gate import compare_run_metrics
+
         ids = list(dict.fromkeys(run_ids))
         if not 2 <= len(ids) <= MAX_COMPARE_RUNS:
             raise ValidationAppError(f"Compare 2 to {MAX_COMPARE_RUNS} runs")
@@ -655,9 +660,34 @@ class EvalService(BaseService):
             EvalCompareCaseOut(case_id=cid, question=questions.get(cid, ""), metrics=m)
             for cid, m in sorted(per_case.items(), key=lambda kv: questions.get(kv[0], ""))
         ]
+        gates: list[EvalMetricGateOut] = []
+        passed: bool | None = None
+        if baseline_run_id is not None:
+            if baseline_run_id not in ids:
+                raise ValidationAppError("baseline_run_id must be one of run_ids")
+            by_id = {r.id: r for r in runs}
+            baseline = by_id[baseline_run_id]
+            for cand in runs:
+                if cand.id == baseline_run_id:
+                    continue
+                for g in compare_run_metrics(baseline.metrics or {}, cand.metrics or {}):
+                    gates.append(
+                        EvalMetricGateOut(
+                            baseline_run_id=baseline_run_id,
+                            candidate_run_id=cand.id,
+                            metric=g.metric,
+                            baseline=g.baseline,
+                            candidate=g.candidate,
+                            delta=g.delta,
+                            regress=g.regress,
+                        )
+                    )
+            passed = not any(g.regress for g in gates)
         return EvalCompareOut(
             runs=await self._run_outs(runs),
             metric_keys=metric_keys,
             config_diff=config_diff,
             cases=cases,
+            gates=gates,
+            passed=passed,
         )

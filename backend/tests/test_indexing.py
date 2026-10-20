@@ -483,6 +483,16 @@ async def test_consistency_check_and_repair(
     assert result.deleted_opensearch == 1
     assert await cli_run(["index", "check", "--kb", kb["id"]], indexing.settings, indexing) == 0
 
+    rebuild = await api.post(
+        "/api/v1/admin/index/rebuild",
+        json={"activate": True, "strict": True, "drop_old": False, "batch_size": 25},
+        headers=ALICE,
+    )
+    assert rebuild.status_code == 202, rebuild.text
+    assert rebuild.json()["queued"] is True
+    assert task_queue.rebuilds == [(True, True, False, 25)]
+    assert (await api.post("/api/v1/admin/index/rebuild", json={}, headers=BOB)).status_code == 403
+
 
 async def test_rebuild_dual_writes_then_switches_aliases(
     api: httpx.AsyncClient,

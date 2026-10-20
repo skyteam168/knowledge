@@ -382,6 +382,28 @@ class OpenApiClientService(BaseService):
             )
         return ApiKeyOut.model_validate(key)
 
+    async def rotate_key(self, client_id: str, key_id: str) -> ApiKeyCreatedOut:
+        """Issue a new secret and revoke the old key in one transaction."""
+        await self._client(client_id)
+        key = await self.session.get(ApiKey, key_id)
+        if key is None or key.client_id != client_id:
+            raise NotFoundError("API key not found")
+        if key.status == ApiKeyStatus.REVOKED.value:
+            raise ValidationAppError("cannot rotate a revoked key")
+        created = await self.create_key(
+            client_id, ApiKeyCreate(name=key.name, expires_at=key.expires_at)
+        )
+        await self.revoke_key(client_id, key_id)
+        await self.audit.record(
+            self.audit_ctx,
+            "openapi.key.rotate",
+            RESOURCE_API_KEY,
+            created.id,
+            {"old_key_id": key_id, "old_prefix": key.prefix},
+            {"new_key_id": created.id, "new_prefix": created.prefix, "client_id": client_id},
+        )
+        return created
+
     # ---- logs & usage ------------------------------------------------------------------
 
     async def logs(

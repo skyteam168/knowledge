@@ -100,6 +100,11 @@ async def revoke_key(client_id: str, key_id: str, service: ServiceDep) -> ApiKey
     return await service.revoke_key(client_id, key_id)
 
 
+@router.post("/clients/{client_id}/keys/{key_id}/rotate", response_model=ApiKeyCreatedOut)
+async def rotate_key(client_id: str, key_id: str, service: ServiceDep) -> ApiKeyCreatedOut:
+    return await service.rotate_key(client_id, key_id)
+
+
 @router.get("/clients/{client_id}/logs", response_model=Page[ApiCallLogOut])
 async def list_logs(
     client_id: str,

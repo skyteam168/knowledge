@@ -39,7 +39,7 @@ async def test_preview_and_download_respect_acl_and_are_audited(
     api: httpx.AsyncClient, corpus: dict[str, Any], engine: AsyncEngine
 ) -> None:
     secret = corpus["secret"]["id"]
-    for path in ("preview-url", "download-url"):
+    for path in ("preview-url", "download-url", "preview-text"):
         url = f"/api/v1/documents/{secret}/{path}"
         assert (await api.get(url, headers=CAROL)).status_code in (403, 404)
         assert (await api.get(url, headers=DAVE)).status_code in (403, 404)
@@ -50,6 +50,7 @@ async def test_preview_and_download_respect_acl_and_are_audited(
 
     actions = [a for a, _ in await audit_actions(engine, secret)]
     assert "document.preview" in actions and "document.download" in actions
+    assert "document.preview_text" in actions
 
 
 async def test_chat_audit_lists_question_and_documents_used(

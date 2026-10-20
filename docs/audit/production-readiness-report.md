@@ -92,13 +92,9 @@ flowchart TB
 
 | 能力 | 缺口 |
 | --- | --- |
-| `preview-text` | 有 `_doc(READ)`，缺 ACL 回归用例 |
-| API Key 轮换 | create+revoke，无单接口 rotate |
-| Chat 流式中途撤销权限 | Evidence ACL 仅生成前一次 |
+| Chat 流式中途撤销权限 | Evidence ACL 仅生成前一次（**延期**） |
 | 多语种 BM25 | IK 主字段 + `.en`/`.vi` multi-field（越文暂用 standard；需全量 rebuild） |
-| Embedding/Rerank failover | 无第二端点；rerank 可 degrade |
-| Rebuild HTTP API | 仅 CLI |
-| Server 部署观测 | `prod.server.yml` 已含 `--profile observability`（Prometheus / Alertmanager / Grafana） |
+| Server 部署观测 | 已含 observability profile；webhook 需配置 |
 | PII 脱敏 | 实现完整，默认关闭 |
 
 ### 2.3 缺陷
@@ -117,11 +113,20 @@ flowchart TB
 | --- | --- |
 | 文档业务状态机 draft→archived | 仅有入库 `DocumentStatus`；KO 另有 `KoStatus` |
 | 文档密级 / 分类 ABAC | 无 classification 字段 |
-| 显式 ACL DENY | 仅 allow-list |
-| 索引任务 PARSING 僵尸 watchdog | 崩溃后可永久卡住 |
-| 软删后 MinIO/chunk 物理清理 | `RETENTION_DELETED_DOCUMENT_DAYS`（默认 30）日批清理对象与 chunk；可选硬删行 |
-| Alertmanager 告警投递 | `--profile observability` 含 Alertmanager；需配置 `ALERTMANAGER_WEBHOOK_URL` |
-| PITR / 异地备份自动化 | 文档建议未落地；日 dump ≈ RPO 24h |
+| 显式 ACL DENY | **延期**：仅 allow-list（精简包明确不做） |
+| 索引任务 PARSING 僵尸 watchdog | 已落地（scheduler reclaim） |
+| 软删后 MinIO/chunk 物理清理 | 已落地（`RETENTION_DELETED_DOCUMENT_DAYS`） |
+| Alertmanager 告警投递 | 已落地（`--profile observability` + webhook） |
+| PITR / 异地备份自动化 | **延期**：日 dump ≈ RPO 24h |
+| Embedding/Rerank 第二端点 | 已落地（`EMBEDDING_FALLBACK_*` / `RERANK_FALLBACK_*`） |
+| Rebuild HTTP API | 已落地（`POST /admin/index/rebuild`，平台管理员） |
+| API Key rotate | 已落地（`POST .../keys/{id}/rotate`） |
+| preview-text ACL 回归 | 已落地（`pytest -m acl`） |
+| 评测 live gold / baseline 门禁 | 已落地（`gold_gate` + compare `baseline_run_id`） |
+| Gap SLA + 发布后 verify | 已落地（自动 `due_at` + `resolution.verify` 任务） |
+| 外部知识源连接器 | **延期**（任务书 P1-3） |
+| OpenSearch 安全插件 / 越文专用分词 | **延期** |
+| Chat 流式中途撤权 | **延期** |
 
 ---
 
@@ -143,7 +148,7 @@ flowchart TB
 | Outbox 幂等 / 死信 | `implemented+tests` |
 | 删文档清 Qdrant/OS | `implemented+tests` |
 | 删文档清缓存 | `partial`（D3） |
-| PARSING 僵尸 reclaim | `missing` |
+| PARSING 僵尸 reclaim | `implemented+tests` |
 | 蓝绿重建 + CLI 回滚 | `implemented+tests` |
 
 ---

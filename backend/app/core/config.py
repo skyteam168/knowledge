@@ -109,6 +109,9 @@ class Settings(BaseSettings):
     embedding_base_url: str = "http://localhost:9100/v1"
     embedding_model: str = "mock-embedding"
     embedding_dim: int = 1024
+    # Same embedding space (dim must match the index); used when the primary endpoint fails.
+    embedding_fallback_base_url: str | None = None
+    embedding_fallback_model: str | None = None
     # Send `dimensions` in requests (Matryoshka models such as Qwen3-Embedding).
     embedding_send_dimensions: bool = False
     embedding_batch_size: int = 32
@@ -121,6 +124,9 @@ class Settings(BaseSettings):
     # Task instruction for instruction-aware rerankers (DashScope qwen3-rerank `instruct`).
     rerank_instruct: str | None = None
     rerank_timeout_seconds: float = 30.0
+    rerank_fallback_base_url: str | None = None
+    rerank_fallback_model: str | None = None
+    rerank_fallback_path: str | None = None
     chat_base_url: str = "http://localhost:9100/v1"
     chat_model: str = "mock-chat"
     chat_fallback_base_url: str | None = None
@@ -213,6 +219,11 @@ class Settings(BaseSettings):
     gap_cluster_window_days: int = 90
     gap_cluster_batch_size: int = 500
     gap_cluster_interval_seconds: float = 300.0
+    # Auto-fill KnowledgeGap.due_at from priority when not set explicitly.
+    gap_sla_hours_critical: int = 24
+    gap_sla_hours_high: int = 72
+    gap_sla_hours_normal: int = 168
+    gap_sla_hours_low: int = 336
     # Knowledge compiler (LLM drafts) and conflict detection.
     ko_compiler_max_materials: int = 8
     ko_compiler_max_chars: int = 12000

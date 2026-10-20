@@ -140,6 +140,11 @@ export default {
       revoke: '吊销',
       revokeTitle: '吊销密钥',
       revokeConfirm: '吊销后使用「{name}」（{prefix}…）的调用将立即被拒绝，且不可恢复。',
+      rotate: '轮换',
+      rotateTitle: '轮换密钥',
+      rotateConfirm:
+        '将签发新密钥并立即吊销「{name}」（{prefix}…）。旧密钥立刻失效，请尽快替换调用方配置。',
+      rotated: '密钥已轮换',
       nameRequired: '请输入密钥名称',
       dialogName: '密钥名称',
       dialogNamePlaceholder: '如：prod / test',
@@ -333,6 +338,11 @@ export default {
       revokeTitle: 'Revoke API key',
       revokeConfirm:
         'After revoking, calls using "{name}" ({prefix}…) will be rejected immediately. This cannot be undone.',
+      rotate: 'Rotate',
+      rotateTitle: 'Rotate API key',
+      rotateConfirm:
+        'A new key will be issued and "{name}" ({prefix}…) will be revoked immediately. Update callers before they fail.',
+      rotated: 'API key rotated',
       nameRequired: 'Enter a key name',
       dialogName: 'Key name',
       dialogNamePlaceholder: 'e.g. prod / test',

@@ -252,6 +252,10 @@ class ConversationService(BaseService):
                 kb_ids=list(conv.kb_ids or []),
                 kb_id=_single_kb(conv),
             )
+            if self.settings is not None:
+                from app.services.curation.sla import apply_gap_sla
+
+                apply_gap_sla(gap, self.settings)
             self.session.add(gap)
         elif (
             gap.status == GapStatus.REJECTED.value and gap.resolution.get("note") == "用户撤回差评"
@@ -296,6 +300,10 @@ class ConversationService(BaseService):
                     "related_gap_id": detected.id if detected else None,
                 },
             )
+            if self.settings is not None:
+                from app.services.curation.sla import apply_gap_sla
+
+                apply_gap_sla(gap, self.settings)
             self.session.add(gap)
         elif description:
             gap.description = description

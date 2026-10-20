@@ -25,6 +25,9 @@ users fix-duplicates [--apply]
                                find users whose usernames differ only by case (e.g. pre-created
                                `Hien` + auto-created `hien`) and move the Keycloak identity onto
                                the pre-created one; dry run unless --apply
+
+eval gold-check [--cases PATH] [--rankings PATH]
+                               offline retrieval gold gate (same as pytest -m gold)
 """
 
 import argparse
@@ -241,6 +244,22 @@ def build_parser() -> argparse.ArgumentParser:
     users_cmds = users.add_subparsers(dest="command", required=True)
     dups = users_cmds.add_parser("fix-duplicates")
     dups.add_argument("--apply", action="store_true", help="write the changes (default: dry run)")
+
+    evaluation = groups.add_parser("eval", help="offline evaluation / gold gate")
+    evaluation_cmds = evaluation.add_subparsers(dest="command", required=True)
+    gold = evaluation_cmds.add_parser(
+        "gold-check", help="run retrieval gold gate against fixture rankings (CI)"
+    )
+    gold.add_argument(
+        "--cases",
+        default=str(Path(__file__).resolve().parents[1] / "tests/fixtures/retrieval_gold.jsonl"),
+    )
+    gold.add_argument(
+        "--rankings",
+        default=str(
+            Path(__file__).resolve().parents[1] / "tests/fixtures/retrieval_gold_rankings.json"
+        ),
+    )
     return parser
 
 
@@ -334,6 +353,21 @@ async def _agent_eval(settings: Settings, args: argparse.Namespace) -> int:
     return 0
 
 
+async def _eval_gold_check(settings: Settings, args: argparse.Namespace) -> int:
+    from app.services.evaluation.gold_gate import load_gold_cases, run_gold_gate
+
+    del settings  # offline fixture gate
+    cases = load_gold_cases(Path(args.cases))
+    raw = await asyncio.to_thread(Path(args.rankings).read_text, encoding="utf-8")
+    rankings = json.loads(raw)
+    results = run_gold_gate(cases, rankings)
+    failed = [r for r in results if not r.passed]
+    _print({"total": len(results), "failed": len(failed)})
+    for r in failed:
+        print(f"FAIL {r.case_id}: {', '.join(r.failures)}", file=sys.stderr)
+    return 1 if failed else 0
+
+
 async def run(argv: list[str], settings: Settings, runtime: IndexingRuntime | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.group == "analytics":
@@ -344,6 +378,8 @@ async def run(argv: list[str], settings: Settings, runtime: IndexingRuntime | No
         return await _users_fix_duplicates(settings, args)
     if args.group == "keycloak":
         return await _keycloak_setup_idp(settings, args)
+    if args.group == "eval":
+        return await _eval_gold_check(settings, args)
     rt = runtime or IndexingRuntime.create(settings)
     try:
         func: Command = args.func

@@ -69,6 +69,7 @@ def get_ko_service(
         ),
         gateway=resources.llm,
         settings=settings,
+        queue=resources.task_queue,
     )
 
 

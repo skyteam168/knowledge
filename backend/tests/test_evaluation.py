@@ -218,6 +218,15 @@ async def test_dataset_import_run_and_compare(
     assert set(body["cases"][0]["metrics"]) == set(runs)
     diff = {d["key"]: d["values"] for d in body["config_diff"]}
     assert diff["environment.judge_model"][runs[1]] is None
+    gated = await api.get(
+        f"{BASE}/runs/compare",
+        params={"run_ids": runs, "baseline_run_id": runs[0]},
+        headers=ALICE,
+    )
+    assert gated.status_code == 200, gated.text
+    gate_body = gated.json()
+    assert gate_body["passed"] is not None and gate_body["gates"]
+    assert all(g["baseline_run_id"] == runs[0] for g in gate_body["gates"])
     one = await api.get(f"{BASE}/runs/compare", params={"run_ids": runs[:1]}, headers=ALICE)
     assert one.status_code == 422
 

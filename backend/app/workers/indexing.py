@@ -42,3 +42,18 @@ async def repair_kb_index(org_id: str, kb_id: str) -> None:
             "consistent": result.report.consistent,
         },
     )
+
+
+@dramatiq.actor(queue_name=INDEX_QUEUE, max_retries=0, time_limit=12 * 60 * 60 * 1000)
+async def rebuild_search_index(
+    activate: bool = True, strict: bool = False, drop_old: bool = False, batch_size: int = 50
+) -> None:
+    rt = get_runtime()
+    result = await rt.rebuilder.rebuild(
+        rt.gateway.default_embedding,
+        batch_size=batch_size,
+        strict=strict,
+        activate=activate,
+        drop_old=drop_old,
+    )
+    logger.info("index_rebuild_job_finished", extra=result.stats())

@@ -608,6 +608,9 @@ class AnswerService(BaseService):
             top_score=top_score,
             details=details,
         )
+        from app.services.curation.sla import apply_gap_sla
+
+        apply_gap_sla(gap, self.settings)
         self.session.add(gap)
         return gap
 

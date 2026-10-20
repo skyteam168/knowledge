@@ -72,3 +72,17 @@ class ConsistencyReportOut(BaseModel):
 class RepairQueuedOut(BaseModel):
     queued: bool
     kb_id: str
+
+
+class RebuildRequest(BaseModel):
+    activate: bool = True
+    strict: bool = False
+    drop_old: bool = False
+    batch_size: int = 50
+
+
+class RebuildQueuedOut(BaseModel):
+    queued: bool
+    activate: bool
+    strict: bool
+    drop_old: bool

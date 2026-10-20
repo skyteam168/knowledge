@@ -95,3 +95,42 @@ def run_gold_gate(
             continue
         results.append(evaluate_gold_case(case, ranked))
     return results
+
+
+@dataclass(frozen=True)
+class MetricRegression:
+    metric: str
+    baseline: float
+    candidate: float
+    delta: float
+    regress: bool
+
+
+def compare_run_metrics(
+    baseline: Mapping[str, Any],
+    candidate: Mapping[str, Any],
+    *,
+    metrics: Sequence[str] = ("recall@10", "mrr"),
+) -> list[MetricRegression]:
+    """Flag regressions when a candidate run's aggregate metric drops below the baseline."""
+    out: list[MetricRegression] = []
+    for key in metrics:
+        b = float(baseline.get(key) or 0.0)
+        c = float(candidate.get(key) or 0.0)
+        out.append(
+            MetricRegression(
+                metric=key, baseline=b, candidate=c, delta=c - b, regress=c + 1e-12 < b
+            )
+        )
+    return out
+
+
+async def run_live_gold(
+    cases: Sequence[GoldCase],
+    search: Any,
+) -> list[GoldCaseResult]:
+    """`search` is an async callable(query: str) -> Sequence[str] of ranked document ids."""
+    rankings: dict[str, Sequence[str]] = {}
+    for case in cases:
+        rankings[case.id] = list(await search(case.query))
+    return run_gold_gate(cases, rankings)
