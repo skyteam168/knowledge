@@ -1,20 +1,26 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import {
   getDocument,
+  getDownloadUrl,
   getPreviewUrl,
+  getVersionDownloadUrl,
   listChunks,
   reprocessDocument,
+  restoreVersion,
   updateDocument,
 } from '@/api/knowledge'
-import type { Chunk, DocumentDetail, Preview } from '@/api/types'
+import type { AclPermission, Chunk, DocumentDetail, DocumentVersion, Preview } from '@/api/types'
 import ChunkViewer from '@/components/knowledge/ChunkViewer.vue'
+import ProtectedArea from '@/components/knowledge/ProtectedArea.vue'
+import VersionCompareDialog from '@/components/knowledge/VersionCompareDialog.vue'
+import VersionViewDialog from '@/components/knowledge/VersionViewDialog.vue'
 import { useAuthStore } from '@/stores/auth'
-import { atLeast, documentStatus } from '@/utils/document'
+import { atLeast, documentStatus, inlinePreviewable, isHtmlFile } from '@/utils/document'
 import { fileExtension, formatBytes } from '@/utils/file'
 import { formatDateTime } from '@/utils/format'
 
@@ -25,18 +31,6 @@ const auth = useAuthStore()
 const { t } = useI18n()
 
 const POLL_INTERVAL_MS = 3000
-const INLINE_EXTENSIONS = [
-  '.pdf',
-  '.txt',
-  '.md',
-  '.markdown',
-  '.csv',
-  '.html',
-  '.htm',
-  '.jpg',
-  '.jpeg',
-  '.png',
-]
 
 const doc = ref<DocumentDetail | null>(null)
 const chunks = ref<Chunk[]>([])
@@ -47,13 +41,18 @@ let timer: ReturnType<typeof setTimeout> | null = null
 
 const status = computed(() => (doc.value ? documentStatus(doc.value) : null))
 const canEdit = computed(() => auth.can('doc:upload') && atLeast(doc.value?.my_permission, 'edit'))
-const inlinePreview = computed(
-  () => !!doc.value && INLINE_EXTENSIONS.includes(fileExtension(doc.value.filename)),
+const canManage = computed(() => atLeast(doc.value?.my_permission, 'manage'))
+const protection = computed(() => doc.value?.protection ?? null)
+const isProtected = computed(
+  () =>
+    !!protection.value &&
+    (protection.value.watermark ||
+      protection.value.copy_protect ||
+      protection.value.download_permission !== 'read'),
 )
-// Uploaded HTML is untrusted: render it without scripts. (PDF viewers refuse sandboxed frames.)
-const isHtml = computed(
-  () => !!doc.value && ['.html', '.htm'].includes(fileExtension(doc.value.filename)),
-)
+const pagesBox = ref<HTMLElement>()
+const inlinePreview = computed(() => !!doc.value && inlinePreviewable(doc.value.filename))
+const isHtml = computed(() => !!doc.value && isHtmlFile(doc.value.filename))
 // Deep links from search results: ?chunk=<id>&page=<n>
 const focusChunk = computed(() =>
   typeof route.query.chunk === 'string' ? route.query.chunk : null,
@@ -64,11 +63,12 @@ const focusPage = computed(() => {
 })
 const isPdf = computed(() => !!doc.value && fileExtension(doc.value.filename) === '.pdf')
 const previewSrc = computed(() => {
-  if (!preview.value) return ''
+  if (!preview.value?.url) return ''
   return isPdf.value && focusPage.value
     ? `${preview.value.url}#page=${focusPage.value}`
     : preview.value.url
 })
+const showFile = computed(() => preview.value?.mode === 'file' && inlinePreview.value)
 const parseInfo = computed(
   () => (doc.value?.metadata?.parse as Record<string, unknown> | undefined) ?? null,
 )
@@ -97,6 +97,17 @@ async function loadChunks(): Promise<void> {
 
 async function loadPreview(): Promise<void> {
   preview.value = await getPreviewUrl(props.docId)
+  if (preview.value.mode === 'pages' && focusPage.value) {
+    await nextTick()
+    pagesBox.value
+      ?.querySelector<HTMLElement>(`[data-page="${focusPage.value}"]`)
+      ?.scrollIntoView({ block: 'start' })
+  }
+}
+
+async function download(): Promise<void> {
+  const file = await getDownloadUrl(props.docId)
+  if (file.url) window.location.assign(file.url)
 }
 
 function schedulePoll(): void {
@@ -110,7 +121,45 @@ async function reprocess(): Promise<void> {
   await loadDocument()
 }
 
+// ---- versions ----------------------------------------------------------------------
+
+const viewing = ref<DocumentVersion | null>(null)
+const comparing = ref<[number, number] | null>(null)
+const versions = computed(() => doc.value?.versions ?? [])
+
+/** Compare `version` (default: the latest) with the version before it (newest first list). */
+function openCompare(version?: number): void {
+  const list = versions.value
+  if (list.length < 2) return
+  const at = Math.max(
+    0,
+    list.findIndex((v) => v.version === version),
+  )
+  const [older, newer] = at < list.length - 1 ? [list[at + 1], list[at]] : [list[at], list[at - 1]]
+  comparing.value = [older.version, newer.version]
+}
+
+async function downloadVersion(version: number): Promise<void> {
+  const file = await getVersionDownloadUrl(props.docId, version)
+  if (file.url) window.location.assign(file.url)
+}
+
+async function restore(version: number): Promise<void> {
+  if (!doc.value) return
+  await ElMessageBox.confirm(
+    t('knowledge.version.restoreConfirm', { from: version, to: doc.value.version + 1 }),
+    t('knowledge.version.restoreTitle'),
+    { type: 'warning' },
+  )
+  const restored = await restoreVersion(props.docId, version)
+  ElMessage.success(t('knowledge.version.restored', { n: restored.version }))
+  await loadDocument()
+}
+
 // ---- metadata editor ---------------------------------------------------------------
+
+/** Select value for "no own setting, as the knowledge base" (options cannot be null). */
+const INHERIT = 'inherit' as const
 
 const editor = reactive({
   visible: false,
@@ -118,12 +167,18 @@ const editor = reactive({
   title: '',
   tags: [] as string[],
   effective: null as [string, string] | null,
+  watermark: INHERIT as typeof INHERIT | 'on',
+  copyProtect: INHERIT as typeof INHERIT | 'on',
+  download: INHERIT as typeof INHERIT | AclPermission,
 })
 
 function openEditor(): void {
   if (!doc.value) return
   editor.title = doc.value.title
   editor.tags = [...doc.value.tags]
+  editor.watermark = doc.value.watermark ? 'on' : INHERIT
+  editor.copyProtect = doc.value.copy_protect ? 'on' : INHERIT
+  editor.download = doc.value.download_permission ?? INHERIT
   editor.effective =
     doc.value.effective_from && doc.value.effective_to
       ? [doc.value.effective_from, doc.value.effective_to]
@@ -139,6 +194,13 @@ async function saveEditor(): Promise<void> {
       tags: editor.tags,
       effective_from: editor.effective?.[0] ?? null,
       effective_to: editor.effective?.[1] ?? null,
+      ...(canManage.value
+        ? {
+            watermark: editor.watermark === 'on' ? true : null,
+            copy_protect: editor.copyProtect === 'on' ? true : null,
+            download_permission: editor.download === INHERIT ? null : editor.download,
+          }
+        : {}),
     })
     ElMessage.success(t('knowledge.kb.savedSuccess'))
     editor.visible = false
@@ -170,6 +232,22 @@ onBeforeUnmount(() => {
           <h2 class="title">{{ doc?.title ?? '...' }}</h2>
           <el-tag v-if="doc" effect="plain">v{{ doc.version }}</el-tag>
           <el-tag v-if="status" :type="status.type">{{ status.label }}</el-tag>
+          <el-tooltip v-if="isProtected && protection" placement="bottom">
+            <template #content>
+              <div v-if="protection.watermark">{{ t('knowledge.protect.watermarkOn') }}</div>
+              <div v-if="protection.copy_protect">{{ t('knowledge.protect.copyOn') }}</div>
+              <div>
+                {{
+                  t('knowledge.protect.downloadBy', {
+                    level: t(`knowledge.protect.download.${protection.download_permission}`),
+                  })
+                }}
+              </div>
+            </template>
+            <el-tag type="warning" effect="plain" data-test="doc-protected">{{
+              t('knowledge.protect.tag')
+            }}</el-tag>
+          </el-tooltip>
         </div>
         <div class="actions">
           <el-button v-if="canEdit" @click="openEditor">{{
@@ -178,7 +256,7 @@ onBeforeUnmount(() => {
           <el-button v-if="canEdit" :disabled="doc?.status === 'parsing'" @click="reprocess">
             {{ t('knowledge.doc.reprocess') }}
           </el-button>
-          <el-button v-if="preview" tag="a" :href="preview.url" target="_blank">{{
+          <el-button v-if="doc?.can_download" data-test="doc-download" @click="download">{{
             t('knowledge.doc.download')
           }}</el-button>
         </div>
@@ -199,103 +277,192 @@ onBeforeUnmount(() => {
       />
     </el-card>
 
-    <div class="body">
+    <!-- Page images carry a server-side watermark; the overlay covers the text side panel. -->
+    <ProtectedArea class="body" :copy-protect="protection?.copy_protect">
       <el-card shadow="never" class="preview-card" body-class="preview-body">
         <template #header>{{ t('knowledge.doc.preview') }}</template>
         <iframe
-          v-if="preview && inlinePreview"
+          v-if="preview && showFile"
           :key="previewSrc"
           :src="previewSrc"
           class="preview-frame"
           :sandbox="isHtml ? '' : undefined"
           title="preview"
         />
+        <div
+          v-else-if="preview?.mode === 'pages'"
+          ref="pagesBox"
+          class="preview-pages"
+          data-test="preview-pages"
+        >
+          <img
+            v-for="page in preview.pages"
+            :key="page.url"
+            :src="page.url"
+            :data-page="page.index"
+            :alt="t('knowledge.protect.pageAlt', { n: page.index })"
+            loading="lazy"
+            draggable="false"
+            class="preview-page"
+          />
+        </div>
+        <el-empty
+          v-else-if="preview?.mode === 'none'"
+          :description="t('knowledge.protect.textOnly')"
+        />
         <el-empty v-else-if="preview" :description="t('knowledge.doc.previewUnsupported')" />
       </el-card>
 
-      <el-card shadow="never" class="side-card">
-        <el-tabs v-model="tab">
-          <el-tab-pane :label="t('knowledge.doc.chunks')" name="chunks">
-            <ChunkViewer :chunks="chunks" :loading="loadingChunks" :focus="focusChunk" />
-          </el-tab-pane>
-          <el-tab-pane :label="t('knowledge.doc.info')" name="info">
-            <el-descriptions v-if="doc" :column="1" border size="small">
-              <el-descriptions-item :label="t('knowledge.doc.filename')">{{
-                doc.filename
-              }}</el-descriptions-item>
-              <el-descriptions-item :label="t('knowledge.doc.type')">{{
-                doc.mime_type
-              }}</el-descriptions-item>
-              <el-descriptions-item :label="t('knowledge.doc.size')">{{
-                formatBytes(doc.size_bytes)
-              }}</el-descriptions-item>
-              <el-descriptions-item label="SHA-256">
-                <span class="mono">{{ doc.sha256 }}</span>
-              </el-descriptions-item>
-              <el-descriptions-item :label="t('knowledge.doc.tags')">
-                <el-tag v-for="tag in doc.tags" :key="tag" size="small" class="tag">{{
-                  tag
-                }}</el-tag>
-                <span v-if="!doc.tags.length">-</span>
-              </el-descriptions-item>
-              <el-descriptions-item :label="t('knowledge.doc.effectiveTime')">
-                {{ formatDateTime(doc.effective_from) }} ~ {{ formatDateTime(doc.effective_to) }}
-              </el-descriptions-item>
-              <el-descriptions-item :label="t('knowledge.doc.permission')">
-                {{ doc.acl_inherit ? t('knowledge.acl.inheritKb') : t('knowledge.acl.custom') }}
-              </el-descriptions-item>
-              <el-descriptions-item :label="t('knowledge.doc.parser')">
-                {{ parseInfo?.parser ?? '-' }}
-              </el-descriptions-item>
-              <el-descriptions-item v-if="parseInfo?.pages" :label="t('knowledge.doc.pages')">
-                {{ parseInfo.pages }}
-              </el-descriptions-item>
-              <el-descriptions-item
-                v-if="
-                  Array.isArray(parseInfo?.ocr_pages) && (parseInfo.ocr_pages as number[]).length
-                "
-                :label="t('knowledge.doc.ocrPages')"
-              >
-                {{ (parseInfo.ocr_pages as number[]).join(', ') }}
-              </el-descriptions-item>
-              <el-descriptions-item :label="t('knowledge.doc.chunkCount')">{{
-                doc.chunk_count ?? '-'
-              }}</el-descriptions-item>
-              <el-descriptions-item :label="t('knowledge.doc.parsedAt')">{{
-                formatDateTime(doc.parsed_at)
-              }}</el-descriptions-item>
-              <el-descriptions-item :label="t('knowledge.doc.chunkedAt')">{{
-                formatDateTime(doc.chunked_at)
-              }}</el-descriptions-item>
-              <el-descriptions-item :label="t('knowledge.doc.uploadedAt')">{{
-                formatDateTime(doc.created_at)
-              }}</el-descriptions-item>
-            </el-descriptions>
-          </el-tab-pane>
-          <el-tab-pane :label="t('knowledge.doc.versions')" name="versions">
-            <el-table :data="doc?.versions ?? []" size="small">
-              <el-table-column :label="t('knowledge.doc.version')" width="70">
-                <template #default="{ row }">v{{ row.version }}</template>
-              </el-table-column>
-              <el-table-column
-                prop="filename"
-                :label="t('knowledge.doc.filename')"
-                min-width="140"
-              />
-              <el-table-column :label="t('knowledge.doc.size')" width="90">
-                <template #default="{ row }">{{ formatBytes(row.size_bytes) }}</template>
-              </el-table-column>
-              <el-table-column :label="t('knowledge.doc.uploadedAt')" width="160">
-                <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
-              </el-table-column>
-            </el-table>
-          </el-tab-pane>
-        </el-tabs>
-      </el-card>
-    </div>
+      <ProtectedArea :watermark="protection?.watermark" class="side-card">
+        <el-card shadow="never" class="side-card__inner">
+          <el-tabs v-model="tab">
+            <el-tab-pane :label="t('knowledge.doc.chunks')" name="chunks">
+              <ChunkViewer :chunks="chunks" :loading="loadingChunks" :focus="focusChunk" />
+            </el-tab-pane>
+            <el-tab-pane :label="t('knowledge.doc.info')" name="info">
+              <el-descriptions v-if="doc" :column="1" border size="small">
+                <el-descriptions-item :label="t('knowledge.doc.filename')">{{
+                  doc.filename
+                }}</el-descriptions-item>
+                <el-descriptions-item :label="t('knowledge.doc.type')">{{
+                  doc.mime_type
+                }}</el-descriptions-item>
+                <el-descriptions-item :label="t('knowledge.doc.size')">{{
+                  formatBytes(doc.size_bytes)
+                }}</el-descriptions-item>
+                <el-descriptions-item label="SHA-256">
+                  <span class="mono">{{ doc.sha256 }}</span>
+                </el-descriptions-item>
+                <el-descriptions-item :label="t('knowledge.doc.tags')">
+                  <el-tag v-for="tag in doc.tags" :key="tag" size="small" class="tag">{{
+                    tag
+                  }}</el-tag>
+                  <span v-if="!doc.tags.length">-</span>
+                </el-descriptions-item>
+                <el-descriptions-item :label="t('knowledge.doc.effectiveTime')">
+                  {{ formatDateTime(doc.effective_from) }} ~ {{ formatDateTime(doc.effective_to) }}
+                </el-descriptions-item>
+                <el-descriptions-item :label="t('knowledge.doc.permission')">
+                  {{ doc.acl_inherit ? t('knowledge.acl.inheritKb') : t('knowledge.acl.custom') }}
+                </el-descriptions-item>
+                <el-descriptions-item :label="t('knowledge.doc.parser')">
+                  {{ parseInfo?.parser ?? '-' }}
+                </el-descriptions-item>
+                <el-descriptions-item v-if="parseInfo?.pages" :label="t('knowledge.doc.pages')">
+                  {{ parseInfo.pages }}
+                </el-descriptions-item>
+                <el-descriptions-item
+                  v-if="
+                    Array.isArray(parseInfo?.ocr_pages) && (parseInfo.ocr_pages as number[]).length
+                  "
+                  :label="t('knowledge.doc.ocrPages')"
+                >
+                  {{ (parseInfo.ocr_pages as number[]).join(', ') }}
+                </el-descriptions-item>
+                <el-descriptions-item :label="t('knowledge.doc.chunkCount')">{{
+                  doc.chunk_count ?? '-'
+                }}</el-descriptions-item>
+                <el-descriptions-item :label="t('knowledge.doc.parsedAt')">{{
+                  formatDateTime(doc.parsed_at)
+                }}</el-descriptions-item>
+                <el-descriptions-item :label="t('knowledge.doc.chunkedAt')">{{
+                  formatDateTime(doc.chunked_at)
+                }}</el-descriptions-item>
+                <el-descriptions-item :label="t('knowledge.doc.uploadedAt')">{{
+                  formatDateTime(doc.created_at)
+                }}</el-descriptions-item>
+              </el-descriptions>
+            </el-tab-pane>
+            <el-tab-pane :label="t('knowledge.doc.versions')" name="versions">
+              <div v-if="versions.length > 1" class="versions-bar">
+                <el-button size="small" data-test="versions-compare" @click="openCompare()">{{
+                  t('knowledge.version.compareTitle')
+                }}</el-button>
+              </div>
+              <el-table :data="versions" size="small" data-test="versions-table">
+                <el-table-column :label="t('knowledge.doc.version')" min-width="120">
+                  <template #default="{ row }">
+                    <span class="mono">v{{ row.version }}</span>
+                    <el-tag
+                      v-if="row.version === doc?.version"
+                      size="small"
+                      type="success"
+                      class="tag-gap"
+                      >{{ t('knowledge.version.current') }}</el-tag
+                    >
+                    <el-tag v-if="row.restored_from" size="small" type="info" class="tag-gap">{{
+                      t('knowledge.version.restoredFrom', { n: row.restored_from })
+                    }}</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column :label="t('knowledge.doc.size')" width="80">
+                  <template #default="{ row }">{{ formatBytes(row.size_bytes) }}</template>
+                </el-table-column>
+                <el-table-column :label="t('knowledge.version.uploader')" min-width="130">
+                  <template #default="{ row }">
+                    <div>{{ row.created_by_name ?? '-' }}</div>
+                    <div class="version-time">{{ formatDateTime(row.created_at) }}</div>
+                  </template>
+                </el-table-column>
+                <el-table-column :label="t('knowledge.version.actions')" width="190">
+                  <template #default="{ row }">
+                    <el-button
+                      link
+                      type="primary"
+                      size="small"
+                      @click="viewing = row as DocumentVersion"
+                      >{{ t('knowledge.version.view') }}</el-button
+                    >
+                    <el-button
+                      v-if="versions.length > 1"
+                      link
+                      type="primary"
+                      size="small"
+                      @click="openCompare(row.version)"
+                      >{{ t('knowledge.version.compare') }}</el-button
+                    >
+                    <el-button
+                      v-if="doc?.can_download"
+                      link
+                      type="primary"
+                      size="small"
+                      @click="downloadVersion(row.version)"
+                      >{{ t('knowledge.version.download') }}</el-button
+                    >
+                    <el-button
+                      v-if="canEdit && row.version !== doc?.version"
+                      link
+                      type="warning"
+                      size="small"
+                      data-test="version-restore"
+                      @click="restore(row.version)"
+                      >{{ t('knowledge.version.restore') }}</el-button
+                    >
+                  </template>
+                </el-table-column>
+              </el-table>
+            </el-tab-pane>
+          </el-tabs>
+        </el-card>
+      </ProtectedArea>
+    </ProtectedArea>
+
+    <VersionViewDialog
+      :doc-id="docId"
+      :version="viewing"
+      :protection="protection"
+      @close="viewing = null"
+    />
+    <VersionCompareDialog
+      :doc-id="docId"
+      :versions="versions"
+      :pair="comparing"
+      :protection="protection"
+      @close="comparing = null"
+    />
 
     <el-dialog v-model="editor.visible" :title="t('knowledge.doc.editTitle')" width="520px">
-      <el-form label-width="80px">
+      <el-form label-width="96px">
         <el-form-item :label="t('knowledge.doc.title')">
           <el-input v-model="editor.title" maxlength="512" />
         </el-form-item>
@@ -319,6 +486,29 @@ onBeforeUnmount(() => {
             :end-placeholder="t('knowledge.doc.effectiveTo')"
           />
         </el-form-item>
+        <template v-if="canManage">
+          <el-divider content-position="left">{{ t('knowledge.protect.title') }}</el-divider>
+          <el-form-item :label="t('knowledge.protect.watermark')">
+            <el-select v-model="editor.watermark" style="width: 100%">
+              <el-option :label="t('knowledge.protect.inherit')" :value="INHERIT" />
+              <el-option :label="t('knowledge.protect.on')" value="on" />
+            </el-select>
+          </el-form-item>
+          <el-form-item :label="t('knowledge.protect.copy')">
+            <el-select v-model="editor.copyProtect" style="width: 100%">
+              <el-option :label="t('knowledge.protect.inherit')" :value="INHERIT" />
+              <el-option :label="t('knowledge.protect.on')" value="on" />
+            </el-select>
+          </el-form-item>
+          <el-form-item :label="t('knowledge.protect.downloadLabel')">
+            <el-select v-model="editor.download" style="width: 100%" data-test="doc-download-level">
+              <el-option :label="t('knowledge.protect.inherit')" :value="INHERIT" />
+              <el-option :label="t('knowledge.protect.download.edit')" value="edit" />
+              <el-option :label="t('knowledge.protect.download.manage')" value="manage" />
+            </el-select>
+          </el-form-item>
+          <div class="protect-hint">{{ t('knowledge.protect.docHint') }}</div>
+        </template>
       </el-form>
       <template #footer>
         <el-button @click="editor.visible = false">{{ t('common.cancel') }}</el-button>
@@ -374,7 +564,28 @@ onBeforeUnmount(() => {
   border: 0;
   display: block;
 }
-.side-card {
+.preview-pages {
+  height: calc(100vh - 260px);
+  min-height: 480px;
+  overflow: auto;
+  padding: 12px;
+  background: var(--el-fill-color-light);
+}
+.preview-page {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0 auto 12px;
+  box-shadow: var(--ekb-shadow-sm);
+  background: #fff;
+}
+.protect-hint {
+  margin: -6px 0 0 96px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  line-height: 1.5;
+}
+.side-card__inner {
   max-height: calc(100vh - 200px);
   overflow: auto;
 }
@@ -385,6 +596,18 @@ onBeforeUnmount(() => {
 }
 .tag {
   margin-right: 4px;
+}
+.tag-gap {
+  margin-left: 6px;
+}
+.version-time {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+.versions-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
 }
 @media (max-width: 1200px) {
   .body {

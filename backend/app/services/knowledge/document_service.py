@@ -1,7 +1,9 @@
+import asyncio
 import hashlib
 import json
 import secrets
 from collections.abc import Sequence
+from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import PurePosixPath
 from typing import Any
@@ -19,7 +21,13 @@ from app.core.exceptions import (
     ValidationAppError,
 )
 from app.core.storage import STAGING_PREFIX, ObjectStorage
-from app.models import Document, DocumentStatus, DocumentVersion, KnowledgeBase, PageAssetKind
+from app.models import (
+    Document,
+    DocumentStatus,
+    DocumentVersion,
+    KnowledgeBase,
+    PageAssetKind,
+)
 from app.models.base import new_id, utcnow
 from app.repositories.base import paginate
 from app.repositories.knowledge_repo import (
@@ -28,30 +36,42 @@ from app.repositories.knowledge_repo import (
     DocumentRepository,
     KnowledgeBaseRepository,
 )
+from app.repositories.user_repo import UserRepository
 from app.schemas.common import Page
 from app.schemas.knowledge import (
     ChunkOut,
+    DiffLineOut,
     DocumentAclOut,
     DocumentAclUpdate,
     DocumentDetail,
     DocumentOut,
     DocumentUpdate,
     DocumentVersionOut,
+    PagePreviewOut,
     PreviewOut,
+    ProtectionOut,
     UploadComplete,
     UploadInit,
     UploadInitOut,
     UploadResult,
+    VersionCompareOut,
+    VersionTextOut,
 )
 from app.services.audit_service import snapshot
 from app.services.authz import AclPermission, AuthzCache
 from app.services.context import BaseService, RequestContext
 from app.services.ingest.parsers.base import FileKind, canonical_mime, detect_kind
+from app.services.ingest.pipeline import parsed_key
 from app.services.ingest.queue import TaskQueue
+from app.services.ingest.sections import ParsedDocument
 from app.services.knowledge.access import RESOURCE_DOCUMENT, RESOURCE_KB, KnowledgeAccess
 from app.services.knowledge.directory import PrincipalDirectory
+from app.services.knowledge.page_links import PageLinks
+from app.services.knowledge.protection import protection_of
+from app.services.knowledge.version_diff import diff_lines, document_lines
 from app.services.outbox_service import ACL_CHANGED, DOCUMENT_DELETED, OutboxService
 from app.services.security.file_guard import FileGuard
+from app.services.security.pii import PiiMasker
 
 MAX_FILENAME_LENGTH = 255
 TICKET_PREFIX = "upload:"
@@ -79,9 +99,15 @@ def clean_filename(filename: str) -> str:
     return name
 
 
-def to_document_out(doc: Document, perm: AclPermission | None) -> DocumentOut:
+def to_document_out(doc: Document, perm: AclPermission | None, kb: KnowledgeBase) -> DocumentOut:
+    protection = protection_of(kb, doc)
+    permission = perm.value if perm else None
     return DocumentOut.model_validate(doc).model_copy(
-        update={"my_permission": perm.value if perm else None}
+        update={
+            "my_permission": permission,
+            "protection": ProtectionOut(**asdict(protection)),
+            "can_download": protection.can_download(permission),
+        }
     )
 
 
@@ -176,7 +202,9 @@ class DocumentService(BaseService):
         perm = await self.access.document_permission(self.ctx.user, doc, kb)
         if perm is None:
             raise ConflictError("An identical file already exists in this knowledge base")
-        return UploadResult(document=to_document_out(doc, perm), duplicate=True, new_version=False)
+        return UploadResult(
+            document=to_document_out(doc, perm, kb), duplicate=True, new_version=False
+        )
 
     async def create_upload(self, kb_id: str, data: UploadInit) -> UploadInitOut:
         kb, _ = await self._kb(kb_id, AclPermission.EDIT)
@@ -311,16 +339,7 @@ class DocumentService(BaseService):
                     "A document with this filename exists and you cannot update it"
                 )
             before = snapshot(doc)
-            doc.version += 1
-            doc.mime_type = mime_type
-            doc.size_bytes = size_bytes
-            doc.sha256 = sha256
-            doc.status = DocumentStatus.UPLOADED.value
-            doc.error_message = None
-            doc.chunk_count = None
-            doc.parsed_at = None
-            doc.chunked_at = None
-            doc.meta = {k: v for k, v in doc.meta.items() if k != "parse"}
+            self._advance(doc, mime_type=mime_type, size_bytes=size_bytes, sha256=sha256)
             if clean_tags:
                 doc.tags = list(dict.fromkeys([*doc.tags, *clean_tags]))
         else:
@@ -342,7 +361,7 @@ class DocumentService(BaseService):
                 acl_inherit=True,
                 created_by=self.ctx.user.id,
             )
-        final_key = f"{self.org_id}/{kb.id}/{doc.id}/v{doc.version}/{filename}"
+        final_key = self._file_key(doc, filename)
         await self.storage.copy(source_key, final_key)
         await self.storage.delete(source_key)
         doc.minio_key = final_key
@@ -373,8 +392,25 @@ class DocumentService(BaseService):
         self._enqueue_parse(doc)
         perm = await self.access.document_permission(self.ctx.user, doc, kb)
         return UploadResult(
-            document=to_document_out(doc, perm), duplicate=False, new_version=new_version
+            document=to_document_out(doc, perm, kb), duplicate=False, new_version=new_version
         )
+
+    @staticmethod
+    def _advance(doc: Document, *, mime_type: str, size_bytes: int, sha256: str) -> None:
+        """Start a new version of `doc`: new file facts, parse state reset."""
+        doc.version += 1
+        doc.mime_type = mime_type
+        doc.size_bytes = size_bytes
+        doc.sha256 = sha256
+        doc.status = DocumentStatus.UPLOADED.value
+        doc.error_message = None
+        doc.chunk_count = None
+        doc.parsed_at = None
+        doc.chunked_at = None
+        doc.meta = {k: v for k, v in doc.meta.items() if k != "parse"}
+
+    def _file_key(self, doc: Document, filename: str) -> str:
+        return f"{self.org_id}/{doc.kb_id}/{doc.id}/v{doc.version}/{filename}"
 
     def _enqueue_parse(self, doc: Document) -> None:
         document_id, version, queue = doc.id, doc.version, self.queue
@@ -401,29 +437,82 @@ class DocumentService(BaseService):
         )
         docs, total = await paginate(self.session, stmt, page, size)
         perms = await self.access.document_permissions(self.ctx.user, docs, kb_perm)
-        items = [to_document_out(d, perms.get(d.id)) for d in docs]
+        items = [to_document_out(d, perms.get(d.id), kb) for d in docs]
         return Page(items=items, total=total, page=page, size=size)
 
     async def get(self, document_id: str) -> DocumentDetail:
         doc, kb, perm = await self._doc(document_id, AclPermission.READ)
         versions = await self.repo.versions(doc.id)
-        base = to_document_out(doc, perm)
+        base = to_document_out(doc, perm, kb)
         return DocumentDetail(
             **base.model_dump(),
             kb_name=kb.name,
-            versions=[DocumentVersionOut.model_validate(v) for v in versions],
+            versions=await self._version_outs(versions),
         )
+
+    async def _version_outs(self, rows: Sequence[DocumentVersion]) -> list[DocumentVersionOut]:
+        ids = sorted({r.created_by for r in rows if r.created_by})
+        users = await UserRepository(self.session).list_by_ids(self.org_id, ids)
+        names = {u.id: u.display_name or u.username for u in users}
+        return [
+            DocumentVersionOut.model_validate(r).model_copy(
+                update={"created_by_name": names.get(r.created_by or "")}
+            )
+            for r in rows
+        ]
+
+    async def _version(self, doc: Document, version: int) -> DocumentVersion:
+        row = await self.repo.get_version(doc.id, version)
+        if row is None:
+            raise NotFoundError("Document version not found")
+        return row
 
     async def chunks(self, document_id: str) -> list[ChunkOut]:
         doc, _, _ = await self._doc(document_id, AclPermission.READ)
         rows = await ChunkRepository(self.session).list_for_document(doc.id, doc.version)
         return [ChunkOut.model_validate(c) for c in rows]
 
-    async def preview_url(self, document_id: str) -> PreviewOut:
-        return await self._file_url(document_id, attachment=False)
+    def _links(self) -> PageLinks:
+        return PageLinks(self.session, self.storage, self.settings, self.ctx.user.id)
 
-    async def download_url(self, document_id: str) -> PreviewOut:
-        return await self._file_url(document_id, attachment=True)
+    async def preview_url(self, document_id: str, version: int | None = None) -> PreviewOut:
+        doc, kb, perm = await self._doc(document_id, AclPermission.READ)
+        source = await self._version(doc, version) if version is not None else None
+        number = source.version if source else doc.version
+        if protection_of(kb, doc).raw_preview(perm.value):
+            return await self._file_url(doc, attachment=False, source=source)
+        assets = await DocumentPageAssetRepository(self.session).list_for_version(doc.id, number)
+        links = self._links()
+        pages = [
+            PagePreviewOut(
+                index=a.page_index, url=await links.url(a), width=a.width, height=a.height
+            )
+            for a in assets
+        ]
+        await self.audit.record(
+            self.audit_ctx,
+            "document.preview",
+            RESOURCE_DOCUMENT,
+            doc.id,
+            None,
+            {"kb_id": doc.kb_id, "version": number, "mode": "pages", "pages": len(pages)},
+        )
+        return PreviewOut(
+            mode="pages" if pages else "none",
+            filename=source.filename if source else doc.filename,
+            mime_type=source.mime_type if source else doc.mime_type,
+            expires_in=self.settings.presign_expiry_seconds,
+            pages=pages,
+        )
+
+    async def download_url(self, document_id: str, version: int | None = None) -> PreviewOut:
+        doc, kb, perm = await self._doc(document_id, AclPermission.READ)
+        if not protection_of(kb, doc).can_download(perm.value):
+            raise PermissionDeniedError(
+                "Downloading the original file is not allowed", code="DOWNLOAD_FORBIDDEN"
+            )
+        source = await self._version(doc, version) if version is not None else None
+        return await self._file_url(doc, attachment=True, source=source)
 
     async def page_asset_url(self, document_id: str, *, kind: str, page_index: int) -> PreviewOut:
         if kind not in {PageAssetKind.PAGE.value, PageAssetKind.SLIDE.value}:
@@ -436,13 +525,7 @@ class DocumentService(BaseService):
             raise NotFoundError("Page asset not found")
         expires = self.settings.presign_expiry_seconds
         filename = f"{kind}-{page_index}.png"
-        url = self.storage.presign_get(
-            asset.minio_key,
-            expires,
-            filename=filename,
-            content_type=asset.mime_type,
-            attachment=False,
-        )
+        url = await self._links().url(asset)
         await self.audit.record(
             self.audit_ctx,
             "document.page_preview",
@@ -453,14 +536,20 @@ class DocumentService(BaseService):
         )
         return PreviewOut(url=url, filename=filename, mime_type=asset.mime_type, expires_in=expires)
 
-    async def _file_url(self, document_id: str, *, attachment: bool) -> PreviewOut:
-        doc, _, _ = await self._doc(document_id, AclPermission.READ)
+    async def _file_url(
+        self, doc: Document, *, attachment: bool, source: DocumentVersion | None = None
+    ) -> PreviewOut:
+        """Presigned URL of the current file, or of the older version `source`."""
         expires = self.settings.presign_expiry_seconds
+        key = source.minio_key if source else doc.minio_key
+        filename = source.filename if source else doc.filename
+        mime_type = source.mime_type if source else doc.mime_type
+        version = source.version if source else doc.version
         url = self.storage.presign_get(
-            doc.minio_key,
+            key,
             expires,
-            filename=doc.filename,
-            content_type=doc.mime_type if attachment else _preview_type(doc.mime_type),
+            filename=filename,
+            content_type=mime_type if attachment else _preview_type(mime_type),
             attachment=attachment,
         )
         await self.audit.record(
@@ -469,18 +558,131 @@ class DocumentService(BaseService):
             RESOURCE_DOCUMENT,
             doc.id,
             None,
-            {"kb_id": doc.kb_id, "version": doc.version, "filename": doc.filename},
+            {"kb_id": doc.kb_id, "version": version, "filename": filename},
         )
-        return PreviewOut(
-            url=url, filename=doc.filename, mime_type=doc.mime_type, expires_in=expires
+        return PreviewOut(url=url, filename=filename, mime_type=mime_type, expires_in=expires)
+
+    # ---- versions ----
+
+    async def _version_text(self, row: DocumentVersion) -> tuple[list[str], bool] | None:
+        key = parsed_key(row.minio_key)
+        if await self.storage.stat(key) is None:
+            return None
+        parsed = ParsedDocument.from_dict(json.loads(await self.storage.get_bytes(key)))
+        settings = self.settings
+        masker = (
+            PiiMasker(settings.pii_types)
+            if settings.pii_mask_on_ingest or settings.pii_mask_on_output
+            else None
         )
+        return document_lines(parsed, masker.mask if masker else None)
+
+    async def version_text(self, document_id: str, version: int) -> VersionTextOut:
+        doc, _, _ = await self._doc(document_id, AclPermission.READ)
+        row = await self._version(doc, version)
+        text = await self._version_text(row)
+        await self.audit.record(
+            self.audit_ctx,
+            "document.version_view",
+            RESOURCE_DOCUMENT,
+            doc.id,
+            None,
+            {"kb_id": doc.kb_id, "version": version},
+        )
+        if text is None:
+            return VersionTextOut(version=version, available=False)
+        lines, truncated = text
+        return VersionTextOut(version=version, available=True, lines=lines, truncated=truncated)
+
+    async def compare_versions(self, document_id: str, base: int, target: int) -> VersionCompareOut:
+        doc, _, _ = await self._doc(document_id, AclPermission.READ)
+        old_row, new_row = await self._version(doc, base), await self._version(doc, target)
+        rows = await self._version_outs([old_row, new_row])
+        await self.audit.record(
+            self.audit_ctx,
+            "document.version_compare",
+            RESOURCE_DOCUMENT,
+            doc.id,
+            None,
+            {"kb_id": doc.kb_id, "base": base, "target": target},
+        )
+        out = VersionCompareOut(
+            base=rows[0],
+            target=rows[1],
+            available=False,
+            same_file=old_row.sha256 == new_row.sha256,
+        )
+        old_text, new_text = await self._version_text(old_row), await self._version_text(new_row)
+        if old_text is None or new_text is None:
+            return out
+        diff = await asyncio.to_thread(diff_lines, old_text[0], new_text[0])
+        return out.model_copy(
+            update={
+                "available": True,
+                "added": diff.added,
+                "removed": diff.removed,
+                "truncated": diff.truncated or old_text[1] or new_text[1],
+                "hunks": [[DiffLineOut(**asdict(line)) for line in hunk] for hunk in diff.hunks],
+            }
+        )
+
+    async def restore_version(self, document_id: str, version: int) -> DocumentOut:
+        """Make an older version current again by copying it into a new version."""
+        doc, kb, perm = await self._doc(document_id, AclPermission.EDIT)
+        row = await self._version(doc, version)
+        if version == doc.version:
+            raise ConflictError("This version is already the current one")
+        twin = await self.repo.find_by_sha256(self.org_id, kb.id, row.sha256)
+        if twin is not None and twin.id != doc.id:
+            raise ConflictError(
+                "Another document in this knowledge base has the same content",
+                detail={"document_id": twin.id, "title": twin.title},
+            )
+        if await self.storage.stat(row.minio_key) is None:
+            raise NotFoundError("The file of this version is no longer stored")
+        before = snapshot(doc)
+        self._advance(doc, mime_type=row.mime_type, size_bytes=row.size_bytes, sha256=row.sha256)
+        doc.minio_key = self._file_key(doc, row.filename)
+        await self.storage.copy(row.minio_key, doc.minio_key)
+        await self.repo.add_version(
+            DocumentVersion(
+                org_id=self.org_id,
+                document_id=doc.id,
+                version=doc.version,
+                filename=row.filename,
+                mime_type=row.mime_type,
+                size_bytes=row.size_bytes,
+                sha256=row.sha256,
+                minio_key=doc.minio_key,
+                restored_from=version,
+                created_by=self.ctx.user.id,
+            )
+        )
+        await self.session.flush()
+        after = snapshot(doc)
+        await self.audit.record(
+            self.audit_ctx,
+            "document.restore_version",
+            RESOURCE_DOCUMENT,
+            doc.id,
+            before,
+            {**after, "restored_from": version} if after else None,
+        )
+        self._enqueue_parse(doc)
+        return to_document_out(doc, perm, kb)
 
     # ---- write ----
 
     async def update(self, document_id: str, data: DocumentUpdate) -> DocumentOut:
-        doc, _, perm = await self._doc(document_id, AclPermission.EDIT)
+        doc, kb, perm = await self._doc(document_id, AclPermission.EDIT)
         before = snapshot(doc)
         fields = data.model_fields_set
+        protection_fields = fields & {"watermark", "copy_protect", "download_permission"}
+        if protection_fields:
+            if perm.level < AclPermission.MANAGE.level:
+                raise PermissionDeniedError("Changing document protection needs manage permission")
+            for name in protection_fields:
+                setattr(doc, name, getattr(data, name))
         if data.title is not None:
             doc.title = data.title
         if data.tags is not None:
@@ -502,7 +704,7 @@ class DocumentService(BaseService):
         await self.audit.record(
             self.audit_ctx, "document.update", RESOURCE_DOCUMENT, doc.id, before, snapshot(doc)
         )
-        return to_document_out(doc, perm)
+        return to_document_out(doc, perm, kb)
 
     async def delete(self, document_id: str) -> None:
         doc, kb, _ = await self._doc(document_id, AclPermission.EDIT)
@@ -522,7 +724,7 @@ class DocumentService(BaseService):
         )
 
     async def reprocess(self, document_id: str) -> DocumentOut:
-        doc, _, perm = await self._doc(document_id, AclPermission.EDIT)
+        doc, kb, perm = await self._doc(document_id, AclPermission.EDIT)
         if doc.status == DocumentStatus.PARSING.value:
             raise ConflictError("Document is being parsed")
         before = snapshot(doc)
@@ -533,7 +735,7 @@ class DocumentService(BaseService):
             self.audit_ctx, "document.reprocess", RESOURCE_DOCUMENT, doc.id, before, snapshot(doc)
         )
         self._enqueue_parse(doc)
-        return to_document_out(doc, perm)
+        return to_document_out(doc, perm, kb)
 
     # ---- ACL ----
 

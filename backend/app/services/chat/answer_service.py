@@ -141,11 +141,14 @@ class AnswerService(BaseService):
         ko_source: KnowledgeObjectSource | None = None,
         allowed_kb_ids: frozenset[str] | None = None,
         storage: ObjectStorage | None = None,
+        absolute_links: bool = False,
     ) -> None:
         super().__init__(session, ctx, authz_cache)
         self.settings = settings
         self.allowed_kb_ids = allowed_kb_ids
         self.storage = storage
+        # External callers (Open API / MCP) need absolute image URLs.
+        self.absolute_links = absolute_links
         self.gateway = gateway
         self.repo = ConversationRepository(session)
         self.search = SearchService(session, ctx, authz_cache, pipeline=pipeline, settings=settings)
@@ -393,7 +396,14 @@ class AnswerService(BaseService):
             return
 
         uncertain = decision.verdict == Verdict.UNCERTAIN
-        await attach_material_images(self.session, evidences, self.storage, self.settings)
+        await attach_material_images(
+            self.session,
+            evidences,
+            self.storage,
+            self.settings,
+            viewer_id=self.ctx.user.id,
+            absolute=self.absolute_links,
+        )
         messages = prompt.answer_messages(
             run.query, rewrite.query, evidences, run.history, uncertain=uncertain
         )
@@ -460,6 +470,8 @@ class AnswerService(BaseService):
                 page_start=cite.get("page_start")
                 if isinstance(cite.get("page_start"), int)
                 else None,
+                viewer_id=self.ctx.user.id,
+                absolute=self.absolute_links,
             )
             cite["image_url"] = url
             cite["image_mime_type"] = mime

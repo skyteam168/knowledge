@@ -36,6 +36,7 @@ class ProfileService:
             username=db_user.username,
             display_name=db_user.display_name,
             email=db_user.email,
+            employee_no=db_user.employee_no,
             org=OrganizationOut.model_validate(org),
             department=DepartmentOut.model_validate(dept) if dept else None,
             roles=[RoleBrief.model_validate(r) for r in roles],

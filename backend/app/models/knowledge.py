@@ -59,6 +59,11 @@ class KnowledgeBase(IdMixin, TenantMixin, TimestampMixin, Base):
     visibility: Mapped[str] = mapped_column(
         String(16), default=KbVisibility.RESTRICTED.value, nullable=False
     )
+    # Document protection: watermarked page previews, copy protection in the UI and the lowest
+    # permission (read / edit / manage) that may download original files.
+    watermark: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    copy_protect: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    download_permission: Mapped[str] = mapped_column(String(16), default="read", nullable=False)
     created_by: Mapped[str | None] = mapped_column(String(32))
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
@@ -91,6 +96,10 @@ class Document(IdMixin, TenantMixin, TimestampMixin, Base):
     effective_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # True: permissions come from the knowledge base; False: own resource_acl entries apply.
     acl_inherit: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Protection overrides; NULL = as the knowledge base. They can only make it stricter.
+    watermark: Mapped[bool | None] = mapped_column(Boolean)
+    copy_protect: Mapped[bool | None] = mapped_column(Boolean)
+    download_permission: Mapped[str | None] = mapped_column(String(16))
     chunk_count: Mapped[int | None] = mapped_column(Integer)
     parsed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     chunked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -112,6 +121,8 @@ class DocumentVersion(IdMixin, TenantMixin, Base):
     size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
     sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     minio_key: Mapped[str] = mapped_column(String(1024), nullable=False)
+    # Set when this version was created by restoring an older one.
+    restored_from: Mapped[int | None] = mapped_column(Integer)
     created_by: Mapped[str | None] = mapped_column(String(32))
     created_at: Mapped[datetime] = created_at_column()
 

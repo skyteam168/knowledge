@@ -234,6 +234,7 @@ class MeResponse(BaseModel):
     username: str
     display_name: str | None
     email: str | None
+    employee_no: str | None = None
     org: OrganizationOut
     department: DepartmentOut | None
     roles: list[RoleBrief]

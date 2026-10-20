@@ -11,6 +11,7 @@ from app.core.storage import ObjectStorage
 from app.models import PageAssetKind
 from app.repositories.knowledge_repo import DocumentPageAssetRepository
 from app.services.chat.evidence import Evidence, MaterialImage
+from app.services.knowledge.page_links import PageLinks
 
 IMAGE_REF_PREFIX = "ekb-image:"
 
@@ -24,8 +25,11 @@ async def resolve_page_image(
     version: int,
     slide_number: int | None,
     page_start: int | None,
+    viewer_id: str,
+    absolute: bool = False,
 ) -> tuple[str | None, str | None]:
-    """Return (presigned_url, mime_type) for the page/slide used by a citation or hit."""
+    """Return (url, mime_type) of the page/slide used by a citation or hit (watermarked
+    for protected documents)."""
     if storage is None or not settings.page_image_enabled:
         return None, None
     asset = await DocumentPageAssetRepository(session).find_for_citation(
@@ -36,14 +40,8 @@ async def resolve_page_image(
     )
     if asset is None:
         return None, None
-    url = storage.presign_get(
-        asset.minio_key,
-        settings.presign_expiry_seconds,
-        filename=f"{asset.kind}-{asset.page_index}.png",
-        content_type=asset.mime_type,
-        attachment=False,
-    )
-    return url, asset.mime_type
+    links = PageLinks(session, storage, settings, viewer_id, absolute=absolute)
+    return await links.url(asset), asset.mime_type
 
 
 async def attach_material_images(
@@ -51,6 +49,9 @@ async def attach_material_images(
     evidences: Sequence[Evidence],
     storage: ObjectStorage | None,
     settings: Settings,
+    *,
+    viewer_id: str,
+    absolute: bool = False,
 ) -> None:
     """Mutate evidences in place: fill `images` with capped, ACL-already-checked assets."""
     if (
@@ -65,8 +66,8 @@ async def attach_material_images(
         return
 
     repo = DocumentPageAssetRepository(session)
+    links = PageLinks(session, storage, settings, viewer_id, absolute=absolute)
     remaining = total_budget
-    expires = settings.presign_expiry_seconds
     seq = 0
 
     for ev in evidences:
@@ -84,13 +85,7 @@ async def attach_material_images(
             if asset is None:
                 continue
             caption = _caption(kind, index)
-            url = storage.presign_get(
-                asset.minio_key,
-                expires,
-                filename=f"{asset.kind}-{asset.page_index}.png",
-                content_type=asset.mime_type,
-                attachment=False,
-            )
+            url = await links.url(asset)
             seq += 1
             images.append(
                 MaterialImage(

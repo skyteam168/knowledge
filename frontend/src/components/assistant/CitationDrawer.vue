@@ -6,6 +6,7 @@ import { useI18n } from 'vue-i18n'
 import { getCitationSource } from '@/api/chat'
 import { HttpError } from '@/api/http'
 import type { Citation, CitationSource } from '@/api/types'
+import ProtectedArea from '@/components/knowledge/ProtectedArea.vue'
 import { useAuthStore } from '@/stores/auth'
 import { KO_TYPE_LABEL } from '@/utils/curation'
 import { formatDateTime } from '@/utils/format'
@@ -147,7 +148,11 @@ function location(s: CitationSource): string {
           {{ t('assistant.citation.openKo') }}
         </el-button>
       </template>
-      <template v-else-if="source">
+      <ProtectedArea
+        v-else-if="source"
+        :watermark="source.watermark"
+        :copy-protect="source.copy_protect"
+      >
         <div class="doc-title">{{ source.document.title }}</div>
         <div class="doc-meta">
           <span>{{ source.document.kb_name }}</span>
@@ -198,7 +203,7 @@ function location(s: CitationSource): string {
           teleported
           @close="previewOpen = false"
         />
-      </template>
+      </ProtectedArea>
       <template v-else-if="error && citation">
         <el-alert type="warning" show-icon :closable="false" class="notice" :title="error" />
         <div class="doc-title">{{ citation.title }}</div>

@@ -217,6 +217,7 @@ export interface MeResponse {
   username: string
   display_name: string | null
   email: string | null
+  employee_no?: string | null
   org: Organization
   department: Department | null
   roles: RoleBrief[]
@@ -294,7 +295,14 @@ export interface DocumentAclUpdate {
   entries: AclEntry[]
 }
 
-export interface KnowledgeBase {
+/** Document protection: watermark, copy protection, lowest permission that may download. */
+export interface Protection {
+  watermark: boolean
+  copy_protect: boolean
+  download_permission: AclPermission
+}
+
+export interface KnowledgeBase extends Protection {
   id: string
   name: string
   description: string | null
@@ -306,13 +314,13 @@ export interface KnowledgeBase {
   my_permission: AclPermission | null
 }
 
-export interface KnowledgeBaseCreate {
+export interface KnowledgeBaseCreate extends Partial<Protection> {
   name: string
   description?: string | null
   visibility?: KbVisibility
 }
 
-export interface KnowledgeBaseUpdate {
+export interface KnowledgeBaseUpdate extends Partial<Protection> {
   name?: string
   description?: string | null
 }
@@ -340,6 +348,13 @@ export interface KbDocument {
   created_at: string
   updated_at: string
   my_permission: AclPermission | null
+  /** The document's own protection settings; null = as the knowledge base. */
+  watermark: boolean | null
+  copy_protect: boolean | null
+  download_permission: AclPermission | null
+  /** Effective protection (knowledge base + document). */
+  protection: Protection
+  can_download: boolean
 }
 
 export interface DocumentVersion {
@@ -348,8 +363,37 @@ export interface DocumentVersion {
   mime_type: string
   size_bytes: number
   sha256: string
+  /** Set when this version was created by restoring an older one. */
+  restored_from: number | null
   created_by: string | null
+  created_by_name: string | null
   created_at: string
+}
+
+export interface VersionText {
+  version: number
+  /** false: the version was never parsed (or its parse result is gone). */
+  available: boolean
+  lines: string[]
+  truncated: boolean
+}
+
+export interface DiffLine {
+  op: 'equal' | 'add' | 'del'
+  text: string
+  old_no: number | null
+  new_no: number | null
+}
+
+export interface VersionCompare {
+  base: DocumentVersion
+  target: DocumentVersion
+  available: boolean
+  same_file: boolean
+  added: number
+  removed: number
+  hunks: DiffLine[][]
+  truncated: boolean
 }
 
 export interface DocumentDetail extends KbDocument {
@@ -363,6 +407,9 @@ export interface DocumentUpdate {
   metadata?: Record<string, unknown>
   effective_from?: string | null
   effective_to?: string | null
+  watermark?: boolean | null
+  copy_protect?: boolean | null
+  download_permission?: AclPermission | null
 }
 
 export interface DocumentQuery extends PageParams {
@@ -408,11 +455,21 @@ export interface Chunk {
   chunk_type: ChunkType
 }
 
-export interface Preview {
+export interface PagePreview {
+  index: number
   url: string
+  width: number | null
+  height: number | null
+}
+
+export interface Preview {
+  /** file: original inline (`url`); pages: page images only; none: text only. */
+  mode: 'file' | 'pages' | 'none'
+  url: string | null
   filename: string
   mime_type: string
   expires_in: number
+  pages: PagePreview[]
 }
 
 export interface PrincipalOption {
@@ -851,6 +908,8 @@ export interface CitationSource {
   segments: { chunk_id: string; content: string; highlight: boolean }[]
   is_ko?: boolean
   ko?: KoCitation | null
+  watermark?: boolean
+  copy_protect?: boolean
 }
 
 /** Server-sent events of POST /chat/conversations/{id}/messages. */

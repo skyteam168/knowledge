@@ -49,6 +49,8 @@ from app.services.chat.expansion import overlap_len
 from app.services.context import BaseService, RequestContext
 from app.services.knowledge.access import RESOURCE_DOCUMENT, KnowledgeAccess
 from app.services.knowledge.ko_access import KoAccess
+from app.services.knowledge.page_links import PageLinks
+from app.services.knowledge.protection import protection_of
 
 DEFAULT_TITLE = "新对话"
 RESOURCE_CONVERSATION = "conversation"
@@ -367,6 +369,7 @@ class ConversationService(BaseService):
             slide_number=cited.slide_number,
             page_start=cited.page_start,
         )
+        protection = protection_of(kb, doc)
         return CitationSourceOut(
             n=n,
             document=SourceDocumentOut(
@@ -388,6 +391,8 @@ class ConversationService(BaseService):
             anchor_chunk_id=cited.chunk_id,
             quote=cited.quote,
             segments=segments,
+            watermark=protection.watermark,
+            copy_protect=protection.copy_protect,
         )
 
     async def _citation_image(
@@ -408,15 +413,8 @@ class ConversationService(BaseService):
         )
         if asset is None:
             return None, None
-        expires = self.settings.presign_expiry_seconds
-        url = self.storage.presign_get(
-            asset.minio_key,
-            expires,
-            filename=f"{asset.kind}-{asset.page_index}.png",
-            content_type=asset.mime_type,
-            attachment=False,
-        )
-        return url, asset.mime_type
+        links = PageLinks(self.session, self.storage, self.settings, self.ctx.user.id)
+        return await links.url(asset), asset.mime_type
 
     async def _ko_citation_source(self, n: int, cited: CitationOut) -> CitationSourceOut:
         live = await KoAccess(self.session).live_objects(self.ctx.user, [cited.document_id])

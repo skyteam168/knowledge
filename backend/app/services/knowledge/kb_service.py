@@ -71,6 +71,9 @@ class KnowledgeBaseService(BaseService):
                 name=data.name,
                 description=data.description,
                 visibility=data.visibility,
+                watermark=data.watermark,
+                copy_protect=data.copy_protect,
+                download_permission=data.download_permission,
                 created_by=self.ctx.user.id,
             )
         )
@@ -93,6 +96,12 @@ class KnowledgeBaseService(BaseService):
             kb.name = data.name
         if "description" in data.model_fields_set:
             kb.description = data.description
+        if data.watermark is not None:
+            kb.watermark = data.watermark
+        if data.copy_protect is not None:
+            kb.copy_protect = data.copy_protect
+        if data.download_permission is not None:
+            kb.download_permission = data.download_permission
         await self.session.flush()
         await self.audit.record(
             self.audit_ctx, "kb.update", RESOURCE_KB, kb.id, before, snapshot(kb)

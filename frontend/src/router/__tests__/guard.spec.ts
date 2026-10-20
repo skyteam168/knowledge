@@ -21,6 +21,7 @@ describe('authGuard', () => {
     vi.mocked(fetchMe).mockReset()
   })
 
+  // The first navigations compile the lazy knowledge / assistant views (cold transform is slow).
   it('loads the profile once and allows permitted routes', async () => {
     vi.mocked(fetchMe).mockResolvedValue(makeProfile(['chat:use', 'kb:read']))
     const router = makeRouter()
@@ -28,7 +29,7 @@ describe('authGuard', () => {
     await router.push('/assistant')
     expect(router.currentRoute.value.name).toBe('assistant')
     expect(fetchMe).toHaveBeenCalledOnce()
-  })
+  }, 20_000)
 
   it('redirects to 403 without permission', async () => {
     vi.mocked(fetchMe).mockResolvedValue(makeProfile(['chat:use']))

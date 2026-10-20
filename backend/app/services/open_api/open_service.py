@@ -165,6 +165,8 @@ class OpenApiService(BaseService):
                     version=r.passage.document.version,
                     slide_number=r.passage.slide_number,
                     page_start=r.passage.page_start,
+                    viewer_id=self.ctx.user.id,
+                    absolute=True,
                 )
             items.append(
                 OpenChunkOut(
@@ -254,6 +256,7 @@ class OpenApiService(BaseService):
             ),
             allowed_kb_ids=self.caller.kb_ids,
             storage=self.storage,
+            absolute_links=True,
         )
         async for event in answer.stream(conversation_id, ask):
             outcome.feed(event)

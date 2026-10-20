@@ -316,7 +316,7 @@ async def test_attach_material_images_presigns_pages(session: AsyncSession) -> N
         evidence("页内容", document=doc_info, page_start=2, page_end=4),
         evidence("无页", n=2),
     ]
-    await attach_material_images(session, evs, storage, settings)
+    await attach_material_images(session, evs, storage, settings, viewer_id="u1")
     assert len(evs[0].images) == 2
     assert [img.caption for img in evs[0].images] == ["第 2 页", "第 3 页"]
     assert all(img.url.startswith(storage.base_url) for img in evs[0].images)
@@ -331,6 +331,7 @@ async def test_attach_material_images_presigns_pages(session: AsyncSession) -> N
         version=1,
         slide_number=None,
         page_start=3,
+        viewer_id="u1",
     )
     assert mime == "image/png" and url is not None and "page-3" in url
 

@@ -1,5 +1,29 @@
 import type { AclPermission, KbDocument, PrincipalType } from '@/api/types'
 import { t } from '@/i18n'
+import { fileExtension } from '@/utils/file'
+
+const INLINE_EXTENSIONS = [
+  '.pdf',
+  '.txt',
+  '.md',
+  '.markdown',
+  '.csv',
+  '.html',
+  '.htm',
+  '.jpg',
+  '.jpeg',
+  '.png',
+]
+
+/** Files the browser can show in an iframe. */
+export function inlinePreviewable(filename: string): boolean {
+  return INLINE_EXTENSIONS.includes(fileExtension(filename))
+}
+
+/** Uploaded HTML is untrusted: render it without scripts. (PDF viewers refuse sandboxed frames.) */
+export function isHtmlFile(filename: string): boolean {
+  return ['.html', '.htm'].includes(fileExtension(filename))
+}
 
 export type TagType = 'primary' | 'success' | 'info' | 'warning' | 'danger'
 

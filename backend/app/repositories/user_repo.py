@@ -20,6 +20,12 @@ class UserRepository:
         stmt = select(User).where(User.org_id == org_id, User.id == user_id)
         return (await self.session.execute(stmt)).scalar_one_or_none()
 
+    async def list_by_ids(self, org_id: str, ids: list[str]) -> list[User]:
+        if not ids:
+            return []
+        stmt = select(User).where(User.org_id == org_id, User.id.in_(ids))
+        return list((await self.session.execute(stmt)).scalars())
+
     async def get_by_sub(self, sub: str) -> User | None:
         stmt = select(User).where(User.keycloak_sub == sub)
         return (await self.session.execute(stmt)).scalar_one_or_none()

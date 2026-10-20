@@ -17,6 +17,8 @@ logger = logging.getLogger(__name__)
 DEFAULT_DPI = 144
 DEFAULT_MAX_EDGE = 1600
 DEFAULT_MAX_PAGES = 200
+# Converted to PDF by LibreOffice, then rasterized like PDF pages.
+OFFICE_PAGED = (".docx", ".doc", ".xlsx", ".xls")
 
 
 @dataclass(frozen=True)
@@ -61,6 +63,15 @@ def extract_page_images(
             )
         if name.endswith((".png", ".jpg", ".jpeg")):
             return _from_raster(data, max_edge=max_edge)
+        if name.endswith(OFFICE_PAGED):
+            return _from_office(
+                data,
+                suffix=name[name.rfind(".") :],
+                dpi=dpi,
+                max_edge=max_edge,
+                max_pages=max_pages,
+                soffice_path=soffice_path,
+            )
     except Exception:
         logger.exception("page_image_extract_failed", extra={"filename": filename})
     return []
@@ -133,6 +144,26 @@ def _from_pptx(
     if pdf_bytes:
         return _from_pdf(pdf_bytes, dpi=dpi, max_edge=max_edge, max_pages=max_pages, kind="slide")
     return _pptx_embedded_pictures(data, max_edge=max_edge, max_pages=max_pages)
+
+
+def _from_office(
+    data: bytes,
+    *,
+    suffix: str,
+    dpi: int,
+    max_edge: int,
+    max_pages: int,
+    soffice_path: str | None,
+) -> list[PageImage]:
+    """Word / Excel pages as printed by LibreOffice (no pages without it)."""
+    from app.services.ingest.office_convert import convert_with_soffice
+
+    pdf_bytes = convert_with_soffice(
+        data, source_suffix=suffix, to_format="pdf", soffice_path=soffice_path
+    )
+    if not pdf_bytes:
+        return []
+    return _from_pdf(pdf_bytes, dpi=dpi, max_edge=max_edge, max_pages=max_pages)
 
 
 def _pptx_to_pdf(data: bytes, *, soffice_path: str | None) -> bytes | None:

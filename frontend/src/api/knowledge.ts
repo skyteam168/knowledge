@@ -22,6 +22,8 @@ import type {
   UploadInit,
   UploadInitResult,
   UploadResult,
+  VersionCompare,
+  VersionText,
 } from './types'
 
 // ---- knowledge bases ------------------------------------------------------------
@@ -75,6 +77,17 @@ export const deleteDocument = (id: string) => del<void>(`/documents/${id}`)
 export const reprocessDocument = (id: string) => post<KbDocument>(`/documents/${id}/reprocess`)
 export const listChunks = (id: string) => get<Chunk[]>(`/documents/${id}/chunks`)
 export const getPreviewUrl = (id: string) => get<Preview>(`/documents/${id}/preview-url`)
+export const getDownloadUrl = (id: string) => get<Preview>(`/documents/${id}/download-url`)
+export const getVersionPreviewUrl = (id: string, version: number) =>
+  get<Preview>(`/documents/${id}/versions/${version}/preview-url`)
+export const getVersionDownloadUrl = (id: string, version: number) =>
+  get<Preview>(`/documents/${id}/versions/${version}/download-url`)
+export const getVersionText = (id: string, version: number) =>
+  get<VersionText>(`/documents/${id}/versions/${version}/text`)
+export const compareVersions = (id: string, base: number, target: number) =>
+  get<VersionCompare>(`/documents/${id}/versions/compare`, { params: { base, target } })
+export const restoreVersion = (id: string, version: number) =>
+  post<KbDocument>(`/documents/${id}/versions/${version}/restore`)
 export const getDocumentAcl = (id: string) => get<DocumentAcl>(`/documents/${id}/acl`)
 export const setDocumentAcl = (id: string, body: DocumentAclUpdate) =>
   put<DocumentAcl>(`/documents/${id}/acl`, body)

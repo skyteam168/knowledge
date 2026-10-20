@@ -197,6 +197,9 @@ class CitationSourceOut(BaseModel):
     image_mime_type: str | None = None
     anchor_chunk_id: str
     quote: str
+    # Protection of the source document (the UI overlays a watermark / blocks copying).
+    watermark: bool = False
+    copy_protect: bool = False
     segments: list[SourceSegmentOut]
     is_ko: bool = False
     ko: KoCitationOut | None = None

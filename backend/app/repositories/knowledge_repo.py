@@ -125,6 +125,12 @@ class DocumentRepository:
         )
         return list((await self.session.execute(stmt)).scalars())
 
+    async def get_version(self, document_id: str, version: int) -> DocumentVersion | None:
+        stmt = select(DocumentVersion).where(
+            DocumentVersion.document_id == document_id, DocumentVersion.version == version
+        )
+        return (await self.session.execute(stmt)).scalar_one_or_none()
+
     async def add_version(self, version: DocumentVersion) -> DocumentVersion:
         self.session.add(version)
         await self.session.flush()
@@ -172,6 +178,17 @@ class DocumentPageAssetRepository:
             DocumentPageAsset.page_index == page_index,
         )
         return (await self.session.execute(stmt)).scalar_one_or_none()
+
+    async def list_for_version(self, document_id: str, version: int) -> list[DocumentPageAsset]:
+        stmt = (
+            select(DocumentPageAsset)
+            .where(
+                DocumentPageAsset.document_id == document_id,
+                DocumentPageAsset.document_version == version,
+            )
+            .order_by(DocumentPageAsset.kind, DocumentPageAsset.page_index)
+        )
+        return list((await self.session.execute(stmt)).scalars().all())
 
     async def find_for_citation(
         self,

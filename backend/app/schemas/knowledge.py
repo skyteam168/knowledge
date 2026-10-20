@@ -57,11 +57,17 @@ class KnowledgeBaseCreate(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     description: str | None = Field(default=None, max_length=2000)
     visibility: Visibility = "restricted"
+    watermark: bool = False
+    copy_protect: bool = False
+    download_permission: AclPermissionName = "read"
 
 
 class KnowledgeBaseUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=128)
     description: str | None = Field(default=None, max_length=2000)
+    watermark: bool | None = None
+    copy_protect: bool | None = None
+    download_permission: AclPermissionName | None = None
 
 
 class KnowledgeBaseOut(ORMModel):
@@ -69,6 +75,9 @@ class KnowledgeBaseOut(ORMModel):
     name: str
     description: str | None
     visibility: Visibility
+    watermark: bool = False
+    copy_protect: bool = False
+    download_permission: AclPermissionName = "read"
     created_by: str | None
     created_at: datetime
     updated_at: datetime
@@ -77,6 +86,12 @@ class KnowledgeBaseOut(ORMModel):
 
 
 # ---- documents ------------------------------------------------------------------------
+
+
+class ProtectionOut(BaseModel):
+    watermark: bool = False
+    copy_protect: bool = False
+    download_permission: AclPermissionName = "read"
 
 
 class DocumentOut(ORMModel):
@@ -95,6 +110,10 @@ class DocumentOut(ORMModel):
     effective_from: datetime | None
     effective_to: datetime | None
     acl_inherit: bool
+    # The document's own protection settings (None = as the knowledge base).
+    watermark: bool | None = None
+    copy_protect: bool | None = None
+    download_permission: AclPermissionName | None = None
     chunk_count: int | None
     parsed_at: datetime | None
     chunked_at: datetime | None
@@ -102,6 +121,9 @@ class DocumentOut(ORMModel):
     created_at: datetime
     updated_at: datetime
     my_permission: AclPermissionName | None = None
+    # Effective protection (knowledge base + document) and what it means for the caller.
+    protection: ProtectionOut = Field(default_factory=lambda: ProtectionOut())
+    can_download: bool = True
 
 
 class DocumentVersionOut(ORMModel):
@@ -110,8 +132,36 @@ class DocumentVersionOut(ORMModel):
     mime_type: str
     size_bytes: int
     sha256: str
+    restored_from: int | None = None
     created_by: str | None
+    created_by_name: str | None = None
     created_at: datetime
+
+
+class VersionTextOut(BaseModel):
+    version: int
+    # False when the version was never parsed (or its parse result is gone).
+    available: bool
+    lines: list[str] = Field(default_factory=list)
+    truncated: bool = False
+
+
+class DiffLineOut(BaseModel):
+    op: Literal["equal", "add", "del"]
+    text: str
+    old_no: int | None
+    new_no: int | None
+
+
+class VersionCompareOut(BaseModel):
+    base: DocumentVersionOut
+    target: DocumentVersionOut
+    available: bool
+    same_file: bool
+    added: int = 0
+    removed: int = 0
+    hunks: list[list[DiffLineOut]] = Field(default_factory=list)
+    truncated: bool = False
 
 
 class DocumentDetail(DocumentOut):
@@ -125,6 +175,10 @@ class DocumentUpdate(BaseModel):
     metadata: dict[str, Any] | None = None
     effective_from: datetime | None = None
     effective_to: datetime | None = None
+    # Protection overrides (manage permission); null = as the knowledge base.
+    watermark: bool | None = None
+    copy_protect: bool | None = None
+    download_permission: AclPermissionName | None = None
 
     @field_validator("tags")
     @classmethod
@@ -177,11 +231,22 @@ class ChunkOut(ORMModel):
     chunk_type: str
 
 
-class PreviewOut(BaseModel):
+class PagePreviewOut(BaseModel):
+    index: int
     url: str
+    width: int | None = None
+    height: int | None = None
+
+
+class PreviewOut(BaseModel):
+    # "file": the original inline (`url`); "pages": page images only (`pages`, watermarked
+    # when the document has a watermark); "none": no page images, text only.
+    mode: Literal["file", "pages", "none"] = "file"
+    url: str | None = None
     filename: str
     mime_type: str
     expires_in: int
+    pages: list[PagePreviewOut] = Field(default_factory=list)
 
 
 # ---- directory (principal picker) -----------------------------------------------------

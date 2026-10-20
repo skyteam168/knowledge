@@ -31,8 +31,9 @@ ENV PYTHONUNBUFFERED=1 \
     PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus
 
 # libgl1 / libglib2.0-0: OpenCV (pulled in by rapidocr). tini: PID 1 signal forwarding + reaping.
+# fonts-wqy-microhei: CJK font for page watermarks and for LibreOffice page rendering.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 tini \
+    && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 tini fonts-wqy-microhei \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system --gid 10001 app \
     && useradd --system --uid 10001 --gid app --home-dir /app --shell /usr/sbin/nologin app
@@ -49,10 +50,11 @@ ENTRYPOINT ["tini", "--", "/app/docker-entrypoint.sh"]
 
 
 FROM runtime AS worker
-# LibreOffice Writer (headless) converts legacy .doc to .docx before parsing; only the worker parses.
+# LibreOffice (headless): legacy .doc -> .docx before parsing, and Word / Excel -> PDF for page
+# images (protected previews). Only the worker parses.
 USER root
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libreoffice-writer-nogui \
+    && apt-get install -y --no-install-recommends libreoffice-writer-nogui libreoffice-calc-nogui \
     && rm -rf /var/lib/apt/lists/*
 USER app
 CMD ["dramatiq", "app.workers.main", "--processes", "2", "--threads", "4"]

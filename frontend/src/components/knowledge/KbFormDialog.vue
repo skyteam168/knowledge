@@ -3,7 +3,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { createKnowledgeBase, updateKnowledgeBase } from '@/api/knowledge'
-import type { KbVisibility, KnowledgeBase } from '@/api/types'
+import type { AclPermission, KbVisibility, KnowledgeBase } from '@/api/types'
 
 const props = defineProps<{ kb?: KnowledgeBase | null }>()
 const visible = defineModel<boolean>({ required: true })
@@ -16,6 +16,9 @@ const form = reactive({
   name: '',
   description: '' as string | null,
   visibility: 'restricted' as KbVisibility,
+  watermark: false,
+  copy_protect: false,
+  download_permission: 'read' as AclPermission,
 })
 const rules = computed<FormRules>(() => ({
   name: [{ required: true, message: t('knowledge.kb.nameRequired'), trigger: 'blur' }],
@@ -26,6 +29,9 @@ watch(visible, (open) => {
   form.name = props.kb?.name ?? ''
   form.description = props.kb?.description ?? ''
   form.visibility = props.kb?.visibility ?? 'restricted'
+  form.watermark = props.kb?.watermark ?? false
+  form.copy_protect = props.kb?.copy_protect ?? false
+  form.download_permission = props.kb?.download_permission ?? 'read'
 })
 
 async function submit(): Promise<void> {
@@ -33,9 +39,19 @@ async function submit(): Promise<void> {
   saving.value = true
   try {
     const description = form.description || null
+    const protection = {
+      watermark: form.watermark,
+      copy_protect: form.copy_protect,
+      download_permission: form.download_permission,
+    }
     const kb = props.kb
-      ? await updateKnowledgeBase(props.kb.id, { name: form.name, description })
-      : await createKnowledgeBase({ name: form.name, description, visibility: form.visibility })
+      ? await updateKnowledgeBase(props.kb.id, { name: form.name, description, ...protection })
+      : await createKnowledgeBase({
+          name: form.name,
+          description,
+          visibility: form.visibility,
+          ...protection,
+        })
     ElMessage.success(t('knowledge.kb.savedSuccess'))
     visible.value = false
     emit('saved', kb)
@@ -51,7 +67,7 @@ async function submit(): Promise<void> {
     :title="kb ? t('knowledge.kb.edit') : t('knowledge.kb.create')"
     width="520px"
   >
-    <el-form ref="formRef" :model="form" :rules="rules" label-width="80px">
+    <el-form ref="formRef" :model="form" :rules="rules" label-width="96px">
       <el-form-item :label="t('common.name')" prop="name">
         <el-input v-model="form.name" maxlength="128" show-word-limit />
       </el-form-item>
@@ -64,6 +80,23 @@ async function submit(): Promise<void> {
           <el-radio value="org">{{ t('knowledge.visibility.orgAll') }}</el-radio>
         </el-radio-group>
       </el-form-item>
+      <el-divider content-position="left">{{ t('knowledge.protect.title') }}</el-divider>
+      <el-form-item :label="t('knowledge.protect.watermark')">
+        <el-switch v-model="form.watermark" data-test="kb-watermark" />
+        <span class="hint">{{ t('knowledge.protect.watermarkHint') }}</span>
+      </el-form-item>
+      <el-form-item :label="t('knowledge.protect.copy')">
+        <el-switch v-model="form.copy_protect" data-test="kb-copy-protect" />
+        <span class="hint">{{ t('knowledge.protect.copyHint') }}</span>
+      </el-form-item>
+      <el-form-item :label="t('knowledge.protect.downloadLabel')">
+        <el-select v-model="form.download_permission" data-test="kb-download">
+          <el-option :label="t('knowledge.protect.download.read')" value="read" />
+          <el-option :label="t('knowledge.protect.download.edit')" value="edit" />
+          <el-option :label="t('knowledge.protect.download.manage')" value="manage" />
+        </el-select>
+      </el-form-item>
+      <div class="hint hint--block">{{ t('knowledge.protect.kbHint') }}</div>
     </el-form>
     <template #footer>
       <el-button @click="visible = false">{{ t('common.cancel') }}</el-button>
@@ -73,3 +106,16 @@ async function submit(): Promise<void> {
     </template>
   </el-dialog>
 </template>
+
+<style scoped>
+.hint {
+  margin-left: 10px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  line-height: 1.5;
+}
+.hint--block {
+  display: block;
+  margin: -6px 0 0 96px;
+}
+</style>

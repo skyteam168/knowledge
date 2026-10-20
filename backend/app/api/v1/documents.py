@@ -1,6 +1,6 @@
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, Path, Query, Response
 
 from app.api.deps import get_document_service, require_permission
 from app.schemas.knowledge import (
@@ -11,6 +11,8 @@ from app.schemas.knowledge import (
     DocumentOut,
     DocumentUpdate,
     PreviewOut,
+    VersionCompareOut,
+    VersionTextOut,
 )
 from app.services.knowledge.document_service import DocumentService
 
@@ -58,6 +60,59 @@ async def preview_url(document_id: str, service: ServiceDep) -> PreviewOut:
 @router.get("/{document_id}/download-url", response_model=PreviewOut, dependencies=CanRead)
 async def download_url(document_id: str, service: ServiceDep) -> PreviewOut:
     return await service.download_url(document_id)
+
+
+VersionNo = Annotated[int, Path(ge=1)]
+
+
+@router.get(
+    "/{document_id}/versions/compare", response_model=VersionCompareOut, dependencies=CanRead
+)
+async def compare_versions(
+    document_id: str,
+    service: ServiceDep,
+    base: Annotated[int, Query(ge=1)],
+    target: Annotated[int, Query(ge=1)],
+) -> VersionCompareOut:
+    return await service.compare_versions(document_id, base, target)
+
+
+@router.get(
+    "/{document_id}/versions/{version}/preview-url",
+    response_model=PreviewOut,
+    dependencies=CanRead,
+)
+async def version_preview_url(
+    document_id: str, version: VersionNo, service: ServiceDep
+) -> PreviewOut:
+    return await service.preview_url(document_id, version)
+
+
+@router.get(
+    "/{document_id}/versions/{version}/download-url",
+    response_model=PreviewOut,
+    dependencies=CanRead,
+)
+async def version_download_url(
+    document_id: str, version: VersionNo, service: ServiceDep
+) -> PreviewOut:
+    return await service.download_url(document_id, version)
+
+
+@router.get(
+    "/{document_id}/versions/{version}/text", response_model=VersionTextOut, dependencies=CanRead
+)
+async def version_text(document_id: str, version: VersionNo, service: ServiceDep) -> VersionTextOut:
+    return await service.version_text(document_id, version)
+
+
+@router.post(
+    "/{document_id}/versions/{version}/restore",
+    response_model=DocumentOut,
+    dependencies=CanUpload,
+)
+async def restore_version(document_id: str, version: VersionNo, service: ServiceDep) -> DocumentOut:
+    return await service.restore_version(document_id, version)
 
 
 @router.get(
