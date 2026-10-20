@@ -1,6 +1,7 @@
 """OpenSearch full-text index (IK analyzers + hot-reloadable synonyms) over the REST API."""
 
 import json
+import logging
 from collections.abc import Sequence
 from typing import Any
 
@@ -8,6 +9,8 @@ import httpx
 
 from app.retrieval.backends import IndexBackendError, TextHit
 from app.retrieval.records import ChunkRecord, IndexedRef
+
+logger = logging.getLogger(__name__)
 
 SCAN_PAGE = 1000
 TERMS_BATCH = 1000
@@ -196,7 +199,15 @@ class OpenSearchIndex:
     async def ensure_index(self, name: str) -> None:
         if await self.exists(name):
             # Additive upgrade of indexes created by an older template (new fields only).
-            await self._call("PUT", f"/{name}/_mapping", {"properties": mapping_properties()})
+            # Analyzer / settings changes cannot be applied in place — rebuild a new generation.
+            try:
+                await self._call(
+                    "PUT", f"/{name}/_mapping", {"properties": mapping_properties()}
+                )
+            except IndexBackendError as exc:
+                logger.warning(
+                    "opensearch_mapping_upgrade_skipped index=%s error=%s", name, exc
+                )
             return
         result = await self._call("PUT", f"/{name}", {}, allow=(400,))
         if result is None and not await self.exists(name):
