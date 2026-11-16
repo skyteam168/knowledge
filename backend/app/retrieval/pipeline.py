@@ -1,11 +1,13 @@
 """Hybrid retrieval pipeline.
 
   query ─┬─ DenseRetriever (Qdrant) ──┐
-         └─ SparseRetriever (BM25) ───┴─ RRF fusion ─ hydrate (PG re-check) ─ rerank ─ top K
+         ├─ SparseRetriever (BM25) ───┼─ RRF fusion ─ hydrate (PG re-check) ─ rerank ─ top K
+         └─ GraphRetriever (KO hops) ─┘   (graph seeds from dense/sparse KO hits)
 
-Both routes run concurrently; a failing / slow route is dropped (degraded) as long as the
-other one answers. Hydration loads the authoritative chunk text from PG and removes every
-chunk the caller can no longer read, *before* any text reaches the reranker model.
+Dense and sparse run concurrently; graph expands from their KO hits. A failing / slow
+route is dropped (degraded) as long as another answers. Hydration loads the authoritative
+chunk text from PG and removes every chunk the caller can no longer read, *before* any
+text reaches the reranker model.
 """
 
 import asyncio
@@ -21,9 +23,10 @@ from app.core.metrics import cache_lookup
 from app.llm import LLMGateway
 from app.retrieval.backends import SearchBackends
 from app.retrieval.cache import EmbeddingCache, ResultCache
-from app.retrieval.config import RetrievalConfig, Route
+from app.retrieval.config import GraphConfig, RetrievalConfig, Route
 from app.retrieval.filters import SearchFilter
 from app.retrieval.fusion import FusedCandidate, boost_ko, rrf_fuse
+from app.retrieval.graph import seed_ko_ids_from_hits
 from app.retrieval.query import ParsedQuery
 from app.retrieval.rerank import Reranker, RerankUnavailableError
 from app.retrieval.retrievers import (
@@ -35,7 +38,7 @@ from app.retrieval.retrievers import (
 
 logger = logging.getLogger(__name__)
 
-CACHE_VERSION = 2
+CACHE_VERSION = 3
 MAX_CACHED_CANDIDATES = 200
 
 # Hydrated passages of knowledge objects carry this document type.
@@ -88,6 +91,15 @@ class HydrationResult:
 
 class Hydrator(Protocol):
     def __call__(self, chunk_ids: Sequence[str]) -> Awaitable[HydrationResult]: ...
+
+
+class GraphRoute(Protocol):
+    def retrieve(
+        self,
+        seed_ko_ids: Sequence[str],
+        flt: SearchFilter,
+        cfg: GraphConfig,
+    ) -> Awaitable[RouteResult]: ...
 
 
 @dataclass(frozen=True)
@@ -174,10 +186,49 @@ class RetrievalPipeline:
             result_cache=ResultCache(store),
         )
 
-    # ---- stage 1: concurrent routes -------------------------------------------------
+    # ---- stage 1: concurrent dense/sparse; then optional graph ----------------------
+
+    @staticmethod
+    def _route_stage(outcome: RouteResult) -> dict[str, Any]:
+        return {
+            "status": "ok",
+            "took_ms": outcome.took_ms,
+            **outcome.info,
+            "hits": [
+                {
+                    "chunk_id": h.chunk_id,
+                    "rank": i,
+                    "score": round(h.score, 6),
+                    **(
+                        {"hops": h.payload["hops"]}
+                        if isinstance(h.payload.get("hops"), int)
+                        else {}
+                    ),
+                }
+                for i, h in enumerate(outcome.hits, start=1)
+            ],
+        }
+
+    def _record_failure(
+        self,
+        route: Route,
+        outcome: BaseException,
+        degraded: list[str],
+        stage: dict[str, Any],
+    ) -> None:
+        reason = _failure(outcome)
+        degraded.append(f"{route.value}:{reason}")
+        stage[route.value] = {"status": reason, "error": str(outcome)[:500], "hits": []}
+        logger.warning(
+            "retrieval_route_failed",
+            extra={"route": route.value, "reason": reason, "error": str(outcome)[:500]},
+        )
 
     async def _retrieve(
-        self, req: RetrievalRequest, degraded: list[str]
+        self,
+        req: RetrievalRequest,
+        degraded: list[str],
+        graph: GraphRoute | None,
     ) -> tuple[dict[Route, RouteResult], dict[str, Any]]:
         cfg = req.config
         calls: dict[Route, Awaitable[RouteResult]] = {}
@@ -205,26 +256,34 @@ class RetrievalPipeline:
             if isinstance(outcome, asyncio.CancelledError):
                 raise outcome
             if isinstance(outcome, BaseException):
-                reason = _failure(outcome)
-                degraded.append(f"{route.value}:{reason}")
-                stage[route.value] = {"status": reason, "error": str(outcome)[:500], "hits": []}
-                logger.warning(
-                    "retrieval_route_failed",
-                    extra={"route": route.value, "reason": reason, "error": str(outcome)[:500]},
-                )
+                self._record_failure(route, outcome, degraded, stage)
                 continue
             results[route] = outcome
-            stage[route.value] = {
-                "status": "ok",
-                "took_ms": outcome.took_ms,
-                **outcome.info,
-                "hits": [
-                    {"chunk_id": h.chunk_id, "rank": i, "score": round(h.score, 6)}
-                    for i, h in enumerate(outcome.hits, start=1)
-                ],
+            stage[route.value] = self._route_stage(outcome)
+
+        if cfg.graph.enabled and graph is not None and results:
+            seeds = seed_ko_ids_from_hits(
+                [h for rr in results.values() for h in rr.hits]
+            )
+            try:
+                graph_outcome = await asyncio.wait_for(
+                    graph.retrieve(seeds, req.filter, cfg.graph),
+                    cfg.graph.timeout_seconds,
+                )
+                results[Route.GRAPH] = graph_outcome
+                stage[Route.GRAPH.value] = self._route_stage(graph_outcome)
+            except asyncio.CancelledError:
+                raise
+            except BaseException as exc:
+                self._record_failure(Route.GRAPH, exc, degraded, stage)
+        elif Route.GRAPH.value not in stage:
+            stage[Route.GRAPH.value] = {
+                "status": "disabled" if not cfg.graph.enabled else "skipped",
+                "hits": [],
             }
-        for route in Route:
-            if route not in calls:
+
+        for route in (Route.DENSE, Route.SPARSE):
+            if route.value not in stage:
                 stage[route.value] = {"status": "disabled", "hits": []}
         if not results:
             raise RetrievalUnavailableError(degraded)
@@ -254,7 +313,12 @@ class RetrievalPipeline:
             generation,
         )
 
-    async def run(self, req: RetrievalRequest, hydrate: Hydrator) -> RetrievalOutcome:
+    async def run(
+        self,
+        req: RetrievalRequest,
+        hydrate: Hydrator,
+        graph: GraphRoute | None = None,
+    ) -> RetrievalOutcome:
         started = time.perf_counter()
         cfg = req.config
         top_k = req.top_k or cfg.top_k
@@ -285,7 +349,7 @@ class RetrievalPipeline:
             timings["retrieve_ms"] = _ms(started)
         else:
             t = time.perf_counter()
-            route_results, routes_stage = await self._retrieve(req, degraded)
+            route_results, routes_stage = await self._retrieve(req, degraded, graph)
             timings["retrieve_ms"] = _ms(t)
             for route, rr in route_results.items():
                 timings[f"{route.value}_ms"] = rr.took_ms

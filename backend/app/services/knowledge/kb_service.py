@@ -83,7 +83,7 @@ class KnowledgeBaseService(BaseService):
             self.org_id,
             RESOURCE_KB,
             kb.id,
-            [("user", self.ctx.user.id, AclPermission.MANAGE.value)],
+            [("user", self.ctx.user.id, AclPermission.MANAGE.value, "allow")],
             self.ctx.user.id,
         )
         await self.audit.record(self.audit_ctx, "kb.create", RESOURCE_KB, kb.id, None, snapshot(kb))
@@ -135,7 +135,7 @@ class KnowledgeBaseService(BaseService):
         rows = await self.access.entries(self.org_id, RESOURCE_KB, kb.id)
         directory = PrincipalDirectory(self.session, self.org_id)
         entries = await directory.describe(
-            (r.principal_type, r.principal_id, r.permission) for r in rows
+            (r.principal_type, r.principal_id, r.permission, r.effect or "allow") for r in rows
         )
         return KbAclOut(visibility=kb.visibility, entries=entries)
 
@@ -143,14 +143,15 @@ class KnowledgeBaseService(BaseService):
         kb, _ = await self.load(kb_id, AclPermission.MANAGE)
         entries = await PrincipalDirectory(self.session, self.org_id).validate(data.entries)
         if not self.ctx.user.is_superuser and not any(
-            e.permission == AclPermission.MANAGE.value for e in entries
+            e.effect == "allow" and e.permission == AclPermission.MANAGE.value for e in entries
         ):
             raise ConflictError("At least one principal must keep 'manage' permission")
         before_rows = await self.access.entries(self.org_id, RESOURCE_KB, kb.id)
         before = {
             "visibility": kb.visibility,
             "entries": sorted(
-                f"{r.principal_type}:{r.principal_id}:{r.permission}" for r in before_rows
+                f"{r.principal_type}:{r.principal_id}:{r.permission}:{r.effect or 'allow'}"
+                for r in before_rows
             ),
         }
         kb.visibility = KbVisibility(data.visibility).value
@@ -158,13 +159,17 @@ class KnowledgeBaseService(BaseService):
             self.org_id,
             RESOURCE_KB,
             kb.id,
-            [(e.principal_type, e.principal_id, e.permission) for e in entries],
+            [
+                (e.principal_type, e.principal_id, e.permission, e.effect or "allow")
+                for e in entries
+            ],
             self.ctx.user.id,
         )
         after = {
             "visibility": kb.visibility,
             "entries": sorted(
-                f"{e.principal_type}:{e.principal_id}:{e.permission}" for e in entries
+                f"{e.principal_type}:{e.principal_id}:{e.permission}:{e.effect or 'allow'}"
+                for e in entries
             ),
         }
         if before != after:

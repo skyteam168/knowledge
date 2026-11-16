@@ -4,13 +4,18 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import {
+  Bell,
   ChatDotRound,
   Collection,
+  Connection,
+  Cpu,
   DataAnalysis,
+  MagicStick,
   Opportunity,
   Promotion,
   Search,
   Setting,
+  Star,
   VideoPlay,
 } from '@element-plus/icons-vue'
 import { visibleManual, type ManualSection } from '@/guide/manual'
@@ -19,13 +24,18 @@ import { useAuthStore } from '@/stores/auth'
 import { useGuideStore } from '@/stores/guide'
 
 const ICONS: Record<string, Component> = {
+  Bell,
   ChatDotRound,
   Collection,
+  Connection,
+  Cpu,
   DataAnalysis,
+  MagicStick,
   Opportunity,
   Promotion,
   Search,
   Setting,
+  Star,
 }
 
 /** Lazy pages need a moment to render their tour targets after navigation. */

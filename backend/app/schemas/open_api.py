@@ -2,7 +2,7 @@ import ipaddress
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models import ApiScope
 
@@ -285,3 +285,115 @@ class OpenWhoAmIOut(BaseModel):
     kbs: list[OpenKbOut]
     rate_limit_per_minute: int
     daily_quota: int
+
+
+class OpenEntityReadIn(BaseModel):
+    """Lookup by entity_id, name/alias, or structured object_type+external_id (one mode)."""
+
+    entity_id: str | None = Field(default=None, max_length=32)
+    name: str | None = Field(default=None, max_length=256)
+    object_type: str | None = Field(default=None, max_length=64)
+    external_id: str | None = Field(default=None, max_length=64)
+    source_id: str | None = Field(default=None, max_length=32)
+
+    @model_validator(mode="after")
+    def _one_mode(self) -> "OpenEntityReadIn":
+        by_id = bool(self.entity_id and self.entity_id.strip())
+        by_name = bool(self.name and self.name.strip())
+        by_ext = bool(
+            self.object_type
+            and self.object_type.strip()
+            and self.external_id
+            and self.external_id.strip()
+        )
+        if sum((by_id, by_name, by_ext)) != 1:
+            raise ValueError(
+                "provide exactly one of: entity_id | name | (object_type + external_id)"
+            )
+        if self.entity_id:
+            self.entity_id = self.entity_id.strip()
+        if self.name:
+            self.name = self.name.strip()
+        if self.object_type:
+            self.object_type = self.object_type.strip().lower()
+        if self.external_id:
+            self.external_id = self.external_id.strip()
+        if self.source_id:
+            self.source_id = self.source_id.strip() or None
+        return self
+
+
+class OpenEntityTermOut(BaseModel):
+    id: str
+    canonical_name: str
+    entity_type: str
+    status: str
+    aliases: list[str] = Field(default_factory=list)
+
+
+class OpenEntityMirrorOut(BaseModel):
+    object_type: str
+    object_id: str
+    external_id: str
+    source_id: str
+    label: str
+    status: str
+
+
+class OpenEntityKoOut(BaseModel):
+    id: str
+    title: str
+    ko_type: str
+    kb_id: str
+
+
+class OpenEntityReadOut(BaseModel):
+    terminology: OpenEntityTermOut | None = None
+    mirror: OpenEntityMirrorOut | None = None
+    knowledge_objects: list[OpenEntityKoOut] = Field(default_factory=list)
+
+
+class OpenGraphTraverseIn(BaseModel):
+    ko_id: str = Field(min_length=1, max_length=32)
+    max_hops: int = Field(default=2, ge=1, le=2)
+    relation_types: list[str] = Field(default_factory=list, max_length=20)
+    kb_ids: list[str] = Field(default_factory=list, max_length=100)
+
+    @field_validator("ko_id")
+    @classmethod
+    def _ko(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("ko_id must not be blank")
+        return value.strip()
+
+    @field_validator("kb_ids")
+    @classmethod
+    def _kbs(cls, value: list[str]) -> list[str]:
+        return _dedupe(value)
+
+    @field_validator("relation_types")
+    @classmethod
+    def _rels(cls, value: list[str]) -> list[str]:
+        return _dedupe([v.lower() for v in value])
+
+
+class OpenGraphNeighborOut(BaseModel):
+    ko_id: str
+    title: str
+    hops: int
+    seed_id: str
+    ko_type: str
+    kb_id: str
+
+
+class OpenGraphSeedOut(BaseModel):
+    id: str
+    title: str
+    ko_type: str
+    kb_id: str
+
+
+class OpenGraphTraverseOut(BaseModel):
+    seed: OpenGraphSeedOut
+    neighbors: list[OpenGraphNeighborOut] = Field(default_factory=list)
+    max_hops: int

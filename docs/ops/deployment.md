@@ -70,7 +70,11 @@ $DC up -d           # migrate 先执行数据库迁移，再滚动重建应用�
 
 ## 5. 可观测性（可选）
 
+无全栈门禁（规则 / 配置语法）：[`alerting-smoke.md`](alerting-smoke.md)、[`../testing/alert-channel-20261114.md`](../testing/alert-channel-20261114.md)。
+
 ```bash
+./observability/verify-alerts.sh   # Windows: powershell -File .\observability\verify-alerts.ps1
+
 # 先写入与 METRICS_TOKEN 相同的 token 文件（勿提交 Git）
 grep ^METRICS_TOKEN= .env.prod | cut -d= -f2- > observability/metrics-token
 $DC --profile observability up -d
@@ -84,6 +88,8 @@ $DC --profile observability up -d
 
 ## 6. 可选组件
 
+PII / 病毒扫描生产开关建议与本地样例见 [`pii-clamav.md`](pii-clamav.md)。
+
 - 病毒扫描：`$DC --profile clamav up -d`，并设置 `VIRUS_SCAN_BACKEND=clamav`（ClamAV 首次启动需下载病毒库，约数分钟）。
 - 敏感信息脱敏：`PII_MASK_ON_INGEST`（入库时脱敏 chunk 文本）、`PII_MASK_ON_OUTPUT`（回答与搜索结果输出时脱敏），类型由 `PII_TYPES` 配置。
 
@@ -94,3 +100,6 @@ $DC --profile observability up -d
 - [索引重建与一致性修复](reindex.md)
 - [更换 embedding 模型](embedding-migration.md)
 - [Keycloak 对接 AD / LDAP](keycloak-ad.md)
+- [PII / ClamAV 开关](pii-clamav.md)
+- [告警冒烟](alerting-smoke.md)
+- [单机 HA 分阶段评估 ADR](../adr/0003-single-node-ha-stages.md)（可选 API 扩副本：`docker-compose.ha-api.yml`）

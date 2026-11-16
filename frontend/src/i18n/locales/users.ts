@@ -169,4 +169,89 @@ export default {
       roleOption: '{name} ({code})',
     },
   },
+  vi: {
+    source: {
+      local: 'Cục bộ',
+      keycloak: 'Keycloak',
+      wecom: 'WeCom',
+      dingtalk: 'DingTalk',
+      weaver: 'Weaver OA',
+      excel: 'Excel',
+    },
+    filters: {
+      keyword: 'Tên đăng nhập / họ tên / email',
+      department: 'Phòng ban (gồm cấp con)',
+      query: 'Tìm kiếm',
+    },
+    status: {
+      disabled: 'Đã tắt',
+    },
+    columns: {
+      user: 'Người dùng',
+      department: 'Phòng ban',
+      primary: 'Chính',
+      jobTitle: 'Chức danh',
+      source: 'Nguồn',
+      lastLogin: 'Đăng nhập gần nhất',
+    },
+    keycloak: {
+      bound: 'Đã liên kết',
+      pending: 'Chờ đăng nhập',
+    },
+    actions: {
+      precreate: 'Tạo sẵn người dùng',
+      passwordLogin: 'Đăng nhập bằng mật khẩu',
+      roles: 'Vai trò',
+      groups: 'Nhóm người dùng',
+      disable: 'Tắt',
+    },
+    empty: 'Không có người dùng',
+    editor: {
+      createTitle: 'Tạo sẵn người dùng',
+      editTitle: 'Chỉnh sửa người dùng',
+      precreateHint:
+        'Khi người dùng đăng nhập lần đầu qua Keycloak, tài khoản sẽ được liên kết theo tên đăng nhập',
+      managedHint:
+        'Người dùng được đồng bộ từ {source}. Hồ sơ và phòng ban chỉ đọc; chỉnh ở hệ thống nguồn. Vai trò và nhóm cục bộ vẫn gán tại đây.',
+      username: 'Tên đăng nhập',
+      displayName: 'Họ tên',
+      employeeNo: 'Mã nhân viên',
+      email: 'Email',
+      mobile: 'Di động',
+      jobTitle: 'Chức danh',
+      primaryDepartment: 'Phòng ban chính',
+      extraDepartments: 'Phòng ban kiêm nhiệm',
+      extraDepartmentsPlaceholder:
+        'Cho người dùng thuộc nhiều phòng ban (quyền áp dụng cho tất cả)',
+      identities: 'Đã liên kết',
+      identity: '{provider}: {id}',
+    },
+    rules: {
+      usernameRequired: 'Vui lòng nhập tên đăng nhập',
+      emailInvalid: 'Email không hợp lệ',
+    },
+    saveSuccess: 'Đã lưu',
+    updated: 'Đã cập nhật',
+    disableConfirm: 'Tắt người dùng "{name}"?',
+    disableSuccess: 'Đã tắt',
+    passwordConfirm: {
+      title: 'Bật đăng nhập bằng mật khẩu',
+      message:
+        'Sẽ bật đăng nhập bằng mật khẩu cho "{name}" với mật khẩu tạm (phải đổi ở lần đăng nhập đầu). Nếu đã có tài khoản Keycloak, mật khẩu được đặt lại thành mật khẩu tạm mới.',
+    },
+    password: {
+      title: 'Đã bật đăng nhập bằng mật khẩu',
+      created:
+        'Đã tạo tài khoản {username} trong Keycloak. Mật khẩu tạm (chỉ hiển thị một lần):',
+      reset: 'Đã đặt lại mật khẩu tài khoản {username}. Mật khẩu tạm (chỉ hiển thị một lần):',
+      hint: 'Người dùng phải đổi mật khẩu ở lần đăng nhập đầu. Chuyển giao qua kênh an toàn.',
+      acknowledge: 'Tôi đã ghi lại',
+    },
+    assign: {
+      rolesTitle: 'Gán vai trò: {username}',
+      groupsTitle: 'Gán nhóm người dùng: {username}',
+      hint: 'Chỉ quản lý gán cục bộ tại đây; vai trò và nhóm từ Keycloak đồng bộ mỗi lần đăng nhập',
+      roleOption: '{name} ({code})',
+    },
+  },
 } satisfies LocaleModule

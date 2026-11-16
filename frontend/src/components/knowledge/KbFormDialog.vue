@@ -11,8 +11,11 @@ const visible = defineModel<boolean>({ required: true })
 const emit = defineEmits<{ saved: [kb: KnowledgeBase] }>()
 const { t } = useI18n()
 
+type PolicyTemplate = 'custom' | 'controlled'
+
 const formRef = ref<FormInstance>()
 const saving = ref(false)
+const policyTemplate = ref<PolicyTemplate>('custom')
 const form = reactive({
   name: '',
   description: '' as string | null,
@@ -27,6 +30,16 @@ const rules = computed<FormRules>(() => ({
   name: [{ required: true, message: t('knowledge.kb.nameRequired'), trigger: 'blur' }],
 }))
 
+function applyTemplate(kind: PolicyTemplate): void {
+  policyTemplate.value = kind
+  if (kind === 'controlled') {
+    form.visibility = 'restricted'
+    form.watermark = true
+    form.copy_protect = true
+    form.download_permission = 'edit'
+  }
+}
+
 watch(visible, (open) => {
   if (!open) return
   form.name = props.kb?.name ?? ''
@@ -36,6 +49,7 @@ watch(visible, (open) => {
   form.copy_protect = props.kb?.copy_protect ?? false
   form.download_permission = props.kb?.download_permission ?? 'read'
   form.review_interval_days = props.kb?.review_interval_days ?? 0
+  policyTemplate.value = 'custom'
 })
 
 async function submit(): Promise<void> {
@@ -84,6 +98,19 @@ async function submit(): Promise<void> {
           <el-radio value="restricted">{{ t('knowledge.visibility.restricted') }}</el-radio>
           <el-radio value="org">{{ t('knowledge.visibility.orgAll') }}</el-radio>
         </el-radio-group>
+      </el-form-item>
+      <el-form-item v-if="!kb" :label="t('knowledge.kb.templateLabel')">
+        <el-radio-group
+          :model-value="policyTemplate"
+          data-test="kb-policy-template"
+          @update:model-value="(v) => applyTemplate(v as PolicyTemplate)"
+        >
+          <el-radio-button value="custom">{{ t('knowledge.kb.templateCustom') }}</el-radio-button>
+          <el-radio-button value="controlled">{{
+            t('knowledge.kb.templateControlled')
+          }}</el-radio-button>
+        </el-radio-group>
+        <div class="hint hint--block hint--template">{{ t('knowledge.kb.templateHint') }}</div>
       </el-form-item>
       <el-divider content-position="left">{{ t('knowledge.protect.title') }}</el-divider>
       <el-form-item :label="t('knowledge.protect.watermark')">
@@ -135,5 +162,9 @@ async function submit(): Promise<void> {
 .hint--block {
   display: block;
   margin: -6px 0 0 96px;
+}
+.hint--template {
+  margin-top: 8px;
+  margin-left: 0;
 }
 </style>

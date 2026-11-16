@@ -92,7 +92,7 @@ flowchart TB
 
 | 能力 | 缺口 |
 | --- | --- |
-| Chat 流式中途撤销权限 | Evidence ACL 仅生成前一次（**延期**） |
+| Chat 流式中途撤销权限 | 生成前 + 流式周期 + 生成后复核（`chat_acl_recheck_every_chars`）；已推送 token 仍为残余窗口 |
 | 多语种 BM25 | IK 主字段 + `.en`/`.vi` multi-field（越文暂用 standard；需全量 rebuild） |
 | Server 部署观测 | 已含 observability profile；webhook 需配置 |
 | PII 脱敏 | 实现完整，默认关闭 |
@@ -126,7 +126,7 @@ flowchart TB
 | Gap SLA + 发布后 verify | 已落地（自动 `due_at` + `resolution.verify` 任务） |
 | 外部知识源连接器 | **延期**（任务书 P1-3） |
 | OpenSearch 安全插件 / 越文专用分词 | **延期** |
-| Chat 流式中途撤权 | **延期** |
+| Chat 流式中途撤权 | 已落地（残余：已推送 token） |
 
 ---
 

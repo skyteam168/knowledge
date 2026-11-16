@@ -41,9 +41,11 @@ import {
   RefreshLeft,
   Search,
   Setting,
+  SetUp,
   Star,
   Sunny,
   SwitchButton,
+  Tools,
   TrendCharts,
   User,
   UserFilled,
@@ -60,7 +62,7 @@ import { useTagsStore } from '@/stores/tags'
 import { fetchReadiness } from '@/api/system'
 import { useTheme, type ThemeMode } from '@/composables/useTheme'
 import type { ReadinessResponse } from '@/api/types'
-import { LOCALE_LABELS, SUPPORTED_LOCALES, setLocale, type AppLocale } from '@/i18n'
+import { LOCALE_LABELS, LOCALE_SHORT, SUPPORTED_LOCALES, setLocale, type AppLocale } from '@/i18n'
 import { roleName } from '@/i18n/catalog'
 import AppLogo from './AppLogo.vue'
 import TagsView from './TagsView.vue'
@@ -73,6 +75,8 @@ const iconMap: Record<string, Component> = {
   Search,
   Star,
   Setting,
+  SetUp,
+  Tools,
   DataAnalysis,
   OfficeBuilding,
   User,
@@ -109,6 +113,40 @@ function visible(routes: MenuRoute[]): MenuRoute[] {
 const menus = computed(() => visible(menuRoutes))
 const activeMenu = computed(() => route.meta.activeMenu ?? route.path)
 
+const PLATFORM_MENU_INDEX = '/admin/platform'
+
+function opsChildren(children: MenuRoute[] | undefined): MenuRoute[] {
+  return (children ?? []).filter((c) => c.meta.menuGroup !== 'platform')
+}
+
+function platformChildren(children: MenuRoute[] | undefined): MenuRoute[] {
+  return (children ?? []).filter((c) => c.meta.menuGroup === 'platform')
+}
+
+const defaultOpeneds = computed(() => {
+  const open: string[] = []
+  for (const m of menus.value) {
+    if (!m.children?.length) continue
+    open.push(m.path)
+    const platform = platformChildren(m.children)
+    if (platform.some((c) => c.path === activeMenu.value)) {
+      open.push(PLATFORM_MENU_INDEX)
+    }
+  }
+  return open
+})
+
+const sideMenuRef = ref<{ open: (index: string) => void } | null>(null)
+
+watch(activeMenu, (path) => {
+  for (const m of menus.value) {
+    if (platformChildren(m.children).some((c) => c.path === path)) {
+      sideMenuRef.value?.open(PLATFORM_MENU_INDEX)
+      break
+    }
+  }
+})
+
 const breadcrumbs = computed(() => {
   const crumbs: string[] = []
   const target = activeMenu.value
@@ -119,7 +157,9 @@ const breadcrumbs = computed(() => {
     }
     const child = item.children?.find((c) => c.path === target)
     if (child) {
-      crumbs.push(t(item.meta.title), t(child.meta.title))
+      crumbs.push(t(item.meta.title))
+      if (child.meta.menuGroup === 'platform') crumbs.push(t('route.adminPlatform'))
+      crumbs.push(t(child.meta.title))
       break
     }
   }
@@ -279,10 +319,11 @@ onBeforeUnmount(() => {
       </div>
       <el-scrollbar class="layout__menu-scroll">
         <el-menu
+          ref="sideMenuRef"
           :default-active="activeMenu"
           :collapse="appStore.sidebarCollapsed"
           :collapse-transition="false"
-          :default-openeds="menus.filter((m) => m.children).map((m) => m.path)"
+          :default-openeds="defaultOpeneds"
           router
           class="layout__menu"
           data-test="side-menu"
@@ -293,10 +334,32 @@ onBeforeUnmount(() => {
                 <el-icon><component :is="iconMap[item.meta.icon]" /></el-icon>
                 <span>{{ t(item.meta.title) }}</span>
               </template>
-              <el-menu-item v-for="child in item.children" :key="child.path" :index="child.path">
+              <el-menu-item
+                v-for="child in opsChildren(item.children)"
+                :key="child.path"
+                :index="child.path"
+              >
                 <el-icon><component :is="iconMap[child.meta.icon]" /></el-icon>
                 <template #title>{{ t(child.meta.title) }}</template>
               </el-menu-item>
+              <el-sub-menu
+                v-if="platformChildren(item.children).length"
+                :index="PLATFORM_MENU_INDEX"
+                data-test="menu-admin-platform"
+              >
+                <template #title>
+                  <el-icon><Tools /></el-icon>
+                  <span>{{ t('route.adminPlatform') }}</span>
+                </template>
+                <el-menu-item
+                  v-for="child in platformChildren(item.children)"
+                  :key="child.path"
+                  :index="child.path"
+                >
+                  <el-icon><component :is="iconMap[child.meta.icon]" /></el-icon>
+                  <template #title>{{ t(child.meta.title) }}</template>
+                </el-menu-item>
+              </el-sub-menu>
             </el-sub-menu>
             <el-menu-item v-else :index="item.path" :data-guide="`menu-${item.name}`">
               <el-icon><component :is="iconMap[item.meta.icon]" /></el-icon>
@@ -398,7 +461,7 @@ onBeforeUnmount(() => {
               :title="t('layout.language')"
               data-test="locale-toggle"
             >
-              {{ locale === 'en' ? 'EN' : '中' }}
+              {{ LOCALE_SHORT[(locale as AppLocale) || 'zh-CN'] }}
             </button>
             <template #dropdown>
               <el-dropdown-menu>
@@ -741,5 +804,25 @@ onBeforeUnmount(() => {
   min-height: 0;
   overflow: auto;
   padding: var(--ekb-content-pad);
+}
+
+@media (max-width: 768px) {
+  .layout__aside {
+    position: fixed;
+    z-index: 40;
+    height: 100%;
+    transform: translateX(0);
+    box-shadow: 0 0 24px rgb(0 0 0 / 18%);
+  }
+  .layout--collapsed .layout__aside {
+    transform: translateX(-100%);
+    box-shadow: none;
+  }
+  .layout__main {
+    padding: 12px;
+  }
+  .layout__user-name {
+    display: none;
+  }
 }
 </style>

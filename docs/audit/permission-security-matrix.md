@@ -1,7 +1,7 @@
 # 权限与安全矩阵
 
 > 基于源码：`services/authz/*`、`services/knowledge/access.py`、`retrieval/filters.py`、`services/open_api/auth.py`。  
-> 冲突规则：**仅允许列表**；同一资源多条 grant 取最高权限（`read < edit < manage`）；无显式 DENY。
+> 冲突规则：allow-list + 显式 DENY（`resource_acl.effect`）；多条 allow 取最高权限（`read < edit < manage`）；**DENY 优先于 allow 与 org 可见**（超管除外；KB manage 可越过文档 DENY 以修复 ACL）。详见 [`docs/adr/0002-explicit-acl-deny.md`](../adr/0002-explicit-acl-deny.md)。
 
 ---
 
@@ -55,7 +55,7 @@
 | 引用打开 | 消息归属校验 + **当前**文档 READ |
 | 检索缓存 | key 含 org + principals_hash + generation；命中后仍 hydrate |
 | ACL 变更 | Outbox → 刷索引 principals → `invalidate_org` |
-| 流式问答 | 生成前 Evidence ACL 一次；生成中途撤销不中断（已知窗口） |
+| 流式问答 | 生成前 + 流式每 N 字 + 生成后 Evidence ACL；中途撤权中止续写并以拒答落库。**残余窗口**：撤权检测前已推送给客户端的 token 无法收回 |
 | 水印页签名 URL | 签发时有权；访问时应重验文档 READ（见修复） |
 
 ---
@@ -87,6 +87,6 @@ Key 轮换：新建 key + 吊销旧 key（无独立 rotate API）。
 
 ## 7. 已知缺口（跟踪）
 
-1. 无显式 DENY / 无 ABAC 密级（P0-3）。  
+1. ABAC 密级已部分落地（B1）；显式 DENY 已落地（B3 / ADR 0002）。  
 2. 流式生成中 ACL 重绑（P1）。  
 3. MinIO 预签名 GET 在对象层不重验 ACL（缩短 TTL + 水印页已覆盖敏感预览）。

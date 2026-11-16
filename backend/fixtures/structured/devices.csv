@@ -1,0 +1,3 @@
+external_id,name,status,location
+EQ-CSV-01,CSV导入飞织机,active,织造车间B
+EQ-CSV-02,CSV导入定型机,active,整理车间

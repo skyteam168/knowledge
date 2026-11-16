@@ -28,6 +28,7 @@ x-backend-env: &backend-env
   QDRANT_API_KEY: ${QDRANT_API_KEY:?}
   OPENSEARCH_URL: http://opensearch:9200
   OPENSEARCH_REPLICAS: ${OPENSEARCH_REPLICAS:-0}
+  OPENSEARCH_SYNONYMS_FILE: /opensearch-analysis/synonyms.txt
   KEYCLOAK_URL: http://keycloak:8080
   KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL:?}
   KEYCLOAK_REALM: ${KEYCLOAK_REALM:-ekb}
@@ -76,8 +77,11 @@ x-backend-env: &backend-env
   RATE_LIMIT_CHAT_ORG_REQUESTS: ${RATE_LIMIT_CHAT_ORG_REQUESTS:-300}
   VIRUS_SCAN_BACKEND: ${VIRUS_SCAN_BACKEND:-none}
   CLAMAV_HOST: ${CLAMAV_HOST:-clamav}
+  CLAMAV_PORT: ${CLAMAV_PORT:-3310}
   PII_MASK_ON_INGEST: ${PII_MASK_ON_INGEST:-false}
   PII_MASK_ON_OUTPUT: ${PII_MASK_ON_OUTPUT:-false}
+  # pydantic-settings expects a JSON array for list[str].
+  PII_TYPES: ${PII_TYPES:-["phone","id_card","bank_card"]}
   # Observability.
   METRICS_TOKEN: ${METRICS_TOKEN:?}
   OTEL_ENABLED: ${OTEL_ENABLED:-false}
@@ -285,6 +289,8 @@ services:
     environment:
       <<: *backend-env
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-4}
+    volumes:
+      - ./opensearch/analysis:/opensearch-analysis
     depends_on:
       migrate:
         condition: service_completed_successfully

@@ -59,32 +59,63 @@ class PrincipalDirectory:
         return result
 
     async def validate(self, entries: list[AclEntryIn]) -> list[AclEntryIn]:
-        """Drop duplicates (keeping the highest permission) and reject unknown principals."""
+        """Merge allow (highest permission) and deny (one per principal); reject unknown ids."""
         levels = {"read": 1, "edit": 2, "manage": 3}
-        merged: dict[tuple[str, str], AclEntryIn] = {}
+        allows: dict[tuple[str, str], AclEntryIn] = {}
+        denies: dict[tuple[str, str], AclEntryIn] = {}
         for entry in entries:
+            effect = entry.effect or "allow"
             key = (entry.principal_type, entry.principal_id)
-            current = merged.get(key)
+            if effect == "deny":
+                # DENY blocks all access; permission is stored as read for uniqueness.
+                denies[key] = AclEntryIn(
+                    principal_type=entry.principal_type,
+                    principal_id=entry.principal_id,
+                    permission="read",
+                    effect="deny",
+                )
+                continue
+            current = allows.get(key)
             if current is None or levels[entry.permission] > levels[current.permission]:
-                merged[key] = entry
-        known = await self.names(merged.keys())
-        missing = [f"{t}:{i}" for t, i in merged if (t, i) not in known]
+                allows[key] = AclEntryIn(
+                    principal_type=entry.principal_type,
+                    principal_id=entry.principal_id,
+                    permission=entry.permission,
+                    effect="allow",
+                )
+        merged = list(allows.values()) + list(denies.values())
+        known = await self.names((e.principal_type, e.principal_id) for e in merged)
+        missing = [
+            f"{e.principal_type}:{e.principal_id}"
+            for e in merged
+            if (e.principal_type, e.principal_id) not in known
+        ]
         if missing:
             raise ValidationAppError("Unknown ACL principals", detail={"principals": missing})
-        return list(merged.values())
+        return merged
 
-    async def describe(self, entries: Iterable[tuple[str, str, str]]) -> list[AclEntryOut]:
+    async def describe(
+        self, entries: Iterable[tuple[str, str, str] | tuple[str, str, str, str]]
+    ) -> list[AclEntryOut]:
         rows = list(entries)
-        names = await self.names((t, i) for t, i, _ in rows)
-        users = await self._users(sorted({i for t, i, _ in rows if t == "user"}))
+        normalized: list[tuple[str, str, str, str]] = []
+        for row in rows:
+            if len(row) == 4:
+                normalized.append(row)  # type: ignore[arg-type]
+            else:
+                t, i, p = row  # type: ignore[misc]
+                normalized.append((t, i, p, "allow"))
+        names = await self.names((t, i) for t, i, _, _ in normalized)
+        users = await self._users(sorted({i for t, i, _, _ in normalized if t == "user"}))
         out: list[AclEntryOut] = []
-        for t, i, p in rows:
+        for t, i, p, effect in normalized:
             user = users.get(i) if t == "user" else None
             out.append(
                 AclEntryOut(
                     principal_type=t,
                     principal_id=i,
-                    permission=p,
+                    permission=p,  # type: ignore[arg-type]
+                    effect=effect,  # type: ignore[arg-type]
                     principal_name=names.get((t, i)),
                     principal_detail=user_detail(user) if user else None,
                     principal_active=user.is_active if user else True,

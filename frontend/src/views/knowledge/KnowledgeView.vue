@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { deleteKnowledgeBase, listKnowledgeBases } from '@/api/knowledge'
 import type { KnowledgeBase } from '@/api/types'
+import EmptyState from '@/components/EmptyState.vue'
 import KbAclDialog from '@/components/knowledge/KbAclDialog.vue'
 import KbFormDialog from '@/components/knowledge/KbFormDialog.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -105,10 +106,16 @@ onMounted(load)
       v-loading="loading"
       :data="rows"
       data-guide="kb-table"
-      :empty-text="t('knowledge.kb.empty')"
       row-class-name="clickable"
       @row-click="(row: KnowledgeBase) => open(row)"
     >
+      <template #empty>
+        <EmptyState
+          :description="t('knowledge.kb.empty')"
+          :action-label="t('knowledge.kb.create')"
+          @action="openCreate"
+        />
+      </template>
       <el-table-column prop="name" :label="t('common.name')" min-width="160">
         <template #default="{ row }">
           <el-link type="primary" :underline="false">{{ (row as KnowledgeBase).name }}</el-link>

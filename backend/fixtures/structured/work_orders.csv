@@ -1,0 +1,3 @@
+external_id,device_external_id,title,status,opened_at
+WO-CSV-001,EQ-CSV-01,CSV织机点检,open,2026-11-10T08:00:00+00:00
+WO-CSV-002,EQ-CSV-02,CSV定型机润滑,closed,2026-11-11T09:30:00+00:00

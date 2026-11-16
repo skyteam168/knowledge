@@ -16,6 +16,7 @@ from app.llm.mock import mock_answer
 from app.models import KnowledgeGap, Message, QaTrace
 from app.retrieval.pipeline import DocumentInfo
 from app.services.chat import prompt
+from app.services.chat.acl_check import AclCheckResult, EvidenceAclChecker
 from app.services.chat.evidence import Evidence, EvidenceKind, Hit
 from app.services.chat.expansion import ExpansionResult, KnowledgeExpansion
 from app.services.indexing.runtime import IndexingRuntime
@@ -476,6 +477,49 @@ async def test_acl_recheck_drops_evidence_the_user_cannot_read(
         }
     ]
     assert trace["steps"]["acl"]["kept"] == trace["steps"]["acl"]["checked"] - 1
+
+
+async def test_midstream_acl_revoke_aborts_generation(
+    api: httpx.AsyncClient,
+    corpus: dict[str, Any],
+    chat: ScriptedChat,
+    answerable: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Simulate ACL revoke after pre-generate check: mid-stream recheck empties evidence."""
+    monkeypatch.setattr(answerable, "chat_acl_recheck_every_chars", 4)
+    original = EvidenceAclChecker.check
+    calls = {"n": 0}
+
+    async def revoke_after_prompt(
+        self: EvidenceAclChecker, evidences: Sequence[Evidence]
+    ) -> AclCheckResult:
+        calls["n"] += 1
+        result = await original(self, list(evidences))
+        # 1 = pre-generate; 2+ = mid/post stream — drop everything to force abort.
+        if calls["n"] >= 2 and result.kept:
+            dropped = [
+                {
+                    "document_id": ev.document.id,
+                    "chunk_ids": ev.chunk_ids,
+                    "reasons": ["no_access"],
+                }
+                for ev in result.kept
+            ]
+            return AclCheckResult(kept=[], dropped=dropped)
+        return result
+
+    monkeypatch.setattr(EvidenceAclChecker, "check", revoke_after_prompt)
+    chat.answer = "年假为 5 天，需提前申请，详细说明如下[1]。"
+    conv = await new_conversation(api, CAROL)
+    result = await ask(api, CAROL, conv["id"], "年假有几天？")
+    done = result["done"]
+
+    assert prompt.ACL_REVOKED_ANSWER in done["answer"]
+    assert done["grounding"] == "no_evidence"
+    trace = await qa_trace(api, done["trace_id"])
+    assert trace["steps"].get("acl_midstream") or trace["steps"].get("acl_poststream")
+    assert calls["n"] >= 2
 
 
 async def test_multi_turn_rewrite_and_subqueries(

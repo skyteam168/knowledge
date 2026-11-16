@@ -38,6 +38,7 @@ ACL_MODULES = {
 ACL_TESTS = {
     "test_restricted_scope_without_readable_kb_refuses",
     "test_acl_recheck_drops_evidence_the_user_cannot_read",
+    "test_midstream_acl_revoke_aborts_generation",
     "test_chat_requires_permission",
     "test_profiles_require_admin_permission",
     "test_acl_change_updates_payload_without_reembedding",

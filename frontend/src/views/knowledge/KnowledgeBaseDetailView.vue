@@ -4,9 +4,16 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
-import { deleteDocument, getKnowledgeBase, listDocuments, reprocessDocument } from '@/api/knowledge'
+import {
+  batchReprocessDocuments,
+  deleteDocument,
+  getKnowledgeBase,
+  listDocuments,
+  reprocessDocument,
+} from '@/api/knowledge'
 import type { DocumentStatus, KbDocument, KnowledgeBase } from '@/api/types'
 import { recordView } from '@/api/collab'
+import EmptyState from '@/components/EmptyState.vue'
 import FavoriteButton from '@/components/collab/FavoriteButton.vue'
 import DocumentAclDialog from '@/components/knowledge/DocumentAclDialog.vue'
 import DocumentUploader from '@/components/knowledge/DocumentUploader.vue'
@@ -39,12 +46,15 @@ const query = reactive({
   status: '' as DocumentStatus | '',
   review: '' as ReviewFilter | '',
   mine: false,
+  missingPages: false,
   page: 1,
   size: 20,
 })
 const rows = ref<KbDocument[]>([])
 const total = ref(0)
 const loading = ref(false)
+const selected = ref<KbDocument[]>([])
+const batching = ref(false)
 let timer: ReturnType<typeof setTimeout> | null = null
 
 const canEdit = computed(() => atLeast(kb.value?.my_permission, 'edit'))
@@ -65,12 +75,24 @@ async function loadDocuments(silent = false): Promise<void> {
       status: query.status || undefined,
       review: query.review || undefined,
       mine: query.mine || undefined,
+      missing_page_images: query.missingPages || undefined,
     })
     rows.value = page.items
     total.value = page.total
   } finally {
     loading.value = false
     schedulePoll()
+  }
+}
+
+function pageImageInfo(doc: KbDocument): { count: number | null; error: string | null } {
+  const parse = (doc.metadata?.parse ?? null) as
+    | { page_images?: number; page_image_error?: string; page_image_expected?: boolean }
+    | null
+  if (!parse) return { count: null, error: null }
+  return {
+    count: typeof parse.page_images === 'number' ? parse.page_images : null,
+    error: parse.page_image_error || null,
   }
 }
 
@@ -117,6 +139,39 @@ async function reprocess(doc: KbDocument): Promise<void> {
   await reprocessDocument(doc.id)
   ElMessage.success(t('knowledge.doc.reprocessed'))
   await loadDocuments(true)
+}
+
+function onSelectionChange(rows: KbDocument[]): void {
+  selected.value = rows
+}
+
+async function batchReprocess(): Promise<void> {
+  if (!selected.value.length) {
+    ElMessage.warning(t('knowledge.doc.batchReprocessNeedSelect'))
+    return
+  }
+  await ElMessageBox.confirm(
+    t('knowledge.doc.batchReprocessConfirm', { count: selected.value.length }),
+    t('common.tip'),
+    { type: 'warning' },
+  )
+  batching.value = true
+  try {
+    const result = await batchReprocessDocuments(props.kbId, {
+      document_ids: selected.value.map((d) => d.id),
+      limit: selected.value.length,
+    })
+    ElMessage.success(
+      t('knowledge.doc.batchReprocessOk', {
+        queued: result.queued.length,
+        skipped: result.skipped.length,
+      }),
+    )
+    selected.value = []
+    await loadDocuments(true)
+  } finally {
+    batching.value = false
+  }
 }
 
 async function remove(doc: KbDocument): Promise<void> {
@@ -255,8 +310,24 @@ onBeforeUnmount(() => {
           }}</el-checkbox>
         </el-form-item>
         <el-form-item>
+          <el-checkbox
+            v-model="query.missingPages"
+            data-test="missing-pages-filter"
+            @change="search"
+            >{{ t('knowledge.doc.missingPages') }}</el-checkbox
+          >
+        </el-form-item>
+        <el-form-item>
           <el-button type="primary" native-type="submit">{{ t('knowledge.kb.query') }}</el-button>
           <el-button @click="loadDocuments()">{{ t('common.refresh') }}</el-button>
+          <el-button
+            v-if="canUpload"
+            :loading="batching"
+            data-test="batch-reprocess"
+            @click="batchReprocess"
+          >
+            {{ t('knowledge.doc.batchReprocess') }}
+          </el-button>
         </el-form-item>
       </el-form>
 
@@ -264,8 +335,12 @@ onBeforeUnmount(() => {
         v-loading="loading"
         :data="rows"
         data-guide="kb-docs"
-        :empty-text="t('knowledge.doc.empty')"
+        @selection-change="onSelectionChange"
       >
+        <template #empty>
+          <EmptyState :description="t('knowledge.doc.empty')" />
+        </template>
+        <el-table-column v-if="canUpload" type="selection" width="42" />
         <el-table-column :label="t('knowledge.doc.title')" min-width="200">
           <template #default="{ row }">
             <el-link type="primary" :underline="false" @click="openDocument(row as KbDocument)">
@@ -305,6 +380,21 @@ onBeforeUnmount(() => {
         </el-table-column>
         <el-table-column :label="t('knowledge.doc.chunks')" width="70">
           <template #default="{ row }">{{ (row as KbDocument).chunk_count ?? '-' }}</template>
+        </el-table-column>
+        <el-table-column :label="t('knowledge.doc.pageImages')" width="100">
+          <template #default="{ row }">
+            <template v-if="pageImageInfo(row as KbDocument).error">
+              <el-tooltip :content="pageImageInfo(row as KbDocument).error!" placement="top">
+                <el-tag type="danger" size="small" effect="plain">{{
+                  t('knowledge.doc.pageImageError')
+                }}</el-tag>
+              </el-tooltip>
+            </template>
+            <span v-else-if="pageImageInfo(row as KbDocument).count != null">{{
+              pageImageInfo(row as KbDocument).count
+            }}</span>
+            <span v-else class="sub">-</span>
+          </template>
         </el-table-column>
         <el-table-column :label="t('knowledge.doc.tags')" min-width="120">
           <template #default="{ row }">

@@ -61,7 +61,21 @@ export const KO_TYPE_LABEL: Record<KoType, string> = labelMap<KoType>('koType', 
   'qa',
   'card',
   'policy_summary',
+  'device',
+  'process',
+  'defect',
+  'policy',
+  'it_term',
 ])
+
+export const KO_RELATION_TYPE_LABEL = labelMap('koRelationType', [
+  'related_to',
+  'part_of',
+  'depends_on',
+  'causes',
+  'mitigates',
+  'applies_to',
+] as const)
 
 export const KO_STATUS_META: Record<KoStatus, Meta> = metaMap('koStatus', {
   draft: 'info',

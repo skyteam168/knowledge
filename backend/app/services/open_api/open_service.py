@@ -25,6 +25,10 @@ from app.schemas.open_api import (
     OpenChatIn,
     OpenChatOut,
     OpenChunkOut,
+    OpenEntityReadIn,
+    OpenEntityReadOut,
+    OpenGraphTraverseIn,
+    OpenGraphTraverseOut,
     OpenKbOut,
     OpenRetrieveIn,
     OpenRetrieveOut,
@@ -43,6 +47,7 @@ from app.services.knowledge.protection import (
     protection_of,
 )
 from app.services.open_api.auth import ApiCaller
+from app.services.open_api.entity_service import OpenEntityService
 from app.services.search.search_service import SearchParams, SearchService
 from app.services.security.pii import PiiMasker
 
@@ -314,3 +319,14 @@ class OpenApiService(BaseService):
             ),
             outcome,
         )
+
+    # ---- entity / graph ----------------------------------------------------------------
+
+    def _entities(self) -> OpenEntityService:
+        return OpenEntityService(self.session, self.ctx, self.authz_cache, self.caller)
+
+    async def entity_read(self, data: OpenEntityReadIn) -> OpenEntityReadOut:
+        return await self._entities().entity_read(data)
+
+    async def graph_traverse(self, data: OpenGraphTraverseIn) -> OpenGraphTraverseOut:
+        return await self._entities().graph_traverse(data)

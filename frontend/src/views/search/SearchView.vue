@@ -14,6 +14,7 @@ import type {
 } from '@/api/types'
 import { CURATION_PERMISSIONS } from '@/router/routes'
 import { useAuthStore } from '@/stores/auth'
+import EmptyState from '@/components/EmptyState.vue'
 import { formatDateTime } from '@/utils/format'
 import {
   dayRangeToParams,
@@ -163,6 +164,7 @@ function scoreRows(hit: SearchHit): StageRow[] {
   return [
     { stage: 'Dense', rank: formatRank(hit.ranks.dense), score: formatScore(hit.scores.dense) },
     { stage: 'BM25', rank: formatRank(hit.ranks.bm25), score: formatScore(hit.scores.bm25) },
+    { stage: 'Graph', rank: formatRank(hit.ranks.graph), score: formatScore(hit.scores.graph) },
     { stage: 'RRF', rank: formatRank(hit.ranks.rrf), score: formatScore(hit.scores.rrf, 6) },
     {
       stage: 'Rerank',
@@ -414,7 +416,7 @@ onActivated(() => {
         "
       />
 
-      <el-empty v-if="!result.items.length" :description="t('search.empty')" />
+      <EmptyState v-if="!result.items.length" :description="t('search.empty')" />
       <div v-for="hit in result.items" :key="hit.chunk_id" class="hit">
         <div
           class="hit-main"

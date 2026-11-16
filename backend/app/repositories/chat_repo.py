@@ -178,3 +178,41 @@ class ChunkRepository:
             .order_by(Chunk.seq)
         )
         return list((await self.session.execute(stmt)).scalars())
+
+    async def children_sharing_entities(
+        self,
+        org_id: str,
+        *,
+        document_ids: Sequence[str],
+        entity_ids: Sequence[str],
+        exclude_ids: Sequence[str],
+        limit: int,
+    ) -> list[Chunk]:
+        """Child chunks in the given documents that share any of `entity_ids`.
+
+        Portable filter (SQLite + PG): load candidates for those docs, intersect in Python.
+        """
+        if not document_ids or not entity_ids or limit <= 0:
+            return []
+        wanted = set(entity_ids)
+        exclude = set(exclude_ids)
+        stmt = (
+            select(Chunk)
+            .where(
+                Chunk.org_id == org_id,
+                Chunk.document_id.in_(list(set(document_ids))),
+                Chunk.level == INDEXED_CHUNK_LEVEL,
+            )
+            .order_by(Chunk.document_id, Chunk.seq)
+        )
+        out: list[Chunk] = []
+        for chunk in (await self.session.execute(stmt)).scalars():
+            if chunk.id in exclude:
+                continue
+            ids = set(chunk.entity_ids or [])
+            if not ids.intersection(wanted):
+                continue
+            out.append(chunk)
+            if len(out) >= limit:
+                break
+        return out

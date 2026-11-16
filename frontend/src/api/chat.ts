@@ -19,6 +19,7 @@ import type {
   MessageFeedback,
   Page,
   PageParams,
+  RelatedConcept,
 } from './types'
 
 const BASE = import.meta.env.VITE_API_BASE_URL ?? '/api/v1'
@@ -46,6 +47,7 @@ export interface AskHandlers {
   onStep?: (data: ChatStep) => void
   onToken?: (text: string) => void
   onCitations?: (citations: Citation[]) => void
+  onConcepts?: (items: RelatedConcept[]) => void
   onDone?: (data: ChatDoneEvent) => void
   onError?: (data: ChatErrorEvent) => void
 }
@@ -69,6 +71,9 @@ export function dispatchChatEvent(event: SseEvent, handlers: AskHandlers): void 
       break
     case 'citations':
       handlers.onCitations?.((data as { citations: Citation[] }).citations)
+      break
+    case 'concepts':
+      handlers.onConcepts?.((data as { items: RelatedConcept[] }).items ?? [])
       break
     case 'done':
       handlers.onDone?.(data as ChatDoneEvent)

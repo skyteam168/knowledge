@@ -6,6 +6,7 @@
 | --- | --- | --- |
 | 检索 `retrieve` | `POST /api/v1/open/retrieve` | 返回授权范围内最相关的原文片段及出处，调用方自己组织回答 |
 | 问答 `chat` | `POST /api/v1/open/chat` | 直接返回带 `[n]` 引用的回答，支持多轮与 SSE 流式 |
+| 概念/图 `entity` | `POST /api/v1/open/entity/read`、`/graph/traverse` | 读术语/外部编号映射，沿知识条目关系多跳（仅元数据） |
 | MCP `mcp` | `POST /api/v1/open/mcp` | 供支持 MCP 的 Agent（Cursor、Claude、各类 Agent 框架）以工具方式调用 |
 
 ---
@@ -228,6 +229,24 @@ curl -N -X POST https://kb.example.com/api/v1/open/chat \
   -d '{"question": "如何远程查看服务器故障信息？", "stream": true}'
 ```
 
+### 3.45 概念/图（需开通「概念/图」`entity`）
+
+**读取实体** `POST /entity/read` — 三选一查询：`entity_id`、`name`（规范名/别名）、或 `object_type` + `external_id`（可选 `source_id`）。返回术语元数据、可选结构化镜像行，以及授权范围内可读的关联知识条目（仅 id/title，无正文）。
+
+```bash
+curl -X POST https://kb.example.com/api/v1/open/entity/read \
+  -H 'X-API-Key: <KEY>' -H 'Content-Type: application/json' \
+  -d '{"object_type": "device", "external_id": "EQ-LOOM-01"}'
+```
+
+**图遍历** `POST /graph/traverse` — 从已发布知识条目 `ko_id` 出发，沿关系双向多跳（`max_hops` 1~2），返回授权库内可读邻居。
+
+```bash
+curl -X POST https://kb.example.com/api/v1/open/graph/traverse \
+  -H 'X-API-Key: <KEY>' -H 'Content-Type: application/json' \
+  -d '{"ko_id": "<KO_ID>", "max_hops": 2}'
+```
+
 ### 3.5 错误码
 
 错误响应统一为 `{code, message, detail, trace_id}`。
@@ -263,6 +282,8 @@ curl -N -X POST https://kb.example.com/api/v1/open/chat \
 | `list_knowledge_bases` | 仅 MCP | 无 | `{knowledge_bases: [{id, name, description}]}` |
 | `search_knowledge` | MCP + 检索 | `query`（必填）、`kb_ids`、`top_k`（1~20，默认 5） | 同 `/retrieve` 响应 |
 | `ask_knowledge` | MCP + 问答 | `question`（必填）、`kb_ids`、`conversation_id` | 同 `/chat` 非流式响应 |
+| `entity_read` | MCP + 概念/图 | `entity_id` 或 `name` 或 `object_type`+`external_id`（三选一） | 同 `/entity/read` |
+| `graph_traverse` | MCP + 概念/图 | `ko_id`（必填）、`max_hops`（1~2）、`relation_types`、`kb_ids` | 同 `/graph/traverse` |
 
 - 支持的方法：`initialize`、`notifications/*`、`ping`、`tools/list`、`tools/call`，支持 JSON-RPC 批量请求。
 - 工具结果同时提供 `content`（JSON 文本，给模型阅读）和 `structuredContent`（结构化数据）。
@@ -278,6 +299,49 @@ curl -N -X POST https://kb.example.com/api/v1/open/chat \
 | -32603 | 服务端内部错误 |
 
 密钥、应用状态、IP、限流的校验发生在 MCP 处理之前，失败时返回第 3.5 节的 HTTP 错误。
+
+### 4.15 概念卡片 / 关系图：如何消费 `structuredContent`
+
+开放平台**不返回 UI 组件**，只返回元数据。MCP 工具结果里：
+
+- `content[].text`：JSON 字符串，供模型阅读；
+- `structuredContent`：同构对象，供宿主渲染。
+
+**概念卡片**（`entity_read`）建议字段映射：
+
+| 区块 | 字段 |
+| --- | --- |
+| 标题 | `terminology.canonical_name`（无则用 `mirror.label`） |
+| 副标题 | `terminology.entity_type` · `mirror.external_id` |
+| 别名 chips | `terminology.aliases` |
+| 关联知识 | `knowledge_objects[]` → 链到站内 KO 或再调 `ask_knowledge` |
+
+伪代码（任意前端）：
+
+```js
+function renderEntityCard(sc) {
+  const title = sc.terminology?.canonical_name ?? sc.mirror?.label ?? "未知概念";
+  const aliases = sc.terminology?.aliases ?? [];
+  const kos = sc.knowledge_objects ?? [];
+  return { title, subtitle: sc.mirror?.external_id, aliases, kos };
+}
+```
+
+**关系小图**（`graph_traverse`）建议：以 `seed` 为中心节点，`neighbors[]` 为周边（`hops` 可映射边长或环层）；节点标签用 `title`，点击再用 `ko_id` 拉详情。节点建议封顶约 20（接口 `limit` 已约束）。
+
+```js
+function toGraph(sc) {
+  const nodes = [{ id: sc.seed.id, name: sc.seed.title, category: "seed" }];
+  const links = [];
+  for (const n of sc.neighbors) {
+    nodes.push({ id: n.ko_id, name: n.title, category: `h${n.hops}` });
+    links.push({ source: n.seed_id, target: n.ko_id, hops: n.hops });
+  }
+  return { nodes, links };
+}
+```
+
+站内问答专家默认**不**嵌入大图；管理端「术语表 → 关系预览」提供轻量图供运营核对。外部 Agent 应自行按上表渲染，或仅让模型用自然语言复述。
 
 ### 4.2 客户端配置
 
@@ -369,7 +433,7 @@ IP 白名单相关的部署要求：
 | 403 `IP_NOT_ALLOWED` 但 IP 确实在白名单 | 看 `detail.ip`：如果是代理地址，按上文配置 nginx / `OPEN_API_TRUSTED_PROXIES` |
 | `whoami` 的 `kbs` 为空或缺少某个库 | 代理身份在该库中没有读权限：给该部门 / 组 / 角色授权，或把库设为「组织内所有人可读」 |
 | 检索结果为空 | 用「授权预览」以同样身份检索对比；确认文档已索引完成 |
-| MCP 客户端看不到某个工具 | 应用需同时开通 MCP 和对应能力（检索 / 问答） |
+| MCP 客户端看不到某个工具 | 应用需同时开通 MCP 和对应能力（检索 / 问答 / 概念图） |
 
 ---
 

@@ -15,6 +15,7 @@ class ResourceAcl(IdMixin, TenantMixin, Base):
             "principal_type",
             "principal_id",
             "permission",
+            "effect",
             name="uq_resource_acl_entry",
         ),
         Index("ix_resource_acl_resource", "org_id", "resource_type", "resource_id"),
@@ -26,5 +27,7 @@ class ResourceAcl(IdMixin, TenantMixin, Base):
     principal_type: Mapped[str] = mapped_column(String(16), nullable=False)
     principal_id: Mapped[str] = mapped_column(String(64), nullable=False)
     permission: Mapped[str] = mapped_column(String(16), nullable=False)
+    # allow = grant permission; deny = block access for matching principals (deny wins).
+    effect: Mapped[str] = mapped_column(String(8), default="allow", nullable=False)
     created_by: Mapped[str | None] = mapped_column(String(32))
     created_at: Mapped[datetime] = created_at_column()

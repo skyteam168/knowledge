@@ -32,6 +32,20 @@ def in_effect(doc: Document, now: datetime | None = None) -> bool:
 # External / open-platform export: classifications at or above this need tighter limits.
 EXTERNAL_RESTRICTED = frozenset({"confidential", "restricted", "secret"})
 
+# Retrieval / Q&A hydrate: elevated ACL required (not mere read).
+RETRIEVAL_REQUIRES_EDIT = frozenset({"restricted"})
+RETRIEVAL_REQUIRES_MANAGE = frozenset({"secret"})
+
 
 def restricts_external_export(classification: str | None) -> bool:
     return (classification or "internal") in EXTERNAL_RESTRICTED
+
+
+def retrieval_min_acl(classification: str | None) -> str | None:
+    """Return required ACL permission name for retrieval, or None if read is enough."""
+    value = classification or "internal"
+    if value in RETRIEVAL_REQUIRES_MANAGE:
+        return "manage"
+    if value in RETRIEVAL_REQUIRES_EDIT:
+        return "edit"
+    return None

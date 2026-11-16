@@ -32,15 +32,20 @@ watch(
   },
 )
 
-const running = computed(() => props.steps.find((s) => s.status === 'running'))
-const failed = computed(() => props.steps.some((s) => s.status === 'failed'))
-const totalMs = computed(() => props.steps.reduce((sum, s) => sum + (s.ms ?? 0), 0))
+/** Pipeline stages only — persist-only extras (e.g. concepts) stay out of the panel. */
+const pipeline = computed(() =>
+  props.steps.filter((s) => (STEPS as string[]).includes(s.step)),
+)
+
+const running = computed(() => pipeline.value.find((s) => s.status === 'running'))
+const failed = computed(() => pipeline.value.some((s) => s.status === 'failed'))
+const totalMs = computed(() => pipeline.value.reduce((sum, s) => sum + (s.ms ?? 0), 0))
 
 const title = computed(() => {
   if (running.value) return t('assistant.steps.running', { label: stepLabel(running.value.step) })
   if (failed.value) return t('assistant.steps.interrupted')
   return t('assistant.steps.completed', {
-    count: props.steps.length,
+    count: pipeline.value.length,
     time: seconds(totalMs.value),
   })
 })
@@ -108,7 +113,7 @@ function summary(step: ChatStep): string[] {
 </script>
 
 <template>
-  <div v-if="steps.length" class="thinking" :class="{ open }" data-test="thinking">
+  <div v-if="pipeline.length" class="thinking" :class="{ open }" data-test="thinking">
     <button type="button" class="thinking__head" @click="open = !open">
       <el-icon v-if="running" class="is-loading thinking__icon"><Loading /></el-icon>
       <el-icon v-else-if="failed" class="thinking__icon failed"><CircleCloseFilled /></el-icon>
@@ -117,7 +122,7 @@ function summary(step: ChatStep): string[] {
       <el-icon class="thinking__arrow"><ArrowDown /></el-icon>
     </button>
     <ol v-show="open" class="thinking__list">
-      <li v-for="s in steps" :key="s.step" class="step" :class="s.status">
+      <li v-for="s in pipeline" :key="s.step" class="step" :class="s.status">
         <span class="step__dot" />
         <div class="step__body">
           <div class="step__line">

@@ -8,6 +8,7 @@ from typing import Any
 TRUNCATABLE: tuple[tuple[str, ...], ...] = (
     ("routes", "dense", "hits"),
     ("routes", "sparse", "hits"),
+    ("routes", "graph", "hits"),
     ("fusion", "candidates"),
     ("rerank", "scores"),
     ("results",),

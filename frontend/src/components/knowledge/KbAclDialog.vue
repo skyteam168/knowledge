@@ -34,10 +34,11 @@ async function submit(): Promise<void> {
   try {
     await setKnowledgeBaseAcl(props.kb.id, {
       visibility: visibility.value,
-      entries: entries.value.map(({ principal_type, principal_id, permission }) => ({
+      entries: entries.value.map(({ principal_type, principal_id, permission, effect }) => ({
         principal_type,
         principal_id,
-        permission,
+        permission: effect === 'deny' ? 'read' : permission,
+        effect: effect ?? 'allow',
       })),
     })
     ElMessage.success(t('knowledge.acl.updated'))

@@ -291,6 +291,17 @@ const guide = computed(() => {
       null,
       2,
     ),
+    entity: [
+      `curl -X POST '${base}/entity/read' \\`,
+      `  -H 'X-API-Key: <YOUR_API_KEY>' \\`,
+      `  -H 'Content-Type: application/json' \\`,
+      `  -d '{"object_type":"device","external_id":"EQ-LOOM-01"}'`,
+      '',
+      `curl -X POST '${base}/graph/traverse' \\`,
+      `  -H 'X-API-Key: <YOUR_API_KEY>' \\`,
+      `  -H 'Content-Type: application/json' \\`,
+      `  -d '{"ko_id":"<KO_ID>","max_hops":2}'`,
+    ].join('\n'),
   }
 })
 

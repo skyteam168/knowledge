@@ -6,6 +6,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { deleteApiClient, listApiClients, updateApiClient } from '@/api/openApi'
 import type { ApiClient, ApiClientStatus } from '@/api/types'
+import EmptyState from '@/components/EmptyState.vue'
 import { formatDateTime } from '@/utils/format'
 import ApiClientEditor from './ApiClientEditor.vue'
 import { principalLabel, scopeLabel } from './meta'
@@ -151,12 +152,10 @@ onActivated(() => {
         </el-form-item>
       </el-form>
 
-      <el-table
-        v-loading="loading"
-        :data="rows"
-        :empty-text="t('openApi.list.empty')"
-        data-test="client-table"
-      >
+      <el-table v-loading="loading" :data="rows" data-test="client-table">
+        <template #empty>
+          <EmptyState :description="t('openApi.list.empty')" />
+        </template>
         <el-table-column :label="t('openApi.list.colClient')" min-width="200">
           <template #default="{ row }">
             <button type="button" class="name-link" @click="openDetail(row as ApiClient)">

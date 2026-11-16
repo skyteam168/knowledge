@@ -32,6 +32,21 @@ class PageImage:
     content_hash: str
 
 
+@dataclass(frozen=True)
+class PageImageExtractResult:
+    images: list[PageImage]
+    expected: bool
+    error: str | None = None
+
+
+PAGE_IMAGE_SUFFIXES = (".pdf", ".pptx", ".png", ".jpg", ".jpeg", *OFFICE_PAGED)
+
+
+def page_image_expected(filename: str) -> bool:
+    name = filename.lower()
+    return any(name.endswith(suffix) for suffix in PAGE_IMAGE_SUFFIXES)
+
+
 def asset_key(minio_key: str, kind: str, page_index: int) -> str:
     from posixpath import dirname
 
@@ -49,22 +64,45 @@ def extract_page_images(
     soffice_path: str | None = None,
 ) -> list[PageImage]:
     """Best-effort page/slide rasters. Returns [] when unsupported or empty."""
+    return extract_page_images_result(
+        data,
+        filename,
+        dpi=dpi,
+        max_edge=max_edge,
+        max_pages=max_pages,
+        soffice_path=soffice_path,
+    ).images
+
+
+def extract_page_images_result(
+    data: bytes,
+    filename: str,
+    *,
+    dpi: int = DEFAULT_DPI,
+    max_edge: int = DEFAULT_MAX_EDGE,
+    max_pages: int = DEFAULT_MAX_PAGES,
+    soffice_path: str | None = None,
+) -> PageImageExtractResult:
+    """Like extract_page_images, but also reports whether rasters were expected and any error."""
+    expected = page_image_expected(filename)
+    if not expected:
+        return PageImageExtractResult(images=[], expected=False)
     name = filename.lower()
     try:
         if name.endswith(".pdf"):
-            return _from_pdf(data, dpi=dpi, max_edge=max_edge, max_pages=max_pages)
-        if name.endswith(".pptx"):
-            return _from_pptx(
+            images = _from_pdf(data, dpi=dpi, max_edge=max_edge, max_pages=max_pages)
+        elif name.endswith(".pptx"):
+            images = _from_pptx(
                 data,
                 dpi=dpi,
                 max_edge=max_edge,
                 max_pages=max_pages,
                 soffice_path=soffice_path,
             )
-        if name.endswith((".png", ".jpg", ".jpeg")):
-            return _from_raster(data, max_edge=max_edge)
-        if name.endswith(OFFICE_PAGED):
-            return _from_office(
+        elif name.endswith((".png", ".jpg", ".jpeg")):
+            images = _from_raster(data, max_edge=max_edge)
+        elif name.endswith(OFFICE_PAGED):
+            images = _from_office(
                 data,
                 suffix=name[name.rfind(".") :],
                 dpi=dpi,
@@ -72,10 +110,15 @@ def extract_page_images(
                 max_pages=max_pages,
                 soffice_path=soffice_path,
             )
-    except Exception:
-        logger.exception("page_image_extract_failed", extra={"filename": filename})
-    return []
-
+        else:
+            images = []
+        return PageImageExtractResult(images=images, expected=True)
+    except Exception as exc:
+        logger.exception(
+            "page_image_extract_failed", extra={"source_name": filename}
+        )
+        err = str(exc) or exc.__class__.__name__
+        return PageImageExtractResult(images=[], expected=True, error=err)
 
 def _from_raster(data: bytes, *, max_edge: int) -> list[PageImage]:
     from PIL import Image

@@ -28,6 +28,33 @@ users fix-duplicates [--apply]
 
 eval gold-check [--cases PATH] [--rankings PATH]
                                offline retrieval gold gate (same as pytest -m gold)
+eval graph-gate [--cases PATH] [--rankings PATH] [--min-lift 0.15]
+                               multi-hop graph lift gate (≥15% recall@5 vs graph-off)
+eval seed-dataset --name NAME --cases PATH [--org ORG] [--replace]
+                               import JSONL cases (expected_document_titles) into a dataset
+eval start-run --dataset-id ID|--name NAME [--org ORG] [--no-judge] [--profile PROFILE]
+                               enqueue an offline eval run for a seeded dataset
+
+terminology seed-it-ops [--org ORG_ID]
+                               upsert sample IT-ops terminology aliases (idempotent)
+terminology retag-chunks [--org ORG_ID] [--document DOCUMENT_ID]
+                               recompute chunks.entity_ids from the terminology table
+terminology sync-synonyms [--org ORG_ID] [--output PATH] [--no-reload]
+                               export active aliases into OpenSearch synonyms.txt and reload
+
+structured seed-equipment [--org ORG_ID]
+                               upsert sample equipment MES mirror + terminology links
+structured sync --source-id ID | --source NAME [--org ORG] [--dry-run]
+                               pull CSV/REST connector configured on a structured source
+
+ontology validate [--ttl PATH]
+                               check enterprise.ttl covers StrEnum classes / relations
+ontology export-sample [--out PATH]
+                               write Protégé-only sample ABox TTL (not a runtime source)
+
+documents reprocess --kb KB_ID [--org ORG] [--failed] [--missing-pages] [--ids a,b]
+                    [--limit N] [--dry-run]
+                               batch re-enqueue document parse (ops; no ACL)
 """
 
 import argparse
@@ -260,6 +287,157 @@ def build_parser() -> argparse.ArgumentParser:
             Path(__file__).resolve().parents[1] / "tests/fixtures/retrieval_gold_rankings.json"
         ),
     )
+    graph_gate = evaluation_cmds.add_parser(
+        "graph-gate",
+        help="multi-hop graph lift gate: with_graph vs without_graph rankings (≥15%)",
+    )
+    graph_gate.add_argument(
+        "--cases",
+        default=str(
+            Path(__file__).resolve().parents[1] / "tests/fixtures/retrieval_graph_gold.jsonl"
+        ),
+    )
+    graph_gate.add_argument(
+        "--rankings",
+        default=str(
+            Path(__file__).resolve().parents[1]
+            / "tests/fixtures/retrieval_graph_gold_rankings.json"
+        ),
+    )
+    graph_gate.add_argument(
+        "--min-lift",
+        type=float,
+        default=0.15,
+        help="minimum relative (or absolute if baseline is 0) lift on mean recall@5",
+    )
+    seed_ds = evaluation_cmds.add_parser(
+        "seed-dataset",
+        help="import JSONL eval cases keyed by document titles into a dataset",
+    )
+    seed_ds.add_argument("--name", required=True, help="dataset name (unique per org)")
+    seed_ds.add_argument(
+        "--cases",
+        required=True,
+        help="JSONL with question / expected_document_titles / reference_answer",
+    )
+    seed_ds.add_argument("--org", default="default", help="organization id")
+    seed_ds.add_argument(
+        "--description",
+        default=None,
+        help="optional dataset description",
+    )
+    seed_ds.add_argument(
+        "--replace",
+        action="store_true",
+        help="replace cases if the dataset name already exists",
+    )
+    start_run = evaluation_cmds.add_parser(
+        "start-run", help="enqueue an offline evaluation run for a dataset"
+    )
+    start_run.add_argument("--dataset-id", default=None)
+    start_run.add_argument("--name", default=None, help="dataset name (if no --dataset-id)")
+    start_run.add_argument("--org", default="default")
+    start_run.add_argument("--profile", default="builtin")
+    start_run.add_argument("--run-name", default=None)
+    start_run.add_argument(
+        "--no-judge",
+        action="store_true",
+        help="retrieval metrics only (skip LLM judge)",
+    )
+    start_run.add_argument(
+        "--user",
+        default="alice",
+        help="username used as the run actor (must exist; ACL applies)",
+    )
+
+    terminology = groups.add_parser("terminology", help="terminology / alias dictionary")
+    terminology_cmds = terminology.add_subparsers(dest="command", required=True)
+    seed = terminology_cmds.add_parser("seed-it-ops", help="upsert sample IT-ops terms")
+    seed.add_argument("--org", default="default", help="organization id (default: default)")
+    retag = terminology_cmds.add_parser(
+        "retag-chunks", help="recompute chunks.entity_ids from terminology aliases"
+    )
+    retag.add_argument("--org", default="default", help="organization id (default: default)")
+    retag.add_argument("--document", default=None, help="optional document id to retag")
+    sync_syn = terminology_cmds.add_parser(
+        "sync-synonyms",
+        help="export active terminology into OpenSearch synonyms.txt and reload analyzers",
+    )
+    sync_syn.add_argument("--org", default="default", help="organization id (default: default)")
+    sync_syn.add_argument(
+        "--output",
+        default=None,
+        help="synonyms file path (default: $OPENSEARCH_SYNONYMS_FILE)",
+    )
+    sync_syn.add_argument(
+        "--no-reload",
+        action="store_true",
+        help="write the file only; do not call OpenSearch reload_search_analyzers",
+    )
+
+    structured = groups.add_parser("structured", help="ERP/MES structured equipment mirror")
+    structured_cmds = structured.add_subparsers(dest="command", required=True)
+    seed_eq = structured_cmds.add_parser(
+        "seed-equipment", help="upsert sample equipment MES mirror + terminology links"
+    )
+    seed_eq.add_argument("--org", default="default", help="organization id (default: default)")
+    sync_eq = structured_cmds.add_parser(
+        "sync",
+        help="pull a CSV/REST connector into equip_* mirror tables for one source",
+    )
+    sync_eq.add_argument("--org", default="default", help="organization id (default: default)")
+    sync_eq.add_argument("--source-id", default=None, help="structured source id")
+    sync_eq.add_argument("--source", default=None, help="structured source name")
+    sync_eq.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="fetch and count would-be upserts without writing",
+    )
+
+    ontology = groups.add_parser("ontology", help="OWL TBox contract (no SPARQL / RDF store)")
+    ontology_cmds = ontology.add_subparsers(dest="command", required=True)
+    ont_validate = ontology_cmds.add_parser(
+        "validate", help="assert enterprise.ttl covers backend StrEnum catalog"
+    )
+    ont_validate.add_argument(
+        "--ttl",
+        default=None,
+        help="path to enterprise.ttl (default: <repo>/ontology/enterprise.ttl)",
+    )
+    ont_export = ontology_cmds.add_parser(
+        "export-sample",
+        help="write read-only seed ABox TTL for Protégé preview",
+    )
+    ont_export.add_argument(
+        "--out",
+        default=None,
+        help="output path (default: <repo>/ontology/examples/seed-abox.ttl)",
+    )
+
+    documents = groups.add_parser("documents", help="document ingest operations")
+    documents_cmds = documents.add_subparsers(dest="command", required=True)
+    reprocess = documents_cmds.add_parser(
+        "reprocess", help="batch re-enqueue parse for a knowledge base"
+    )
+    reprocess.add_argument("--org", default="default", help="organization id (default: default)")
+    reprocess.add_argument("--kb", required=True, help="knowledge base id")
+    reprocess.add_argument(
+        "--failed", action="store_true", help="only documents in failed status"
+    )
+    reprocess.add_argument(
+        "--missing-pages",
+        action="store_true",
+        help="only documents that expected page images but have none / an extract error",
+    )
+    reprocess.add_argument(
+        "--ids",
+        default=None,
+        help="comma-separated document ids (overrides --failed / --missing-pages)",
+    )
+    reprocess.add_argument("--limit", type=int, default=100, help="max documents (default 100)")
+    reprocess.add_argument(
+        "--dry-run", action="store_true", help="list candidates without enqueueing"
+    )
     return parser
 
 
@@ -368,6 +546,333 @@ async def _eval_gold_check(settings: Settings, args: argparse.Namespace) -> int:
     return 1 if failed else 0
 
 
+async def _eval_graph_gate(settings: Settings, args: argparse.Namespace) -> int:
+    from app.services.evaluation.gold_gate import (
+        load_gold_cases,
+        load_graph_rankings,
+        run_graph_lift_gate,
+    )
+
+    del settings  # offline fixture gate
+    cases = load_gold_cases(Path(args.cases))
+    without, with_graph = load_graph_rankings(Path(args.rankings))
+    report = run_graph_lift_gate(
+        cases, without, with_graph, min_lift=float(args.min_lift)
+    )
+    _print(
+        {
+            "cases": len(cases),
+            "metric": report.metric,
+            "without": report.without,
+            "with_graph": report.with_graph,
+            "lift": report.lift,
+            "min_lift": report.min_lift,
+            "passed": report.passed,
+        }
+    )
+    for failure in report.failures:
+        print(f"FAIL {failure}", file=sys.stderr)
+    return 0 if report.passed else 1
+
+
+async def _eval_seed_dataset(settings: Settings, args: argparse.Namespace) -> int:
+    from app.models import Organization
+    from app.services.evaluation.seed_baseline import seed_dataset_from_jsonl
+    from sqlalchemy import select
+
+    engine = create_engine(settings)
+    try:
+        async with create_session_factory(engine)() as session:
+            org = await session.scalar(select(Organization).where(Organization.id == args.org))
+            if org is None:
+                # Local demos often use a generated org id; fall back to the first org
+                # when --org=default and that literal id is missing.
+                if args.org == "default":
+                    org = await session.scalar(select(Organization).order_by(Organization.created_at))
+                if org is None:
+                    print(f"error: organization not found: {args.org}", file=sys.stderr)
+                    return 2
+            try:
+                result = await seed_dataset_from_jsonl(
+                    session,
+                    org_id=org.id,
+                    name=args.name,
+                    cases_path=Path(args.cases),
+                    description=args.description,
+                    replace=bool(args.replace),
+                )
+            except ValueError as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                return 2
+            await session.commit()
+        _print({"org_id": org.id, **result})
+    finally:
+        await engine.dispose()
+    return 0
+
+
+async def _eval_start_run(settings: Settings, args: argparse.Namespace) -> int:
+    from sqlalchemy import select
+
+    from app.models import EvalDataset, Organization, User
+    from app.schemas.evaluation import EvalRunCreate
+    from app.services.audit_service import AuditContext
+    from app.services.authz.context import CurrentUser
+    from app.services.authz.principals import PrincipalResolver
+    from app.services.context import RequestContext
+    from app.services.evaluation.eval_service import EvalService
+    from app.services.ingest.queue import DramatiqTaskQueue
+
+    engine = create_engine(settings)
+    redis = RedisCache.from_url(settings.redis_url)
+    authz = AuthzCache(redis, settings.authz_cache_ttl_seconds)
+    try:
+        async with create_session_factory(engine)() as session:
+            org = await session.scalar(select(Organization).where(Organization.id == args.org))
+            if org is None and args.org == "default":
+                org = await session.scalar(select(Organization).order_by(Organization.created_at))
+            if org is None:
+                print(f"error: organization not found: {args.org}", file=sys.stderr)
+                return 2
+            user = await session.scalar(
+                select(User).where(User.org_id == org.id, User.username == args.user)
+            )
+            if user is None:
+                print(f"error: user not found: {args.user}", file=sys.stderr)
+                return 2
+            if args.dataset_id:
+                ds = await session.get(EvalDataset, args.dataset_id)
+            elif args.name:
+                ds = await session.scalar(
+                    select(EvalDataset).where(
+                        EvalDataset.org_id == org.id, EvalDataset.name == args.name
+                    )
+                )
+            else:
+                print("error: provide --dataset-id or --name", file=sys.stderr)
+                return 2
+            if ds is None or ds.org_id != org.id:
+                print("error: dataset not found", file=sys.stderr)
+                return 2
+            principals = await PrincipalResolver(session, authz).resolve(org.id, user.id)
+            actor = CurrentUser(
+                id=user.id,
+                org_id=org.id,
+                username=user.username,
+                display_name=user.display_name,
+                principals=principals,
+            )
+            ctx = RequestContext(
+                actor,
+                AuditContext(org_id=org.id, actor_id=user.id, actor_name=user.username),
+            )
+            service = EvalService(
+                session, ctx, authz, settings=settings, queue=DramatiqTaskQueue()
+            )
+            run = await service.create_run(
+                EvalRunCreate(
+                    dataset_id=ds.id,
+                    profile_id=args.profile,
+                    name=args.run_name,
+                    judge_enabled=not bool(args.no_judge),
+                )
+            )
+            await session.commit()
+        _print(run.model_dump(mode="json"))
+    finally:
+        await redis.close()
+        await engine.dispose()
+    return 0
+
+
+async def _terminology_seed_it_ops(settings: Settings, args: argparse.Namespace) -> int:
+    from app.services.terminology.seed_it_ops import seed_it_ops
+
+    engine = create_engine(settings)
+    try:
+        async with create_session_factory(engine)() as session:
+            counts = await seed_it_ops(session, args.org)
+            await session.commit()
+        _print({"org_id": args.org, **counts})
+    finally:
+        await engine.dispose()
+    return 0
+
+
+async def _terminology_sync_synonyms(settings: Settings, args: argparse.Namespace) -> int:
+    from app.repositories.terminology_repo import TerminologyRepository
+    from app.services.terminology.synonyms import format_synonym_lines, write_synonyms_file
+
+    target = Path(args.output) if args.output else None
+    if target is None:
+        if not settings.opensearch_synonyms_file:
+            print("error: set --output or OPENSEARCH_SYNONYMS_FILE", file=sys.stderr)
+            return 2
+        target = Path(settings.opensearch_synonyms_file)
+
+    engine = create_engine(settings)
+    rt: IndexingRuntime | None = None
+    try:
+        async with create_session_factory(engine)() as session:
+            rows = await TerminologyRepository(session).load_active_alias_map(args.org)
+            lines = format_synonym_lines(rows)
+            count = write_synonyms_file(target, lines)
+        reloaded = False
+        if not args.no_reload:
+            rt = IndexingRuntime.create(settings)
+            active = await rt.registry.active() or await rt.registry.bootstrap()
+            await rt.backends.text.reload_search_analyzers(active.opensearch_index)
+            reloaded = True
+        _print({"org_id": args.org, "path": str(target), "lines": count, "reloaded": reloaded})
+        return 0
+    finally:
+        if rt is not None:
+            await rt.aclose()
+        await engine.dispose()
+
+
+async def _terminology_retag_chunks(settings: Settings, args: argparse.Namespace) -> int:
+    from app.services.terminology.retag import retag_chunks
+
+    engine = create_engine(settings)
+    try:
+        async with create_session_factory(engine)() as session:
+            counts = await retag_chunks(session, args.org, document_id=args.document)
+            await session.commit()
+        _print({"org_id": args.org, "document_id": args.document, **counts})
+    finally:
+        await engine.dispose()
+    return 0
+
+
+async def _structured_seed_equipment(settings: Settings, args: argparse.Namespace) -> int:
+    from app.services.structured.seed_equipment import seed_equipment
+
+    engine = create_engine(settings)
+    try:
+        async with create_session_factory(engine)() as session:
+            counts = await seed_equipment(session, args.org)
+            await session.commit()
+        _print({"org_id": args.org, **counts})
+    finally:
+        await engine.dispose()
+    return 0
+
+
+async def _structured_sync(settings: Settings, args: argparse.Namespace) -> int:
+    from app.repositories.structured_repo import StructuredRepository
+    from app.services.structured.sync import StructuredSyncExecutor
+
+    if not args.source_id and not args.source:
+        print("error: provide --source-id or --source", file=sys.stderr)
+        return 2
+
+    engine = create_engine(settings)
+    try:
+        async with create_session_factory(engine)() as session:
+            repo = StructuredRepository(session)
+            source_id = args.source_id
+            if not source_id:
+                row = await repo.get_source_by_name(args.org, args.source)
+                if row is None:
+                    print(f"error: source not found: {args.source}", file=sys.stderr)
+                    return 1
+                source_id = row.id
+            result = await StructuredSyncExecutor(session, settings).sync_source(
+                args.org,
+                source_id,
+                dry_run=bool(args.dry_run),
+                triggered_by="cli",
+            )
+            if not args.dry_run:
+                await session.commit()
+            else:
+                await session.rollback()
+        _print(result)
+    finally:
+        await engine.dispose()
+    return 0
+
+
+async def _ontology_validate(settings: Settings, args: argparse.Namespace) -> int:
+    from app.ontology.validate_ttl import validate_enterprise_ttl
+
+    del settings
+    ttl = Path(args.ttl) if args.ttl else None
+    issues = validate_enterprise_ttl(ttl)
+    _print(
+        {
+            "ok": not issues,
+            "ttl": str(ttl) if ttl else "ontology/enterprise.ttl",
+            "issues": [{"code": i.code, "message": i.message} for i in issues],
+        }
+    )
+    return 1 if issues else 0
+
+
+async def _ontology_export_sample(settings: Settings, args: argparse.Namespace) -> int:
+    from app.ontology.export_sample import write_seed_abox
+
+    del settings
+    out = write_seed_abox(Path(args.out) if args.out else None)
+    _print({"written": str(out)})
+    return 0
+
+
+async def _documents_reprocess(settings: Settings, args: argparse.Namespace) -> int:
+    """Ops batch reprocess: resets status to uploaded and enqueues parse (no ACL)."""
+    from app.models import Document, DocumentStatus
+    from app.repositories.knowledge_repo import DocumentRepository
+    from app.services.ingest.queue import DramatiqTaskQueue
+
+    ids = [x.strip() for x in (args.ids or "").split(",") if x.strip()]
+    status = DocumentStatus.FAILED.value if args.failed and not ids else None
+    engine = create_engine(settings)
+    queue = DramatiqTaskQueue()
+    try:
+        async with create_session_factory(engine)() as session:
+            repo = DocumentRepository(session)
+            if ids:
+                stmt = repo.search_stmt(args.org, args.kb).where(Document.id.in_(ids))
+            else:
+                stmt = repo.search_stmt(
+                    args.org,
+                    args.kb,
+                    status=status,
+                    missing_page_images=bool(args.missing_pages),
+                )
+            docs = list((await session.execute(stmt.limit(max(1, args.limit)))).scalars())
+            queued: list[str] = []
+            skipped: list[dict[str, str]] = []
+            for doc in docs:
+                if doc.status == DocumentStatus.PARSING.value:
+                    skipped.append({"id": doc.id, "reason": "parsing"})
+                    continue
+                if args.dry_run:
+                    queued.append(doc.id)
+                    continue
+                doc.status = DocumentStatus.UPLOADED.value
+                doc.error_message = None
+                await session.flush()
+                queue.enqueue_parse(doc.id, doc.version)
+                queued.append(doc.id)
+            if not args.dry_run:
+                await session.commit()
+        _print(
+            {
+                "org_id": args.org,
+                "kb_id": args.kb,
+                "dry_run": bool(args.dry_run),
+                "queued": queued,
+                "skipped": skipped,
+                "total_candidates": len(docs),
+            }
+        )
+    finally:
+        await engine.dispose()
+    return 0
+
+
 async def run(argv: list[str], settings: Settings, runtime: IndexingRuntime | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.group == "analytics":
@@ -379,7 +884,29 @@ async def run(argv: list[str], settings: Settings, runtime: IndexingRuntime | No
     if args.group == "keycloak":
         return await _keycloak_setup_idp(settings, args)
     if args.group == "eval":
+        if args.command == "graph-gate":
+            return await _eval_graph_gate(settings, args)
+        if args.command == "seed-dataset":
+            return await _eval_seed_dataset(settings, args)
+        if args.command == "start-run":
+            return await _eval_start_run(settings, args)
         return await _eval_gold_check(settings, args)
+    if args.group == "terminology":
+        if args.command == "retag-chunks":
+            return await _terminology_retag_chunks(settings, args)
+        if args.command == "sync-synonyms":
+            return await _terminology_sync_synonyms(settings, args)
+        return await _terminology_seed_it_ops(settings, args)
+    if args.group == "structured":
+        if args.command == "sync":
+            return await _structured_sync(settings, args)
+        return await _structured_seed_equipment(settings, args)
+    if args.group == "ontology":
+        if args.command == "export-sample":
+            return await _ontology_export_sample(settings, args)
+        return await _ontology_validate(settings, args)
+    if args.group == "documents":
+        return await _documents_reprocess(settings, args)
     rt = runtime or IndexingRuntime.create(settings)
     try:
         func: Command = args.func

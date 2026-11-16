@@ -256,6 +256,7 @@ export interface AuditLog {
 
 export type KbVisibility = 'org' | 'restricted'
 export type AclPermission = 'read' | 'edit' | 'manage'
+export type AclEffect = 'allow' | 'deny'
 export type PrincipalType = 'user' | 'group' | 'role' | 'dept'
 export type DocumentStatus = 'uploaded' | 'parsing' | 'parsed' | 'indexing' | 'indexed' | 'failed'
 export type ChunkType = 'text' | 'table' | 'title'
@@ -264,6 +265,7 @@ export interface AclEntry {
   principal_type: PrincipalType
   principal_id: string
   permission: AclPermission
+  effect?: AclEffect
 }
 
 export interface AclEntryOut extends AclEntry {
@@ -507,6 +509,8 @@ export interface DocumentQuery extends PageParams {
   review?: 'due_soon' | 'overdue' | 'attention'
   /** Only documents I am responsible for. */
   mine?: boolean
+  /** Documents that expected page/slide rasters but have none or an extract error. */
+  missing_page_images?: boolean
 }
 
 export interface UploadInit {
@@ -661,7 +665,7 @@ export interface RepairQueued {
 
 // ---- search / retrieval ----------------------------------------------------------------
 
-export type SearchRoute = 'dense' | 'sparse'
+export type SearchRoute = 'dense' | 'sparse' | 'graph'
 
 export interface SearchQuery {
   q: string
@@ -691,6 +695,7 @@ export interface SearchDocument {
 export interface StageScores {
   dense: number | null
   bm25: number | null
+  graph: number | null
   rrf: number
   rerank: number | null
 }
@@ -698,6 +703,7 @@ export interface StageScores {
 export interface StageRanks {
   dense: number | null
   bm25: number | null
+  graph: number | null
   rrf: number
   rerank: number | null
 }
@@ -776,6 +782,13 @@ export interface RetrievalConfig {
     phrase_boost: number
     minimum_should_match: string | null
     fragment_size: number
+    timeout_seconds: number
+  }
+  graph: {
+    enabled: boolean
+    top_k: number
+    max_hops: number
+    relation_types: string[]
     timeout_seconds: number
   }
   fusion: { k: number; weights: Partial<Record<SearchRoute, number>> }
@@ -902,6 +915,29 @@ export interface MessageFeedback {
   updated_at: string
 }
 
+export interface RelatedConceptMirror {
+  object_type: string
+  external_id: string
+  label: string
+}
+
+export interface RelatedConceptKo {
+  id: string
+  title: string
+  ko_type: string
+  kb_id: string
+}
+
+/** Lightweight concept strip under an answer (terminology + optional mirror / KO). */
+export interface RelatedConcept {
+  entity_id: string
+  canonical_name: string
+  entity_type: string
+  aliases: string[]
+  mirrors: RelatedConceptMirror[]
+  knowledge_objects: RelatedConceptKo[]
+}
+
 export interface ChatMessage {
   id: string
   role: MessageRole
@@ -919,9 +955,11 @@ export interface ChatMessage {
   steps: ChatStep[]
   /** Answer cites a copy-protected / download-restricted document. */
   copy_protect?: boolean
+  /** Related terminology cards (from SSE / persisted concepts step). */
+  concepts?: RelatedConcept[]
 }
 
-export type ChatStepName = 'rewrite' | 'retrieve' | 'evidence' | 'generate'
+export type ChatStepName = 'rewrite' | 'retrieve' | 'evidence' | 'generate' | 'concepts'
 export type ChatStepStatus = 'running' | 'done' | 'failed'
 
 /** Pipeline progress for the "thinking" panel; no model reasoning, only stage + timings. */
@@ -1028,6 +1066,7 @@ export interface ChatDoneEvent {
   trace_id: string
   gap_id: string | null
   copy_protect?: boolean
+  concepts?: RelatedConcept[]
 }
 
 export interface ChatErrorEvent {
@@ -1042,8 +1081,40 @@ export interface ChatErrorEvent {
 export type GapType = 'no_evidence' | 'low_grounding' | 'negative_feedback' | 'user_request'
 export type GapStatus = 'open' | 'in_review' | 'resolved' | 'rejected' | 'duplicate'
 export type GapSort = 'frequency' | 'recent'
-export type KoType = 'faq' | 'qa' | 'card' | 'policy_summary'
+export type KoType =
+  | 'faq'
+  | 'qa'
+  | 'card'
+  | 'policy_summary'
+  | 'device'
+  | 'process'
+  | 'defect'
+  | 'policy'
+  | 'it_term'
+
+export type KoRelationType =
+  | 'related_to'
+  | 'part_of'
+  | 'depends_on'
+  | 'causes'
+  | 'mitigates'
+  | 'applies_to'
+
 export type KoStatus = 'draft' | 'pending_review' | 'published' | 'deprecated'
+
+export interface KoRelation {
+  id: string
+  from_ko_id: string
+  to_ko_id: string
+  relation_type: KoRelationType
+  direction: 'outbound' | 'inbound'
+  peer_id: string
+  peer_title: string
+  peer_ko_type: KoType
+  peer_status: KoStatus
+  created_at: string
+  created_by?: string | null
+}
 export type KoOrigin = 'manual' | 'gap' | 'document'
 export type KoVersionStatus =
   'pending_review' | 'published' | 'rejected' | 'withdrawn' | 'superseded' | 'deprecated'
@@ -1788,7 +1859,7 @@ export interface EvalCompare {
 
 // ---- open platform (mirrors backend app/schemas/open_api.py) -------------------
 
-export type ApiScope = 'retrieve' | 'chat' | 'mcp'
+export type ApiScope = 'retrieve' | 'chat' | 'mcp' | 'entity'
 export type ApiPrincipalType = 'dept' | 'group' | 'role'
 export type ApiClientStatus = 'active' | 'disabled'
 
@@ -2109,4 +2180,215 @@ export interface AgentRunDetail extends AgentRun {
   expires_at: string | null
   events: AgentStoredEvent[]
   exec_events: AgentStoredEvent[]
+}
+
+export type TerminologyEntityType =
+  | 'device'
+  | 'process'
+  | 'defect'
+  | 'policy'
+  | 'it_term'
+  | 'other'
+
+export type TerminologyStatus = 'active' | 'disabled'
+
+export interface TerminologyAlias {
+  id: string
+  entity_id: string
+  alias: string
+  lang: string
+  created_at: string
+}
+
+export interface TerminologyEntity {
+  id: string
+  canonical_name: string
+  entity_type: TerminologyEntityType | string
+  description: string | null
+  status: TerminologyStatus | string
+  aliases: TerminologyAlias[]
+  created_at: string
+  updated_at: string
+}
+
+export interface TerminologyEntityCreate {
+  canonical_name: string
+  entity_type?: string
+  description?: string | null
+  status?: string
+  aliases?: string[]
+}
+
+export interface TerminologyEntityUpdate {
+  canonical_name?: string
+  entity_type?: string
+  description?: string | null
+  status?: string
+}
+
+export interface TerminologyAliasCreate {
+  alias: string
+  lang?: string
+}
+
+export interface ConceptGraphNode {
+  id: string
+  label: string
+  kind: string
+  meta: Record<string, string>
+}
+
+export interface ConceptGraphEdge {
+  source: string
+  target: string
+  relation: string
+}
+
+export interface TerminologyNeighborhood {
+  entity: TerminologyEntity
+  nodes: ConceptGraphNode[]
+  edges: ConceptGraphEdge[]
+}
+
+export type StructuredSourceType = 'erp' | 'mes' | 'manual' | 'qms' | 'plm' | 'wms'
+export type StructuredObjectType = 'device' | 'work_order' | 'spare_part'
+export type StructuredDomainKind = 'equipment' | 'generic'
+
+export interface StructuredSource {
+  id: string
+  name: string
+  type: StructuredSourceType | string
+  enabled: boolean
+  meta: Record<string, unknown>
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface StructuredSourceCreate {
+  name: string
+  type?: string
+  enabled?: boolean
+  meta?: Record<string, unknown>
+}
+
+export interface StructuredSyncResult {
+  source_id: string
+  source_name: string
+  connector: string
+  status: string
+  dry_run: boolean
+  stats: Record<string, unknown>
+  warnings: string[]
+  synced_at?: string | null
+  triggered_by?: string | null
+}
+
+export interface StructuredDomain {
+  id: string
+  code: string
+  name: string
+  kind: StructuredDomainKind | string
+  description: string | null
+  enabled: boolean
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface StructuredDomainCreate {
+  code: string
+  name: string
+  description?: string | null
+  enabled?: boolean
+}
+
+export interface StructuredRecord {
+  id: string
+  domain_id: string
+  source_id: string
+  object_type: string
+  external_id: string
+  title: string
+  status: string
+  attrs: Record<string, unknown>
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface StructuredRecordCreate {
+  domain_id: string
+  source_id: string
+  object_type: string
+  external_id: string
+  title: string
+  status?: string
+  attrs?: Record<string, unknown>
+}
+
+export interface EquipDevice {
+  id: string
+  source_id: string
+  external_id: string
+  name: string
+  status: string
+  location: string | null
+  meta: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
+export interface EquipWorkOrder {
+  id: string
+  source_id: string
+  external_id: string
+  device_external_id: string | null
+  title: string
+  status: string
+  opened_at: string | null
+  meta: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
+export interface EquipSparePart {
+  id: string
+  source_id: string
+  external_id: string
+  name: string
+  sku: string | null
+  qty_on_hand: number
+  meta: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
+export interface StructuredLink {
+  id: string
+  object_type: StructuredObjectType | string
+  object_id: string
+  terminology_entity_id: string | null
+  terminology_name: string | null
+  ko_id: string | null
+  ko_title: string | null
+  created_by: string | null
+  created_at: string
+}
+
+export interface StructuredLinkCreate {
+  object_type: string
+  object_id: string
+  terminology_entity_id?: string | null
+  ko_id?: string | null
+}
+
+export interface StructuredResolve {
+  object_type: string
+  object_id: string
+  external_id: string
+  source_id: string
+  label: string
+  status: string
+  links: StructuredLink[]
 }

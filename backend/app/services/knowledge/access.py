@@ -3,19 +3,21 @@
 - Knowledge base: visibility=org grants `read` to every org member; resource_acl entries
   (user / group / role / dept incl. descendants) grant read / edit / manage.
 - Document: acl_inherit=True -> the knowledge base permission applies (default);
-  otherwise the document's own entries apply, while KB managers always keep `manage`.
+  otherwise the document's own allow entries apply. Document-level DENY always applies
+  (except KB managers / superusers), so org-visible libraries can exclude individuals.
+- Explicit DENY wins over allow grants and org visibility (deny-wins).
 - Superusers (`*`) can do everything.
 """
 
 from collections.abc import Iterable, Sequence
 from typing import Protocol
 
-from sqlalchemy import ColumnElement, or_, select, true
+from sqlalchemy import ColumnElement, and_, not_, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError, PermissionDeniedError
 from app.models import Document, KbVisibility, KnowledgeBase, ResourceAcl
-from app.repositories.acl_repo import ResourceAclRepository
+from app.repositories.acl_repo import EFFECT_ALLOW, EFFECT_DENY, ResourceAclRepository
 from app.services.authz import AclPermission, AclService, CurrentUser, ResourceRef
 
 RESOURCE_KB = "kb"
@@ -23,15 +25,7 @@ RESOURCE_DOCUMENT = "document"
 # Knowledge objects follow the document model: inherit the KB ACL or carry their own.
 RESOURCE_KO = "ko"
 
-
-class KbScopedResource(Protocol):
-    """A resource inside a knowledge base that inherits its ACL or has its own entries."""
-
-    @property
-    def id(self) -> str: ...
-
-    @property
-    def acl_inherit(self) -> bool: ...
+AclEntryTuple = tuple[str, str, str, str]  # principal_type, principal_id, permission, effect
 
 
 def _best(perms: Iterable[AclPermission | None]) -> AclPermission | None:
@@ -46,6 +40,20 @@ def _satisfies(perm: AclPermission | None, required: AclPermission) -> bool:
     return perm is not None and perm.level >= required.level
 
 
+def _row_effect(row: ResourceAcl) -> str:
+    return row.effect or EFFECT_ALLOW
+
+
+class KbScopedResource(Protocol):
+    """A resource inside a knowledge base that inherits its ACL or has its own entries."""
+
+    @property
+    def id(self) -> str: ...
+
+    @property
+    def acl_inherit(self) -> bool: ...
+
+
 class KnowledgeAccess:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
@@ -55,18 +63,31 @@ class KnowledgeAccess:
     async def entries(self, org_id: str, resource_type: str, resource_id: str) -> list[ResourceAcl]:
         rows = await self.repo.list_for_resource(org_id, resource_type, resource_id)
         order = {"manage": 0, "edit": 1, "read": 2}
-        return sorted(rows, key=lambda r: (order.get(r.permission, 9), r.principal_type))
+        effect_order = {EFFECT_DENY: 0, EFFECT_ALLOW: 1}
+        return sorted(
+            rows,
+            key=lambda r: (
+                effect_order.get(_row_effect(r), 9),
+                order.get(r.permission, 9),
+                r.principal_type,
+            ),
+        )
 
     async def replace_entries(
         self,
         org_id: str,
         resource_type: str,
         resource_id: str,
-        entries: Iterable[tuple[str, str, str]],
+        entries: Iterable[tuple[str, str, str] | AclEntryTuple],
         created_by: str | None,
     ) -> None:
         await self.repo.delete_for_resource(org_id, resource_type, resource_id)
-        for ptype, pid, perm in entries:
+        for entry in entries:
+            if len(entry) == 4:
+                ptype, pid, perm, effect = entry
+            else:
+                ptype, pid, perm = entry  # type: ignore[misc]
+                effect = EFFECT_ALLOW
             self.session.add(
                 ResourceAcl(
                     org_id=org_id,
@@ -75,6 +96,7 @@ class KnowledgeAccess:
                     principal_type=ptype,
                     principal_id=pid,
                     permission=perm,
+                    effect=effect or EFFECT_ALLOW,
                     created_by=created_by,
                 )
             )
@@ -85,6 +107,8 @@ class KnowledgeAccess:
     async def kb_permission(self, user: CurrentUser, kb: KnowledgeBase) -> AclPermission | None:
         if user.is_superuser:
             return AclPermission.MANAGE
+        if await self.acl.is_denied(user.principals, ResourceRef(RESOURCE_KB, kb.id)):
+            return None
         granted = await self.acl.effective_permission(
             user.principals, ResourceRef(RESOURCE_KB, kb.id)
         )
@@ -99,11 +123,20 @@ class KnowledgeAccess:
         rows = await self.repo.list_matching_many(
             user.org_id, RESOURCE_KB, [kb.id for kb in kbs], user.principals.pairs()
         )
+        denied = {
+            row.resource_id for row in rows if _row_effect(row) == EFFECT_DENY
+        }
         result: dict[str, AclPermission | None] = {
-            kb.id: AclPermission.READ if kb.visibility == KbVisibility.ORG.value else None
+            kb.id: (
+                None
+                if kb.id in denied
+                else (AclPermission.READ if kb.visibility == KbVisibility.ORG.value else None)
+            )
             for kb in kbs
         }
         for row in rows:
+            if _row_effect(row) != EFFECT_ALLOW or row.resource_id in denied:
+                continue
             result[row.resource_id] = _best(
                 [result.get(row.resource_id), AclPermission(row.permission)]
             )
@@ -113,8 +146,13 @@ class KnowledgeAccess:
         if user.is_superuser:
             return true()
         granted = self.repo.granted_ids_stmt(user.org_id, RESOURCE_KB, user.principals.pairs())
-        return or_(
-            KnowledgeBase.visibility == KbVisibility.ORG.value, KnowledgeBase.id.in_(granted)
+        denied = self.repo.denied_ids_stmt(user.org_id, RESOURCE_KB, user.principals.pairs())
+        return and_(
+            or_(
+                KnowledgeBase.visibility == KbVisibility.ORG.value,
+                KnowledgeBase.id.in_(granted),
+            ),
+            not_(KnowledgeBase.id.in_(denied)),
         )
 
     async def require_kb(
@@ -138,7 +176,14 @@ class KnowledgeAccess:
         kb_perm: AclPermission | None = None,
     ) -> AclPermission | None:
         kb_perm = kb_perm if kb_perm is not None else await self.kb_permission(user, kb)
-        if document.acl_inherit or kb_perm == AclPermission.MANAGE:
+        if user.is_superuser:
+            return AclPermission.MANAGE
+        # KB managers keep manage so they can repair ACL even after a document DENY.
+        if kb_perm == AclPermission.MANAGE:
+            return kb_perm
+        if await self.acl.is_denied(user.principals, ResourceRef(RESOURCE_DOCUMENT, document.id)):
+            return None
+        if document.acl_inherit:
             return kb_perm
         return await self.acl.effective_permission(
             user.principals, ResourceRef(RESOURCE_DOCUMENT, document.id)
@@ -160,21 +205,32 @@ class KnowledgeAccess:
         resource_type: str,
     ) -> dict[str, AclPermission | None]:
         """Permissions on resources of one knowledge base, given the KB permission."""
+        if user.is_superuser:
+            return {item.id: AclPermission.MANAGE for item in items}
+        if kb_perm == AclPermission.MANAGE:
+            return {item.id: kb_perm for item in items}
+
         result: dict[str, AclPermission | None] = {}
-        overriding = []
+        need_lookup = [item.id for item in items]
+        rows = await self.repo.list_matching_many(
+            user.org_id, resource_type, need_lookup, user.principals.pairs()
+        )
+        denied = {row.resource_id for row in rows if _row_effect(row) == EFFECT_DENY}
+        allow_by_id: dict[str, AclPermission | None] = {}
+        for row in rows:
+            if _row_effect(row) != EFFECT_ALLOW:
+                continue
+            allow_by_id[row.resource_id] = _best(
+                [allow_by_id.get(row.resource_id), AclPermission(row.permission)]
+            )
+
         for item in items:
-            if item.acl_inherit or kb_perm == AclPermission.MANAGE:
+            if item.id in denied:
+                result[item.id] = None
+            elif item.acl_inherit:
                 result[item.id] = kb_perm
             else:
-                result[item.id] = None
-                overriding.append(item.id)
-        rows = await self.repo.list_matching_many(
-            user.org_id, resource_type, overriding, user.principals.pairs()
-        )
-        for row in rows:
-            result[row.resource_id] = _best(
-                [result[row.resource_id], AclPermission(row.permission)]
-            )
+                result[item.id] = allow_by_id.get(item.id)
         return result
 
     async def readable_documents(
@@ -208,15 +264,20 @@ class KnowledgeAccess:
         self, user: CurrentUser, kb_perm: AclPermission | None
     ) -> ColumnElement[bool]:
         """Documents of one knowledge base the user can read, given their KB permission."""
-        if kb_perm == AclPermission.MANAGE:
+        if user.is_superuser or kb_perm == AclPermission.MANAGE:
             return true()
         granted = self.repo.granted_ids_stmt(
             user.org_id, RESOURCE_DOCUMENT, user.principals.pairs()
         )
+        denied = self.repo.denied_ids_stmt(
+            user.org_id, RESOURCE_DOCUMENT, user.principals.pairs()
+        )
         overridden = Document.id.in_(granted)
         if kb_perm is None:
-            return overridden
-        return or_(Document.acl_inherit.is_(True), overridden)
+            base = overridden
+        else:
+            base = or_(Document.acl_inherit.is_(True), overridden)
+        return and_(base, not_(Document.id.in_(denied)))
 
     async def require_document(
         self,

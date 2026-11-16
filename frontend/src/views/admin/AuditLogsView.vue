@@ -3,6 +3,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { listAuditLogs } from '@/api/admin'
 import type { AuditDiffEntry, AuditLog } from '@/api/types'
+import EmptyState from '@/components/EmptyState.vue'
 import { formatDateTime } from '@/utils/format'
 
 const { t } = useI18n()
@@ -114,7 +115,10 @@ onMounted(load)
       </el-form-item>
     </el-form>
 
-    <el-table v-loading="loading" :data="rows" row-key="id" :empty-text="t('audit.empty')">
+    <el-table v-loading="loading" :data="rows" row-key="id">
+      <template #empty>
+        <EmptyState :description="t('audit.empty')" />
+      </template>
       <el-table-column type="expand">
         <template #default="{ row }">
           <div class="detail">

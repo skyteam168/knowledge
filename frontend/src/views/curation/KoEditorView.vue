@@ -5,18 +5,29 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   checkKoConflicts,
+  createKoRelation,
+  deleteKoRelation,
   deprecateKo,
   getKo,
+  listKoRelations,
   reviewKo,
   submitKo,
   updateKo,
   withdrawKo,
 } from '@/api/curation'
-import type { KnowledgeObjectDetail, KoSource, KoSourceIn, KoType } from '@/api/types'
+import type {
+  KnowledgeObjectDetail,
+  KoRelation,
+  KoRelationType,
+  KoSource,
+  KoSourceIn,
+  KoType,
+} from '@/api/types'
 import DocumentPicker from '@/components/curation/DocumentPicker.vue'
 import KoVersionHistory from '@/components/curation/KoVersionHistory.vue'
 import UserPicker from '@/components/curation/UserPicker.vue'
 import {
+  KO_RELATION_TYPE_LABEL,
   KO_STATUS_META,
   KO_TYPE_LABEL,
   ORIGIN_LABEL,
@@ -57,6 +68,10 @@ const savedSnapshot = ref('')
 const newVariant = ref('')
 const answerTab = ref<'edit' | 'preview'>('edit')
 const sideTab = ref('draft')
+const relations = ref<KoRelation[]>([])
+const relationPeerId = ref('')
+const relationType = ref<KoRelationType>('related_to')
+const relationBusy = ref(false)
 
 const editable = computed(() => !!ko.value?.can_edit && ko.value.status !== 'pending_review')
 const dirty = computed(() => JSON.stringify(form) !== savedSnapshot.value)
@@ -87,6 +102,30 @@ function toRow(s: KoSource): SourceRow {
   }
 }
 
+async function loadRelations(): Promise<void> {
+  relations.value = await listKoRelations(props.koId)
+}
+
+async function addRelation(): Promise<void> {
+  const peer = relationPeerId.value.trim()
+  if (!peer || relationBusy.value) return
+  relationBusy.value = true
+  try {
+    await createKoRelation(props.koId, { to_ko_id: peer, relation_type: relationType.value })
+    relationPeerId.value = ''
+    ElMessage.success(t('curation.koEditor.relationAdded'))
+    await loadRelations()
+  } finally {
+    relationBusy.value = false
+  }
+}
+
+async function removeRelation(row: KoRelation): Promise<void> {
+  await deleteKoRelation(props.koId, row.id)
+  ElMessage.success(t('curation.koEditor.relationDeleted'))
+  await loadRelations()
+}
+
 function fill(detail: KnowledgeObjectDetail): void {
   ko.value = detail
   form.title = detail.title
@@ -98,6 +137,7 @@ function fill(detail: KnowledgeObjectDetail): void {
   form.effective_from = detail.effective_from
   form.effective_to = detail.effective_to
   form.owner_id = detail.owner?.id ?? null
+  void loadRelations()
   savedSnapshot.value = JSON.stringify(form)
 }
 
@@ -479,6 +519,61 @@ onMounted(load)
                   <el-button :disabled="!pickedDocs.length" @click="addSources">{{
                     t('common.add')
                   }}</el-button>
+                </div>
+              </div>
+            </el-form-item>
+            <el-form-item :label="t('curation.koEditor.relations')">
+              <p class="muted" style="margin: 0 0 8px">{{ t('curation.koEditor.relationsHint') }}</p>
+              <div class="ko-editor__sources">
+                <div v-for="row in relations" :key="row.id" class="src">
+                  <div class="src__head">
+                    <el-tag size="small" type="info">
+                      {{
+                        row.direction === 'outbound'
+                          ? t('curation.koEditor.relationOutbound')
+                          : t('curation.koEditor.relationInbound')
+                      }}
+                    </el-tag>
+                    <span>{{ KO_RELATION_TYPE_LABEL[row.relation_type] }}</span>
+                    <router-link class="ko-editor__link" :to="`/curation/kos/${row.peer_id}`">
+                      {{ row.peer_title }}
+                    </router-link>
+                    <span class="muted">{{ KO_TYPE_LABEL[row.peer_ko_type] }}</span>
+                    <el-button
+                      v-if="editable"
+                      link
+                      type="danger"
+                      @click="removeRelation(row)"
+                    >
+                      {{ t('common.remove') }}
+                    </el-button>
+                  </div>
+                </div>
+                <div v-if="!relations.length" class="muted">
+                  {{ t('curation.koEditor.relationEmpty') }}
+                </div>
+                <div v-if="editable" class="ko-editor__add-src">
+                  <el-input
+                    v-model="relationPeerId"
+                    :placeholder="t('curation.koEditor.relationPeerId')"
+                    style="width: 260px"
+                  />
+                  <el-select v-model="relationType" style="width: 140px">
+                    <el-option
+                      v-for="(label, key) in KO_RELATION_TYPE_LABEL"
+                      :key="key"
+                      :label="label"
+                      :value="key"
+                    />
+                  </el-select>
+                  <el-button
+                    type="primary"
+                    :loading="relationBusy"
+                    :disabled="!relationPeerId.trim()"
+                    @click="addRelation"
+                  >
+                    {{ t('curation.koEditor.relationAdd') }}
+                  </el-button>
                 </div>
               </div>
             </el-form-item>

@@ -27,3 +27,5 @@ deploy/certs/*.crt
 .idea/
 .vscode/
 .DS_Store
+
+deploy/.env.llm.runtime

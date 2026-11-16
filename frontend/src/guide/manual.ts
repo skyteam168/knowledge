@@ -1,6 +1,7 @@
 import type { PermissionRequirement } from '@/utils/permission'
 import { currentLocale, type AppLocale } from '@/i18n'
 import * as en from './content/manual.en'
+import * as vi from './content/manual.vi'
 import * as zhCN from './content/manual.zh-CN'
 
 export interface ManualStep {
@@ -44,6 +45,7 @@ export interface ManualContent {
 export const MANUAL_CONTENT: Record<AppLocale, ManualContent> = {
   'zh-CN': { sections: zhCN.MANUAL_SECTIONS, faq: zhCN.MANUAL_FAQ },
   en: { sections: en.MANUAL_SECTIONS, faq: en.MANUAL_FAQ },
+  vi: { sections: vi.MANUAL_SECTIONS, faq: vi.MANUAL_FAQ },
 }
 
 /** Manual for the current UI locale; reactive when read inside a computed or render. */

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { getDocumentAcl, setDocumentAcl } from '@/api/knowledge'
@@ -18,6 +18,22 @@ const kbVisibility = ref<KbVisibility>('restricted')
 const kbEntries = ref<AclEntryOut[]>([])
 const entries = ref<AclEntryOut[]>([])
 
+const denyEntries = computed({
+  get: () => entries.value.filter((e) => (e.effect ?? 'allow') === 'deny'),
+  set: (rows: AclEntryOut[]) => {
+    const allows = entries.value.filter((e) => (e.effect ?? 'allow') !== 'deny')
+    entries.value = [...allows, ...rows.map((r) => ({ ...r, effect: 'deny' as const, permission: 'read' as const }))]
+  },
+})
+
+const allowEntries = computed({
+  get: () => entries.value.filter((e) => (e.effect ?? 'allow') !== 'deny'),
+  set: (rows: AclEntryOut[]) => {
+    const denies = entries.value.filter((e) => (e.effect ?? 'allow') === 'deny')
+    entries.value = [...rows.map((r) => ({ ...r, effect: r.effect ?? ('allow' as const) })), ...denies]
+  },
+})
+
 watch(visible, async (open) => {
   if (!open || !props.document) return
   loading.value = true
@@ -26,7 +42,7 @@ watch(visible, async (open) => {
     inherit.value = acl.inherit
     kbVisibility.value = acl.kb_visibility
     kbEntries.value = acl.kb_entries
-    entries.value = acl.entries
+    entries.value = acl.entries.map((e) => ({ ...e, effect: e.effect ?? 'allow' }))
   } finally {
     loading.value = false
   }
@@ -36,15 +52,17 @@ async function submit(): Promise<void> {
   if (!props.document) return
   saving.value = true
   try {
+    const payload = inherit.value
+      ? denyEntries.value
+      : entries.value
     await setDocumentAcl(props.document.id, {
       inherit: inherit.value,
-      entries: inherit.value
-        ? []
-        : entries.value.map(({ principal_type, principal_id, permission }) => ({
-            principal_type,
-            principal_id,
-            permission,
-          })),
+      entries: payload.map(({ principal_type, principal_id, permission, effect }) => ({
+        principal_type,
+        principal_id,
+        permission: effect === 'deny' ? 'read' : permission,
+        effect: effect ?? 'allow',
+      })),
     })
     ElMessage.success(t('knowledge.acl.updated'))
     visible.value = false
@@ -59,7 +77,7 @@ async function submit(): Promise<void> {
   <el-dialog
     v-model="visible"
     :title="t('knowledge.acl.docTitle', { title: document?.title ?? '' })"
-    width="720px"
+    width="760px"
   >
     <div v-loading="loading">
       <el-form label-width="100px">
@@ -84,6 +102,15 @@ async function submit(): Promise<void> {
           class="tip"
         />
         <AclEditor v-model="kbEntries" disabled />
+        <h4 class="deny-title">{{ t('knowledge.acl.denySection') }}</h4>
+        <el-alert
+          type="warning"
+          :closable="false"
+          show-icon
+          :title="t('knowledge.acl.denyTip')"
+          class="tip"
+        />
+        <AclEditor v-model="denyEntries" deny-only />
       </template>
       <template v-else>
         <el-alert
@@ -93,7 +120,7 @@ async function submit(): Promise<void> {
           :title="t('knowledge.acl.customTip')"
           class="tip"
         />
-        <AclEditor v-model="entries" />
+        <AclEditor v-model="allowEntries" />
       </template>
     </div>
     <template #footer>
@@ -106,5 +133,10 @@ async function submit(): Promise<void> {
 <style scoped>
 .tip {
   margin-bottom: 12px;
+}
+.deny-title {
+  margin: 16px 0 8px;
+  font-size: 14px;
+  font-weight: 600;
 }
 </style>

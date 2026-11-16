@@ -42,15 +42,16 @@ from app.retrieval.pipeline import RetrievalPipeline
 from app.schemas.chat import AskIn
 from app.services.authz import AuthzCache
 from app.services.chat import prompt
-from app.services.chat.acl_check import EvidenceAclChecker
+from app.services.chat.acl_check import AclCheckResult, EvidenceAclChecker
 from app.services.chat.answer_images import (
     answer_image_targets,
     attach_material_images,
     resolve_page_image,
 )
 from app.services.chat.citations import CitationResult, CitationValidator
+from app.services.chat.concepts import related_concepts_from_matches
 from app.services.chat.conversation_service import DEFAULT_TITLE, RESOURCE_MESSAGE
-from app.services.chat.evidence import EvidenceValidator, Hit, Verdict
+from app.services.chat.evidence import Evidence, EvidenceValidator, Hit, Verdict
 from app.services.chat.expansion import (
     ExpansionConfig,
     KnowledgeExpansion,
@@ -63,6 +64,7 @@ from app.services.knowledge.ko_access import KoAccess
 from app.services.knowledge.protection import limit_export_text, protection_of
 from app.services.search.search_service import SearchParams, SearchService
 from app.services.security.pii import PiiMasker, StreamMasker
+from app.services.terminology.service import TerminologyService
 
 logger = logging.getLogger(__name__)
 
@@ -105,6 +107,8 @@ class _Run:
     gap: KnowledgeGap | None = None
     # User-facing progress, streamed as `step` events and kept on the answer message.
     progress: list[dict[str, Any]] = field(default_factory=list)
+    # Lightweight terminology cards (SSE `concepts`); also persisted into message.steps.
+    concepts: list[dict[str, Any]] = field(default_factory=list)
 
     def mark(self, name: str, since: float) -> None:
         self.timings[f"{name}_ms"] = round((time.perf_counter() - since) * 1000, 2)
@@ -168,6 +172,7 @@ class AnswerService(BaseService):
                 parent=settings.chat_expand_parent,
                 neighbors=max(0, settings.chat_expand_neighbors),
                 ko=settings.chat_expand_ko,
+                entity_limit=max(0, settings.chat_expand_entity_limit),
                 token_budget=settings.chat_context_token_budget,
             ),
             ko_source,
@@ -340,6 +345,19 @@ class AnswerService(BaseService):
             },
         )
 
+        term_meta = run.steps.get("terminology") or {}
+        raw_matches = term_meta.get("matches") if isinstance(term_meta, dict) else None
+        if isinstance(raw_matches, list) and raw_matches:
+            run.concepts = await related_concepts_from_matches(
+                self.session,
+                org_id=self.ctx.user.org_id,
+                user=self.ctx.user,
+                matches=[m for m in raw_matches if isinstance(m, dict)],
+                allowed_kb_ids=self.allowed_kb_ids,
+            )
+            if run.concepts:
+                yield ChatEvent("concepts", {"items": run.concepts})
+
         yield run.step("evidence", "running")
         t = time.perf_counter()
         expansion = await self.expansion.expand(hits)
@@ -422,9 +440,29 @@ class AnswerService(BaseService):
                 {"n": i, **e.describe(with_content=True)} for i, e in enumerate(evidences, start=1)
             ],
         }
-        parts = []
-        async for event in self._generate(run, messages, parts):
+        parts: list[str] = []
+        async for event in self._generate(run, messages, parts, evidences=evidences):
             yield event
+
+        # Post-generate ACL gate: catch revoke that landed after the last mid-stream check.
+        post = await self._recheck_evidences(evidences)
+        if post.dropped:
+            prev = run.steps.get("acl_midstream") or {}
+            run.steps["acl_poststream"] = {
+                "kept": len(post.kept),
+                "dropped": post.dropped,
+                "midstream": bool(prev),
+            }
+            evidences[:] = post.kept
+        if not evidences:
+            # All context revoked: replace streamed answer with a safe refusal.
+            parts.clear()
+            parts.append(prompt.ACL_REVOKED_ANSWER)
+            yield ChatEvent("token", {"text": "\n\n" + prompt.ACL_REVOKED_ANSWER})
+            result = CitationResult(answer=prompt.ACL_REVOKED_ANSWER, citations=[])
+            async for event in self._finish(run, result, Grounding.NO_EVIDENCE):
+                yield event
+            return
 
         result = self.citations.validate("".join(parts), evidences)
         image_targets = answer_image_targets(evidences)
@@ -481,7 +519,18 @@ class AnswerService(BaseService):
 
     async def _retrieve(self, run: _Run, rewrite: RewriteResult) -> list[Hit]:
         t = time.perf_counter()
-        queries = rewrite.queries[: 1 + max(0, self.settings.chat_max_subqueries)]
+        base_queries = rewrite.queries[: 1 + max(0, self.settings.chat_max_subqueries)]
+        terminology = TerminologyService(
+            self.session, self.ctx, self.authz_cache, self.settings
+        )
+        expansion = await terminology.expand_for_org(base_queries)
+        run.steps["terminology"] = expansion.describe()
+        # Cap total retrieval fan-out: originals + alias extras, still bounded by max_subqueries
+        # plus terminology_expand_max_extra.
+        max_queries = 1 + max(0, self.settings.chat_max_subqueries) + max(
+            0, self.settings.terminology_expand_max_extra
+        )
+        queries = expansion.queries[:max_queries]
         merged: dict[str, Hit] = {}
         order: list[str] = []
         per_query: list[dict[str, Any]] = []
@@ -544,13 +593,26 @@ class AnswerService(BaseService):
         await self.session.commit()
         return hits
 
+    async def _recheck_evidences(self, evidences: list[Evidence]) -> AclCheckResult:
+        """Re-run Evidence ACL (PG queries; do not expire_all — ORM messages are mid-stream)."""
+        return await self.acl.check(evidences)
+
     async def _generate(
-        self, run: _Run, messages: list[ChatMessage], parts: list[str]
+        self,
+        run: _Run,
+        messages: list[ChatMessage],
+        parts: list[str],
+        *,
+        evidences: list[Evidence] | None = None,
     ) -> AsyncIterator[ChatEvent]:
         yield run.step("generate", "running")
         t = time.perf_counter()
         first: float | None = None
         stream_mask = StreamMasker(self.masker) if self.masker else None
+        interval = max(0, int(self.settings.chat_acl_recheck_every_chars))
+        next_check = interval
+        streamed_chars = 0
+        revoked_midstream = False
         tokens = self.gateway.stream(
             messages,
             temperature=self.settings.chat_temperature,
@@ -562,27 +624,48 @@ class AnswerService(BaseService):
                     first = time.perf_counter()
                     run.timings["first_token_ms"] = round((first - t) * 1000, 2)
                 parts.append(token)
+                streamed_chars += len(token)
                 text = stream_mask.feed(token) if stream_mask else token
                 if text:
                     yield ChatEvent("token", {"text": text})
-            if stream_mask:
+                if (
+                    evidences is not None
+                    and interval > 0
+                    and streamed_chars >= next_check
+                ):
+                    next_check = streamed_chars + interval
+                    mid = await self._recheck_evidences(evidences)
+                    if mid.dropped:
+                        revoked_midstream = True
+                        run.steps["acl_midstream"] = {
+                            "chars": streamed_chars,
+                            "kept": len(mid.kept),
+                            "dropped": mid.dropped,
+                        }
+                        evidences[:] = mid.kept
+                        break
+            if stream_mask and not revoked_midstream:
                 rest = stream_mask.flush()
                 if rest:
                     yield ChatEvent("token", {"text": rest})
+            detail: dict[str, Any] = {
+                "model": self.gateway.chat.model,
+                "first_token_ms": run.timings.get("first_token_ms"),
+            }
+            if revoked_midstream:
+                detail["acl_revoked"] = True
             yield run.step(
                 "generate",
                 "done",
                 ms=(time.perf_counter() - t) * 1000,
-                detail={
-                    "model": self.gateway.chat.model,
-                    "first_token_ms": run.timings.get("first_token_ms"),
-                },
+                detail=detail,
             )
         finally:
             run.mark("generation", t)
             run.steps["generation"] = {
                 "model": self.gateway.chat.model,
                 "chars": sum(len(p) for p in parts),
+                "acl_revoked": revoked_midstream,
             }
 
     def _gap(
@@ -701,7 +784,12 @@ class AnswerService(BaseService):
         answer = run.answer
         answer.content = result.answer
         answer.citations = result.citations
-        answer.steps = list(run.progress)
+        steps = list(run.progress)
+        if run.concepts:
+            steps.append(
+                {"step": "concepts", "status": "done", "detail": {"items": run.concepts}}
+            )
+        answer.steps = steps
         answer.grounding = grounding.value
         answer.status = MessageStatus.DONE.value
         self.session.add(self._trace(run, "ok", grounding.value))
@@ -723,23 +811,24 @@ class AnswerService(BaseService):
                 ),
                 "context_document_ids": run.context_document_ids,
                 "copy_protect": copy_protect,
+                "concepts": len(run.concepts),
             },
         )
         await self.session.commit()
-        yield ChatEvent(
-            "done",
-            {
-                "message_id": answer.id,
-                "conversation_id": run.conversation_id,
-                "answer": result.answer,
-                "grounding": grounding.value,
-                "intent": answer.intent,
-                "rewritten_query": answer.rewritten_query,
-                "trace_id": run.trace_id,
-                "gap_id": run.gap.id if run.gap else None,
-                "copy_protect": copy_protect,
-            },
-        )
+        done: dict[str, Any] = {
+            "message_id": answer.id,
+            "conversation_id": run.conversation_id,
+            "answer": result.answer,
+            "grounding": grounding.value,
+            "intent": answer.intent,
+            "rewritten_query": answer.rewritten_query,
+            "trace_id": run.trace_id,
+            "gap_id": run.gap.id if run.gap else None,
+            "copy_protect": copy_protect,
+        }
+        if run.concepts:
+            done["concepts"] = run.concepts
+        yield ChatEvent("done", done)
 
     async def _fail(self, run: _Run, code: str, error: str) -> None:
         """Roll back the unfinished work, then persist the error state and the trace."""

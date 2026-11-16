@@ -35,10 +35,12 @@ import type {
   Conversation,
   FeedbackReason,
   KnowledgeBase,
+  RelatedConcept,
 } from '@/api/types'
 import AnswerContent from '@/components/assistant/AnswerContent.vue'
 import CitationDrawer from '@/components/assistant/CitationDrawer.vue'
 import FeedbackDialog from '@/components/assistant/FeedbackDialog.vue'
+import RelatedConcepts from '@/components/assistant/RelatedConcepts.vue'
 import ThinkingSteps from '@/components/assistant/ThinkingSteps.vue'
 import ProtectedArea from '@/components/knowledge/ProtectedArea.vue'
 import AppLogo from '@/components/layout/AppLogo.vue'
@@ -68,10 +70,9 @@ const streaming = ref(false)
 let controller: AbortController | null = null
 const scroller = ref<HTMLElement>()
 const atBottom = ref(true)
-const composer = ref<{ focus: () => void }>()
+const composer = ref<{ focus: () => void; textarea?: HTMLTextAreaElement } | null>(null)
 
 const active = computed(() => conversations.value.find((c) => c.id === activeId.value) ?? null)
-const canSend = computed(() => !!input.value.trim() && !streaming.value)
 const lastAssistant = computed(() =>
   [...messages.value].reverse().find((m) => m.role === 'assistant'),
 )
@@ -116,8 +117,20 @@ const groupedConversations = computed(() => {
   return groups.filter((g) => g.items.length)
 })
 
+function conceptsFromSteps(steps: ChatStep[] | undefined): RelatedConcept[] {
+  const row = steps?.find((s) => s.step === 'concepts')
+  const items = row?.detail?.items
+  return Array.isArray(items) ? (items as RelatedConcept[]) : []
+}
+
 function toUi(message: ChatMessage): UiMessage {
-  return { ...message, steps: message.steps ?? [], key: message.id }
+  const steps = message.steps ?? []
+  return {
+    ...message,
+    steps,
+    concepts: message.concepts?.length ? message.concepts : conceptsFromSteps(steps),
+    key: message.id,
+  }
 }
 
 async function openConversation(id: string): Promise<void> {
@@ -247,6 +260,7 @@ function draftMessage(role: ChatMessage['role'], content: string): UiMessage {
     feedback: null,
     knowledge_requested: false,
     steps: [],
+    concepts: [],
   }
 }
 
@@ -268,6 +282,25 @@ function upsertStep(reply: UiMessage, step: ChatStep): void {
   const idx = reply.steps.findIndex((s) => s.step === step.step)
   if (idx >= 0) reply.steps.splice(idx, 1, step)
   else reply.steps.push(step)
+}
+
+function syncComposerFromDom(): void {
+  const root = composer.value as { textarea?: HTMLTextAreaElement } | HTMLElement | null
+  const el =
+    root && 'textarea' in root && root.textarea
+      ? root.textarea
+      : root instanceof HTMLElement
+        ? root.querySelector('textarea')
+        : null
+  if (el && typeof el.value === 'string' && el.value !== input.value) {
+    input.value = el.value
+  }
+}
+
+/** Prefer DOM value so CDP / IME / paste still send even if v-model lagged. */
+async function sendFromComposer(): Promise<void> {
+  syncComposerFromDom()
+  await send()
 }
 
 async function send(text?: string): Promise<void> {
@@ -306,12 +339,16 @@ async function send(text?: string): Promise<void> {
         onCitations: (citations) => {
           reply.citations = citations
         },
+        onConcepts: (items) => {
+          reply.concepts = items
+        },
         onDone: (done) => {
           reply.content = done.answer
           reply.grounding = done.grounding
           reply.intent = done.intent
           reply.rewritten_query = done.rewritten_query
           reply.copy_protect = !!done.copy_protect
+          if (done.concepts?.length) reply.concepts = done.concepts
           reply.status = 'done'
           scrollToBottom()
         },
@@ -596,6 +633,10 @@ onBeforeUnmount(stop)
               <div class="msg__avatar"><AppLogo :size="28" collapsed /></div>
               <div class="msg__body">
                 <ThinkingSteps :steps="msg.steps" :streaming="msg.status === 'streaming'" />
+                <RelatedConcepts
+                  v-if="msg.status === 'done' && msg.concepts?.length"
+                  :items="msg.concepts"
+                />
 
                 <div v-if="msg.grounding === 'no_evidence'" class="notice notice--info">
                   <div class="notice__title">{{ t('assistant.noEvidence') }}</div>
@@ -803,10 +844,11 @@ onBeforeUnmount(stop)
               v-else
               type="button"
               class="send"
-              :disabled="!canSend"
+              :disabled="streaming"
               :title="t('assistant.send')"
+              :aria-label="t('assistant.send')"
               data-test="send"
-              @click="send()"
+              @click="sendFromComposer()"
             >
               <el-icon><Position /></el-icon>
             </button>

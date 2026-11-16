@@ -15,6 +15,7 @@ import type {
   KnowledgeBase,
 } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
+import EmptyState from '@/components/EmptyState.vue'
 import { GAP_STATUS_META, GAP_TYPE_META, metaOf } from '@/utils/curation'
 import { formatDateTime } from '@/utils/format'
 
@@ -287,6 +288,9 @@ onMounted(async () => {
             data-test="gap-table"
             @row-click="openGap"
           >
+            <template #empty>
+              <EmptyState :description="t('curation.gapBoard.empty')" />
+            </template>
             <el-table-column :label="t('curation.gapBoard.colQuestion')" min-width="280">
               <template #default="{ row }">
                 <div class="gap-board__question">{{ row.rewritten_query || row.query }}</div>

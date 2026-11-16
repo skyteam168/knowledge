@@ -26,7 +26,10 @@ from app.models import (
     KnowledgeGap,
     KnowledgeObject,
     KoOrigin,
+    KoRelation,
+    KoRelationType,
     KoStatus,
+    KoType,
     KoVersion,
     KoVersionStatus,
     ReviewStatus,
@@ -39,6 +42,7 @@ from app.repositories.chat_repo import ChunkRepository as AnswerChunkRepository
 from app.repositories.curation_repo import (
     GapRepository,
     KnowledgeObjectRepository,
+    KoRelationRepository,
     ReviewTaskRepository,
 )
 from app.repositories.indexing_repo import IndexingRepository
@@ -51,6 +55,8 @@ from app.schemas.curation import (
     KoCreate,
     KoDetailOut,
     KoOut,
+    KoRelationCreate,
+    KoRelationOut,
     KoSourceIn,
     KoSourceOut,
     KoUpdate,
@@ -89,8 +95,16 @@ class CompilerUnavailableError(AppError):
     message = "AI 生成失败，请稍后重试"
 
 
-def _entry_strings(rows: Sequence[tuple[str, str, str]]) -> list[str]:
-    return sorted(f"{t}:{i}:{p}" for t, i, p in rows)
+def _entry_strings(rows: Sequence[tuple[str, str, str] | tuple[str, str, str, str]]) -> list[str]:
+    out: list[str] = []
+    for row in rows:
+        if len(row) == 4:
+            t, i, p, effect = row
+        else:
+            t, i, p = row  # type: ignore[misc]
+            effect = "allow"
+        out.append(f"{t}:{i}:{p}:{effect}")
+    return sorted(out)
 
 
 class KnowledgeObjectService(BaseService):
@@ -108,6 +122,7 @@ class KnowledgeObjectService(BaseService):
         super().__init__(session, ctx, authz_cache)
         self.settings = settings
         self.repo = KnowledgeObjectRepository(session)
+        self.relations = KoRelationRepository(session)
         self.tasks = ReviewTaskRepository(session)
         self.gaps = GapRepository(session)
         self.access = KnowledgeAccess(session)
@@ -648,23 +663,28 @@ class KnowledgeObjectService(BaseService):
             inherit=ko.acl_inherit,
             kb_visibility=kb.visibility,
             kb_entries=await directory.describe(
-                (r.principal_type, r.principal_id, r.permission) for r in kb_rows
+                (r.principal_type, r.principal_id, r.permission, r.effect or "allow")
+                for r in kb_rows
             ),
             entries=await directory.describe(
-                (r.principal_type, r.principal_id, r.permission) for r in rows
+                (r.principal_type, r.principal_id, r.permission, r.effect or "allow")
+                for r in rows
             ),
         )
 
     async def set_acl(self, ko_id: str, data: DocumentAclUpdate) -> DocumentAclOut:
         ko, kb = await self._ko(ko_id, AclPermission.MANAGE)
         entries = await PrincipalDirectory(self.session, self.org_id).validate(data.entries)
-        new_rows = (
-            []
+        kept = (
+            [e for e in entries if e.effect == "deny"]
             if data.inherit
-            else [(e.principal_type, e.principal_id, e.permission) for e in entries]
+            else entries
         )
+        new_rows = [
+            (e.principal_type, e.principal_id, e.permission, e.effect or "allow") for e in kept
+        ]
         old_rows = [
-            (r.principal_type, r.principal_id, r.permission)
+            (r.principal_type, r.principal_id, r.permission, r.effect or "allow")
             for r in await self.access.entries(self.org_id, RESOURCE_KO, ko.id)
         ]
         before = {"inherit": ko.acl_inherit, "entries": _entry_strings(old_rows)}
@@ -685,6 +705,112 @@ class KnowledgeObjectService(BaseService):
             self.audit_ctx, "ko.set_acl", RESOURCE_KO_AUDIT, ko.id, before, after
         )
         return await self.get_acl(ko.id)
+
+    # ---- relations (light ontology) ----------------------------------------------------
+
+    async def list_relations(self, ko_id: str) -> list[KoRelationOut]:
+        await self._ko(ko_id, AclPermission.READ)
+        rows = await self.relations.list_for_ko(self.org_id, ko_id)
+        return await self._relations_out(ko_id, rows)
+
+    async def create_relation(self, ko_id: str, data: KoRelationCreate) -> KoRelationOut:
+        from app.ontology.constraints import relation_soft_warnings
+
+        focus, _kb = await self._ko(ko_id, AclPermission.EDIT)
+        if data.to_ko_id == ko_id:
+            raise ValidationAppError("不能与自身建立关系")
+        peer = await self.repo.get(self.org_id, data.to_ko_id)
+        if peer is None:
+            raise NotFoundError("目标知识条目不存在")
+        # Peer must be readable so editors cannot link into invisible KOs.
+        await self._ko(peer.id, AclPermission.READ)
+        existing = await self.relations.find_edge(
+            self.org_id, ko_id, data.to_ko_id, data.relation_type.value
+        )
+        if existing is not None:
+            raise ConflictError("相同关系已存在")
+        soft_warnings = relation_soft_warnings(
+            data.relation_type,
+            KoType(focus.ko_type),
+            KoType(peer.ko_type),
+        )
+        row = KoRelation(
+            org_id=self.org_id,
+            from_ko_id=ko_id,
+            to_ko_id=data.to_ko_id,
+            relation_type=data.relation_type.value,
+            created_by=self.ctx.user.id,
+        )
+        self.relations.add(row)
+        await self.session.flush()
+        await self.audit.record(
+            self.audit_ctx,
+            "ko.relation_create",
+            RESOURCE_KO_AUDIT,
+            row.id,
+            None,
+            {
+                "from_ko_id": ko_id,
+                "to_ko_id": data.to_ko_id,
+                "relation_type": data.relation_type.value,
+                "ontology_warnings": soft_warnings or None,
+            },
+        )
+        await self.session.commit()
+        out = await self._relations_out(ko_id, [row])
+        result = out[0]
+        result.warnings = soft_warnings
+        return result
+
+    async def delete_relation(self, ko_id: str, relation_id: str) -> None:
+        await self._ko(ko_id, AclPermission.EDIT)
+        row = await self.relations.get(self.org_id, relation_id)
+        if row is None or (row.from_ko_id != ko_id and row.to_ko_id != ko_id):
+            raise NotFoundError("关系不存在")
+        before = {
+            "from_ko_id": row.from_ko_id,
+            "to_ko_id": row.to_ko_id,
+            "relation_type": row.relation_type,
+        }
+        await self.relations.delete(row)
+        await self.audit.record(
+            self.audit_ctx, "ko.relation_delete", RESOURCE_KO_AUDIT, relation_id, before, None
+        )
+        await self.session.commit()
+
+    async def _relations_out(
+        self, focus_ko_id: str, rows: Sequence[KoRelation]
+    ) -> list[KoRelationOut]:
+        peer_ids = {
+            (r.to_ko_id if r.from_ko_id == focus_ko_id else r.from_ko_id) for r in rows
+        }
+        peers = {
+            ko.id: ko
+            for ko, _kb in await self.repo.objects_with_kbs(self.org_id, list(peer_ids))
+        }
+        out: list[KoRelationOut] = []
+        for row in rows:
+            outbound = row.from_ko_id == focus_ko_id
+            peer_id = row.to_ko_id if outbound else row.from_ko_id
+            peer = peers.get(peer_id)
+            if peer is None:
+                continue
+            out.append(
+                KoRelationOut(
+                    id=row.id,
+                    from_ko_id=row.from_ko_id,
+                    to_ko_id=row.to_ko_id,
+                    relation_type=KoRelationType(row.relation_type),
+                    direction="outbound" if outbound else "inbound",
+                    peer_id=peer.id,
+                    peer_title=peer.title,
+                    peer_ko_type=KoType(peer.ko_type),
+                    peer_status=KoStatus(peer.status),
+                    created_at=row.created_at,
+                    created_by=row.created_by,
+                )
+            )
+        return out
 
     # ---- AI drafts ---------------------------------------------------------------------
 

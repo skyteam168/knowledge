@@ -419,6 +419,24 @@ async def test_expansion_parent_dedupes_and_neighbors_merge(session: AsyncSessio
     assert [e.chunk_ids for e in singles.evidences] == [["c2"], ["c5"], ["c1"]]
 
 
+async def test_expansion_entity_related_chunks(session: AsyncSession) -> None:
+    org_id, chunks = await _seed_chunks(session)
+    # c1 and c6 share an entity; hit only c1 so neighbors stay in p0, entity pulls c6.
+    chunks["c1"].entity_ids = ["ent-acl"]
+    chunks["c6"].entity_ids = ["ent-acl"]
+    await session.flush()
+    repo = ChunkRepository(session)
+    result = await KnowledgeExpansion(
+        repo,
+        org_id,
+        ExpansionConfig(parent=False, neighbors=0, entity_limit=2),
+    ).expand([_hit("c1", 0.9, 1)])
+    kinds = [(e.kind, e.chunk_ids) for e in result.evidences]
+    assert (EvidenceKind.CHUNKS, ["c1"]) in kinds
+    assert (EvidenceKind.ENTITY, ["c6"]) in kinds
+    assert result.stats.get("entity") == 1
+
+
 async def test_expansion_respects_token_budget(session: AsyncSession) -> None:
     org_id, _ = await _seed_chunks(session)
     repo = ChunkRepository(session)

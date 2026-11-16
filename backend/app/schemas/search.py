@@ -23,6 +23,7 @@ class SearchDocumentOut(BaseModel):
 class StageScores(BaseModel):
     dense: float | None = None
     bm25: float | None = None
+    graph: float | None = None
     rrf: float
     rerank: float | None = None
 
@@ -30,6 +31,7 @@ class StageScores(BaseModel):
 class StageRanks(BaseModel):
     dense: int | None = None
     bm25: int | None = None
+    graph: int | None = None
     rrf: int
     rerank: int | None = None
 

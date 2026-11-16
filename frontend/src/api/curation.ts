@@ -1,4 +1,4 @@
-import { get, http, post, put } from './http'
+import { del, get, http, post, put } from './http'
 import type {
   ClusterRunResult,
   DocumentAcl,
@@ -14,6 +14,8 @@ import type {
   KnowledgeObjectDetail,
   KoCreate,
   KoQuery,
+  KoRelation,
+  KoRelationType,
   KoType,
   KoUpdate,
   KoVersion,
@@ -68,6 +70,13 @@ export const deprecateKo = (id: string, reason?: string) =>
 export const checkKoConflicts = (id: string) =>
   post<KnowledgeObjectDetail>(`${BASE}/kos/${id}/check-conflicts`, null, slow)
 export const listKoVersions = (id: string) => get<KoVersion[]>(`${BASE}/kos/${id}/versions`)
+export const listKoRelations = (id: string) => get<KoRelation[]>(`${BASE}/kos/${id}/relations`)
+export const createKoRelation = (
+  id: string,
+  body: { to_ko_id: string; relation_type: KoRelationType },
+) => post<KoRelation>(`${BASE}/kos/${id}/relations`, body)
+export const deleteKoRelation = (id: string, relationId: string) =>
+  del(`${BASE}/kos/${id}/relations/${relationId}`)
 export const getKoAcl = (id: string) => get<DocumentAcl>(`${BASE}/kos/${id}/acl`)
 export const setKoAcl = (id: string, body: DocumentAclUpdate) =>
   put<DocumentAcl>(`${BASE}/kos/${id}/acl`, body)

@@ -15,15 +15,20 @@ function flatten(messages: LocaleMessages, prefix = ''): Record<string, string> 
 const modules = localeModules()
 
 describe('locale modules', () => {
-  it.each(Object.keys(modules))('%s: zh-CN and en have the same keys', (ns) => {
+  it.each(Object.keys(modules))('%s: zh-CN, en and vi have the same keys', (ns) => {
     const zh = Object.keys(flatten(modules[ns]['zh-CN'])).sort()
     const en = Object.keys(flatten(modules[ns].en)).sort()
     expect(en).toEqual(zh)
+    expect(modules[ns].vi, `${ns} missing vi pack`).toBeTruthy()
+    const vi = Object.keys(flatten(modules[ns].vi!)).sort()
+    expect(vi).toEqual(en)
   })
 
   it.each(Object.keys(modules))('%s: every message compiles and is non-empty', (ns) => {
-    for (const locale of ['zh-CN', 'en'] as const) {
-      for (const [key, message] of Object.entries(flatten(modules[ns][locale]))) {
+    for (const locale of ['zh-CN', 'en', 'vi'] as const) {
+      const pack = modules[ns][locale]
+      expect(pack, `${ns}.${locale}`).toBeTruthy()
+      for (const [key, message] of Object.entries(flatten(pack!))) {
         const errors: string[] = []
         baseCompile(message, { onError: (e) => errors.push(e.message) })
         expect(errors, `${locale} ${ns}.${key}: ${message}`).toEqual([])

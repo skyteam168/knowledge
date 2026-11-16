@@ -47,12 +47,18 @@ async def run(settings: Settings, stop: asyncio.Event) -> None:
     from app.workers.curation import check_expirations, cluster_gaps
     from app.workers.directory import dispatch_directory_syncs
     from app.workers.maintenance import purge_expired_data, reclaim_stuck_ingest
+    from app.workers.structured import dispatch_structured_syncs
 
     jobs = [
         Job(
             "directory_sync",
             settings.directory_sync_check_interval_seconds,
             dispatch_directory_syncs.send,
+        ),
+        Job(
+            "structured_sync",
+            settings.structured_sync_check_interval_seconds,
+            dispatch_structured_syncs.send,
         ),
         Job("cluster_gaps", settings.gap_cluster_interval_seconds, cluster_gaps.send),
         Job("check_expirations", settings.expiry_check_interval_seconds, check_expirations.send),

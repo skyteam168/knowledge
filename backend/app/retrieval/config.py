@@ -12,6 +12,7 @@ from app.core.config import Settings
 class Route(StrEnum):
     DENSE = "dense"
     SPARSE = "sparse"
+    GRAPH = "graph"
 
 
 # Root fields use IK (Chinese); `.en` / `.vi` multi-fields cover English / Vietnamese BM25.
@@ -78,10 +79,21 @@ class SparseConfig(_Strict):
         return value
 
 
+class GraphConfig(_Strict):
+    """Multi-hop over curated KO relations (PG recursive CTE); seeds come from dense/sparse."""
+
+    enabled: bool = True
+    top_k: int = Field(default=20, ge=1, le=200)
+    max_hops: int = Field(default=2, ge=1, le=5)
+    # Empty = all relation types; otherwise only listed KoRelationType values.
+    relation_types: list[str] = Field(default_factory=list)
+    timeout_seconds: float = Field(default=3.0, gt=0, le=60)
+
+
 class FusionConfig(_Strict):
     k: int = Field(default=60, ge=1, le=1000)
     weights: dict[Route, float] = Field(
-        default_factory=lambda: {Route.DENSE: 1.0, Route.SPARSE: 1.0}
+        default_factory=lambda: {Route.DENSE: 1.0, Route.SPARSE: 1.0, Route.GRAPH: 1.0}
     )
 
     @field_validator("weights")
@@ -124,6 +136,7 @@ class KoBoostConfig(_Strict):
 class RetrievalConfig(_Strict):
     dense: DenseConfig = Field(default_factory=DenseConfig)
     sparse: SparseConfig = Field(default_factory=SparseConfig)
+    graph: GraphConfig = Field(default_factory=GraphConfig)
     fusion: FusionConfig = Field(default_factory=FusionConfig)
     rerank: RerankConfig = Field(default_factory=RerankConfig)
     cache: CacheConfig = Field(default_factory=CacheConfig)
@@ -132,6 +145,7 @@ class RetrievalConfig(_Strict):
 
     @model_validator(mode="after")
     def _one_route(self) -> "RetrievalConfig":
+        # Graph alone cannot seed itself; dense and/or sparse must run.
         if not (self.dense.enabled or self.sparse.enabled):
             raise ValueError("at least one of dense / sparse retrieval must be enabled")
         return self
@@ -144,7 +158,19 @@ class RetrievalConfig(_Strict):
                 query_instruction=settings.retrieval_query_instruction,
             ),
             sparse=SparseConfig(top_k=settings.retrieval_sparse_top_k),
-            fusion=FusionConfig(k=settings.retrieval_rrf_k),
+            graph=GraphConfig(
+                enabled=settings.retrieval_graph_enabled,
+                top_k=settings.retrieval_graph_top_k,
+                max_hops=settings.retrieval_graph_max_hops,
+            ),
+            fusion=FusionConfig(
+                k=settings.retrieval_rrf_k,
+                weights={
+                    Route.DENSE: 1.0,
+                    Route.SPARSE: 1.0,
+                    Route.GRAPH: settings.retrieval_graph_rrf_weight,
+                },
+            ),
             rerank=RerankConfig(
                 enabled=settings.retrieval_rerank_enabled, top_n=settings.retrieval_rerank_top_n
             ),

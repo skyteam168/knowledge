@@ -17,6 +17,7 @@ import {
 import type { DepartmentNode, Group, Role, User, UserIdentityBrief } from '@/api/types'
 import { useDepartmentTree } from '@/composables/useDepartmentTree'
 import { formatDateTime } from '@/utils/format'
+import EmptyState from '@/components/EmptyState.vue'
 import { roleName } from '@/i18n/catalog'
 
 const { t, te } = useI18n()
@@ -265,9 +266,15 @@ onMounted(() => Promise.all([reloadTree(), load()]))
     <el-table
       v-loading="loading"
       :data="rows"
-      :empty-text="t('users.empty')"
       data-test="user-table"
     >
+      <template #empty>
+        <EmptyState
+          :description="t('users.empty')"
+          :action-label="t('users.actions.precreate')"
+          @action="openCreate"
+        />
+      </template>
       <el-table-column :label="t('users.columns.user')" min-width="150">
         <template #default="{ row }">
           <div>{{ row.display_name || row.username }}</div>

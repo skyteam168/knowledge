@@ -31,6 +31,8 @@ from app.schemas.curation import (
     KoDeprecateIn,
     KoDetailOut,
     KoOut,
+    KoRelationCreate,
+    KoRelationOut,
     KoReviewIn,
     KoSubmitIn,
     KoUpdate,
@@ -258,6 +260,32 @@ async def get_ko_acl(ko_id: str, service: KoServiceDep) -> DocumentAclOut:
 @router.put("/kos/{ko_id}/acl", response_model=DocumentAclOut, dependencies=[KoEditor])
 async def set_ko_acl(ko_id: str, data: DocumentAclUpdate, service: KoServiceDep) -> DocumentAclOut:
     return await service.set_acl(ko_id, data)
+
+
+@router.get("/kos/{ko_id}/relations", response_model=list[KoRelationOut])
+async def list_ko_relations(ko_id: str, service: KoServiceDep) -> list[KoRelationOut]:
+    return await service.list_relations(ko_id)
+
+
+@router.post(
+    "/kos/{ko_id}/relations",
+    response_model=KoRelationOut,
+    status_code=201,
+    dependencies=[KoEditor],
+)
+async def create_ko_relation(
+    ko_id: str, data: KoRelationCreate, service: KoServiceDep
+) -> KoRelationOut:
+    return await service.create_relation(ko_id, data)
+
+
+@router.delete(
+    "/kos/{ko_id}/relations/{relation_id}",
+    status_code=204,
+    dependencies=[KoEditor],
+)
+async def delete_ko_relation(ko_id: str, relation_id: str, service: KoServiceDep) -> None:
+    await service.delete_relation(ko_id, relation_id)
 
 
 @router.post(

@@ -59,4 +59,33 @@ export default {
     },
     system: 'System',
   },
+  vi: {
+    filters: {
+      action: 'Hành động',
+      actionPlaceholder: 'vd. user.update',
+      resourceType: 'Loại tài nguyên',
+      resourceTypePlaceholder: 'vd. user / role',
+      resourceId: 'ID tài nguyên',
+      actorId: 'ID người thực hiện',
+      time: 'Thời gian',
+      start: 'Bắt đầu',
+      end: 'Kết thúc',
+      query: 'Tìm kiếm',
+    },
+    empty: 'Không có nhật ký kiểm toán',
+    detail: {
+      request: 'Yêu cầu',
+      field: 'Trường',
+      before: 'Trước',
+      after: 'Sau',
+      noDiff: 'Không có thay đổi trường',
+    },
+    columns: {
+      time: 'Thời gian',
+      actor: 'Người thực hiện',
+      action: 'Hành động',
+      resource: 'Tài nguyên',
+    },
+    system: 'Hệ thống',
+  },
 } satisfies LocaleModule

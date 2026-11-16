@@ -11,6 +11,7 @@ from app.workers import (
     indexing,
     ingest,
     maintenance,
+    structured,
     tasks,
 )
 
@@ -25,5 +26,6 @@ __all__ = [
     "indexing",
     "ingest",
     "maintenance",
+    "structured",
     "tasks",
 ]

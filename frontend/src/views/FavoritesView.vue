@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { listFavorites, listRecent, removeFavorite } from '@/api/collab'
 import type { SavedItem } from '@/api/types'
+import EmptyState from '@/components/EmptyState.vue'
 import { formatDateTime } from '@/utils/format'
 
 const router = useRouter()
@@ -40,14 +41,16 @@ onActivated(load)
       <el-tab-pane :label="t('collab.favorite.tabRecent')" name="recent" />
     </el-tabs>
     <p class="hint">{{ t('collab.favorite.hint') }}</p>
-    <el-table
-      v-loading="loading"
-      :data="items"
-      data-test="saved-items"
-      :empty-text="
-        tab === 'favorites' ? t('collab.favorite.emptyFavorites') : t('collab.favorite.emptyRecent')
-      "
-    >
+    <el-table v-loading="loading" :data="items" data-test="saved-items">
+      <template #empty>
+        <EmptyState
+          :description="
+            tab === 'favorites'
+              ? t('collab.favorite.emptyFavorites')
+              : t('collab.favorite.emptyRecent')
+          "
+        />
+      </template>
       <el-table-column :label="t('knowledge.doc.title')" min-width="260">
         <template #default="{ row }">
           <el-tag size="small" effect="plain" class="type">{{

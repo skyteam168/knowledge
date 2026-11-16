@@ -1,8 +1,1149 @@
 {
-  "zh-annual-leave": ["doc-leave-policy", "doc-expense-policy", "doc-onboarding"],
-  "zh-leave-apply": ["doc-leave-policy", "doc-onboarding"],
-  "en-pto-days": ["doc-expense-policy", "doc-leave-policy", "doc-onboarding"],
-  "en-expense": ["doc-expense-policy", "doc-leave-policy"],
-  "vi-leave-days": ["doc-onboarding", "doc-leave-policy", "doc-expense-policy"],
-  "vi-onboarding": ["doc-onboarding", "doc-leave-policy"]
+  "zh-annual-leave": [
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding"
+  ],
+  "zh-leave-apply": [
+    "doc-leave-policy",
+    "doc-onboarding"
+  ],
+  "en-pto-days": [
+    "doc-expense-policy",
+    "doc-leave-policy",
+    "doc-onboarding"
+  ],
+  "en-expense": [
+    "doc-expense-policy",
+    "doc-leave-policy"
+  ],
+  "vi-leave-days": [
+    "doc-onboarding",
+    "doc-leave-policy",
+    "doc-expense-policy"
+  ],
+  "vi-onboarding": [
+    "doc-onboarding",
+    "doc-leave-policy"
+  ],
+  "zh-leave-00": [
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "zh-leave-01": [
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "zh-leave-02": [
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "zh-leave-03": [
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "zh-leave-04": [
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "zh-leave-05": [
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "zh-leave-06": [
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "zh-leave-07": [
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "zh-leave-08": [
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "zh-leave-09": [
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "en-leave-00": [
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "en-leave-01": [
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "en-leave-02": [
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "en-leave-03": [
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "vi-leave-00": [
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "vi-leave-01": [
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "zh-expense-00": [
+    "doc-expense-policy",
+    "doc-leave-policy",
+    "doc-onboarding",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "zh-expense-01": [
+    "doc-expense-policy",
+    "doc-leave-policy",
+    "doc-onboarding",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "zh-expense-02": [
+    "doc-expense-policy",
+    "doc-leave-policy",
+    "doc-onboarding",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "zh-expense-03": [
+    "doc-expense-policy",
+    "doc-leave-policy",
+    "doc-onboarding",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "zh-expense-04": [
+    "doc-expense-policy",
+    "doc-leave-policy",
+    "doc-onboarding",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "zh-expense-05": [
+    "doc-expense-policy",
+    "doc-leave-policy",
+    "doc-onboarding",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "zh-expense-06": [
+    "doc-expense-policy",
+    "doc-leave-policy",
+    "doc-onboarding",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "zh-expense-07": [
+    "doc-expense-policy",
+    "doc-leave-policy",
+    "doc-onboarding",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "zh-expense-08": [
+    "doc-expense-policy",
+    "doc-leave-policy",
+    "doc-onboarding",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "zh-expense-09": [
+    "doc-expense-policy",
+    "doc-leave-policy",
+    "doc-onboarding",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "en-expense-00": [
+    "doc-expense-policy",
+    "doc-leave-policy",
+    "doc-onboarding",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "en-expense-01": [
+    "doc-expense-policy",
+    "doc-leave-policy",
+    "doc-onboarding",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "en-expense-02": [
+    "doc-expense-policy",
+    "doc-leave-policy",
+    "doc-onboarding",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "en-expense-03": [
+    "doc-expense-policy",
+    "doc-leave-policy",
+    "doc-onboarding",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "vi-expense-00": [
+    "doc-expense-policy",
+    "doc-leave-policy",
+    "doc-onboarding",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "vi-expense-01": [
+    "doc-expense-policy",
+    "doc-leave-policy",
+    "doc-onboarding",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "zh-onboard-00": [
+    "doc-onboarding",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "zh-onboard-01": [
+    "doc-onboarding",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "zh-onboard-02": [
+    "doc-onboarding",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "zh-onboard-03": [
+    "doc-onboarding",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "zh-onboard-04": [
+    "doc-onboarding",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "zh-onboard-05": [
+    "doc-onboarding",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "zh-onboard-06": [
+    "doc-onboarding",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "zh-onboard-07": [
+    "doc-onboarding",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "zh-onboard-08": [
+    "doc-onboarding",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "zh-onboard-09": [
+    "doc-onboarding",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "en-onboard-00": [
+    "doc-onboarding",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "en-onboard-01": [
+    "doc-onboarding",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "en-onboard-02": [
+    "doc-onboarding",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "en-onboard-03": [
+    "doc-onboarding",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "vi-onboard-00": [
+    "doc-onboarding",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "vi-onboard-01": [
+    "doc-onboarding",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-vpn-guide",
+    "doc-mail-errors"
+  ],
+  "zh-vpn-00": [
+    "doc-vpn-guide",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-mail-errors"
+  ],
+  "zh-vpn-01": [
+    "doc-vpn-guide",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-mail-errors"
+  ],
+  "zh-vpn-02": [
+    "doc-vpn-guide",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-mail-errors"
+  ],
+  "zh-vpn-03": [
+    "doc-vpn-guide",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-mail-errors"
+  ],
+  "zh-vpn-04": [
+    "doc-vpn-guide",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-mail-errors"
+  ],
+  "zh-vpn-05": [
+    "doc-vpn-guide",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-mail-errors"
+  ],
+  "zh-vpn-06": [
+    "doc-vpn-guide",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-mail-errors"
+  ],
+  "zh-vpn-07": [
+    "doc-vpn-guide",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-mail-errors"
+  ],
+  "zh-vpn-08": [
+    "doc-vpn-guide",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-mail-errors"
+  ],
+  "zh-vpn-09": [
+    "doc-vpn-guide",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-mail-errors"
+  ],
+  "en-vpn-00": [
+    "doc-vpn-guide",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-mail-errors"
+  ],
+  "en-vpn-01": [
+    "doc-vpn-guide",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-mail-errors"
+  ],
+  "en-vpn-02": [
+    "doc-vpn-guide",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-mail-errors"
+  ],
+  "en-vpn-03": [
+    "doc-vpn-guide",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-mail-errors"
+  ],
+  "vi-vpn-00": [
+    "doc-vpn-guide",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-mail-errors"
+  ],
+  "vi-vpn-01": [
+    "doc-vpn-guide",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-mail-errors"
+  ],
+  "zh-mail-00": [
+    "doc-mail-errors",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-mail-01": [
+    "doc-mail-errors",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-mail-02": [
+    "doc-mail-errors",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-mail-03": [
+    "doc-mail-errors",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-mail-04": [
+    "doc-mail-errors",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-mail-05": [
+    "doc-mail-errors",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-mail-06": [
+    "doc-mail-errors",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-mail-07": [
+    "doc-mail-errors",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-mail-08": [
+    "doc-mail-errors",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-mail-09": [
+    "doc-mail-errors",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "en-mail-00": [
+    "doc-mail-errors",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "en-mail-01": [
+    "doc-mail-errors",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "en-mail-02": [
+    "doc-mail-errors",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "en-mail-03": [
+    "doc-mail-errors",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "vi-mail-00": [
+    "doc-mail-errors",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "vi-mail-01": [
+    "doc-mail-errors",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-fw-00": [
+    "doc-firewall",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-fw-01": [
+    "doc-firewall",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-fw-02": [
+    "doc-firewall",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-fw-03": [
+    "doc-firewall",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-fw-04": [
+    "doc-firewall",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-fw-05": [
+    "doc-firewall",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-fw-06": [
+    "doc-firewall",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-fw-07": [
+    "doc-firewall",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-fw-08": [
+    "doc-firewall",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-fw-09": [
+    "doc-firewall",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "en-fw-00": [
+    "doc-firewall",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "en-fw-01": [
+    "doc-firewall",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "en-fw-02": [
+    "doc-firewall",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "en-fw-03": [
+    "doc-firewall",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "vi-fw-00": [
+    "doc-firewall",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "vi-fw-01": [
+    "doc-firewall",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-backup-00": [
+    "doc-backup",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-backup-01": [
+    "doc-backup",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-backup-02": [
+    "doc-backup",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-backup-03": [
+    "doc-backup",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-backup-04": [
+    "doc-backup",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-backup-05": [
+    "doc-backup",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-backup-06": [
+    "doc-backup",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-backup-07": [
+    "doc-backup",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-backup-08": [
+    "doc-backup",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-backup-09": [
+    "doc-backup",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "en-backup-00": [
+    "doc-backup",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "en-backup-01": [
+    "doc-backup",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "en-backup-02": [
+    "doc-backup",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "en-backup-03": [
+    "doc-backup",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "vi-backup-00": [
+    "doc-backup",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "vi-backup-01": [
+    "doc-backup",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-device-00": [
+    "doc-device-pm",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-device-01": [
+    "doc-device-pm",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-device-02": [
+    "doc-device-pm",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-device-03": [
+    "doc-device-pm",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-device-04": [
+    "doc-device-pm",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-device-05": [
+    "doc-device-pm",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-device-06": [
+    "doc-device-pm",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-device-07": [
+    "doc-device-pm",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-device-08": [
+    "doc-device-pm",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-device-09": [
+    "doc-device-pm",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "en-device-00": [
+    "doc-device-pm",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "en-device-01": [
+    "doc-device-pm",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "en-device-02": [
+    "doc-device-pm",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "en-device-03": [
+    "doc-device-pm",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "vi-device-00": [
+    "doc-device-pm",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "vi-device-01": [
+    "doc-device-pm",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-yarn-00": [
+    "doc-yarn-defect",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-yarn-01": [
+    "doc-yarn-defect",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-yarn-02": [
+    "doc-yarn-defect",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-yarn-03": [
+    "doc-yarn-defect",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-yarn-04": [
+    "doc-yarn-defect",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-yarn-05": [
+    "doc-yarn-defect",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-yarn-06": [
+    "doc-yarn-defect",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-yarn-07": [
+    "doc-yarn-defect",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-yarn-08": [
+    "doc-yarn-defect",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-yarn-09": [
+    "doc-yarn-defect",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "en-yarn-00": [
+    "doc-yarn-defect",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "en-yarn-01": [
+    "doc-yarn-defect",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "en-yarn-02": [
+    "doc-yarn-defect",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "en-yarn-03": [
+    "doc-yarn-defect",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "vi-yarn-00": [
+    "doc-yarn-defect",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "vi-yarn-01": [
+    "doc-yarn-defect",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-acl-00": [
+    "doc-acl-policy",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-acl-01": [
+    "doc-acl-policy",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-acl-02": [
+    "doc-acl-policy",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-acl-03": [
+    "doc-acl-policy",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-acl-04": [
+    "doc-acl-policy",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-acl-05": [
+    "doc-acl-policy",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-acl-06": [
+    "doc-acl-policy",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-acl-07": [
+    "doc-acl-policy",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-acl-08": [
+    "doc-acl-policy",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "zh-acl-09": [
+    "doc-acl-policy",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "en-acl-00": [
+    "doc-acl-policy",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "en-acl-01": [
+    "doc-acl-policy",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "en-acl-02": [
+    "doc-acl-policy",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "en-acl-03": [
+    "doc-acl-policy",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "vi-acl-00": [
+    "doc-acl-policy",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ],
+  "vi-acl-01": [
+    "doc-acl-policy",
+    "doc-leave-policy",
+    "doc-expense-policy",
+    "doc-onboarding",
+    "doc-vpn-guide"
+  ]
 }

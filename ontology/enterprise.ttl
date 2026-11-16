@@ -1,0 +1,223 @@
+@prefix : <https://flyknit.local/ontology/enterprise#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+#################################################################
+# Flyknit Enterprise Knowledge Ontology (TBox only)
+# Runtime ABox lives in PostgreSQL; this file is the contract.
+# Enum values in backend StrEnum must stay aligned (see catalog.py).
+#################################################################
+
+: a owl:Ontology ;
+    rdfs:label "Flyknit Enterprise Knowledge Ontology"@en ;
+    rdfs:label "飞织企业知识本体"@zh ;
+    rdfs:comment "企业知识库概念层 TBox：术语类型、KO 类型、关系与结构化镜像。运行时实例存 PostgreSQL，不提供 SPARQL。"@zh ;
+    owl:versionInfo "1.0.0" .
+
+#################################################################
+# Top-level classes
+#################################################################
+
+:TerminologyEntity a owl:Class ;
+    rdfs:label "Terminology entity"@en ;
+    rdfs:label "术语实体"@zh ;
+    rdfs:comment "组织内规范术语，对应 terminology_entities。"@zh .
+
+:KnowledgeObject a owl:Class ;
+    rdfs:label "Knowledge object"@en ;
+    rdfs:label "知识条目"@zh ;
+    rdfs:comment "人工治理的知识条目 KO，对应 knowledge_objects。"@zh .
+
+:StructuredObject a owl:Class ;
+    rdfs:label "Structured mirror object"@en ;
+    rdfs:label "结构化镜像对象"@zh ;
+    rdfs:comment "ERP/MES 等本地镜像行，经 structured_entity_links 挂接术语或 KO。"@zh .
+
+:StructuredDomain a owl:Class ;
+    rdfs:label "Structured domain"@en ;
+    rdfs:label "结构化业务域"@zh ;
+    rdfs:comment "对应 structured_domains。"@zh .
+
+#################################################################
+# TerminologyEntityType → subclasses
+#################################################################
+
+:Device a owl:Class ;
+    rdfs:subClassOf :TerminologyEntity ;
+    rdfs:label "Device"@en ;
+    rdfs:label "设备"@zh ;
+    rdfs:comment "enum TerminologyEntityType.device / KoType.device"@en .
+
+:Process a owl:Class ;
+    rdfs:subClassOf :TerminologyEntity ;
+    rdfs:label "Process"@en ;
+    rdfs:label "工艺/流程"@zh ;
+    rdfs:comment "enum TerminologyEntityType.process / KoType.process"@en .
+
+:Defect a owl:Class ;
+    rdfs:subClassOf :TerminologyEntity ;
+    rdfs:label "Defect"@en ;
+    rdfs:label "缺陷"@zh ;
+    rdfs:comment "enum TerminologyEntityType.defect / KoType.defect"@en .
+
+:Policy a owl:Class ;
+    rdfs:subClassOf :TerminologyEntity ;
+    rdfs:label "Policy"@en ;
+    rdfs:label "制度/政策"@zh ;
+    rdfs:comment "enum TerminologyEntityType.policy / KoType.policy"@en .
+
+:ItTerm a owl:Class ;
+    rdfs:subClassOf :TerminologyEntity ;
+    rdfs:label "IT term"@en ;
+    rdfs:label "IT 术语"@zh ;
+    rdfs:comment "enum TerminologyEntityType.it_term / KoType.it_term"@en .
+
+:Other a owl:Class ;
+    rdfs:subClassOf :TerminologyEntity ;
+    rdfs:label "Other"@en ;
+    rdfs:label "其他"@zh ;
+    rdfs:comment "enum TerminologyEntityType.other"@en .
+
+#################################################################
+# KoType content shapes (presentation) — also under KnowledgeObject
+#################################################################
+
+:Faq a owl:Class ;
+    rdfs:subClassOf :KnowledgeObject ;
+    rdfs:label "FAQ"@en ;
+    rdfs:comment "enum KoType.faq"@en .
+
+:Qa a owl:Class ;
+    rdfs:subClassOf :KnowledgeObject ;
+    rdfs:label "Q&A"@en ;
+    rdfs:comment "enum KoType.qa"@en .
+
+:Card a owl:Class ;
+    rdfs:subClassOf :KnowledgeObject ;
+    rdfs:label "Card"@en ;
+    rdfs:comment "enum KoType.card"@en .
+
+:PolicySummary a owl:Class ;
+    rdfs:subClassOf :KnowledgeObject ;
+    rdfs:label "Policy summary"@en ;
+    rdfs:label "制度摘要"@zh ;
+    rdfs:comment "enum KoType.policy_summary"@en .
+
+# Business KO kinds reuse the same local names as terminology subclasses
+# but are also KnowledgeObject (multiple inheritance for contract clarity).
+:Device rdfs:subClassOf :KnowledgeObject .
+:Process rdfs:subClassOf :KnowledgeObject .
+:Defect rdfs:subClassOf :KnowledgeObject .
+:Policy rdfs:subClassOf :KnowledgeObject .
+:ItTerm rdfs:subClassOf :KnowledgeObject .
+
+#################################################################
+# Structured domain kinds & object types
+#################################################################
+
+:Equipment a owl:Class ;
+    rdfs:subClassOf :StructuredDomain ;
+    rdfs:label "Equipment domain"@en ;
+    rdfs:label "设备域"@zh ;
+    rdfs:comment "enum StructuredDomainKind.equipment"@en .
+
+:GenericDomain a owl:Class ;
+    rdfs:subClassOf :StructuredDomain ;
+    rdfs:label "Generic domain"@en ;
+    rdfs:label "通用业务域"@zh ;
+    rdfs:comment "enum StructuredDomainKind.generic"@en .
+
+:WorkOrder a owl:Class ;
+    rdfs:subClassOf :StructuredObject ;
+    rdfs:label "Work order"@en ;
+    rdfs:label "工单"@zh ;
+    rdfs:comment "enum StructuredObjectType.work_order"@en .
+
+:SparePart a owl:Class ;
+    rdfs:subClassOf :StructuredObject ;
+    rdfs:label "Spare part"@en ;
+    rdfs:label "备件"@zh ;
+    rdfs:comment "enum StructuredObjectType.spare_part"@en .
+
+# StructuredObjectType.device shares local name Device with terminology/KO.
+:Device rdfs:subClassOf :StructuredObject .
+
+#################################################################
+# KoRelationType → object properties
+#################################################################
+
+:relatedTo a owl:ObjectProperty , owl:SymmetricProperty ;
+    rdfs:label "related to"@en ;
+    rdfs:label "相关"@zh ;
+    rdfs:domain :KnowledgeObject ;
+    rdfs:range :KnowledgeObject ;
+    rdfs:comment "enum KoRelationType.related_to"@en .
+
+:partOf a owl:ObjectProperty , owl:TransitiveProperty ;
+    rdfs:label "part of"@en ;
+    rdfs:label "组成/从属"@zh ;
+    rdfs:domain :KnowledgeObject ;
+    rdfs:range :KnowledgeObject ;
+    rdfs:comment "enum KoRelationType.part_of"@en .
+
+:dependsOn a owl:ObjectProperty ;
+    rdfs:label "depends on"@en ;
+    rdfs:label "依赖"@zh ;
+    rdfs:domain :KnowledgeObject ;
+    rdfs:range :KnowledgeObject ;
+    rdfs:comment "enum KoRelationType.depends_on"@en .
+
+:causes a owl:ObjectProperty ;
+    rdfs:label "causes"@en ;
+    rdfs:label "导致"@zh ;
+    rdfs:domain :KnowledgeObject ;
+    rdfs:range :KnowledgeObject ;
+    rdfs:comment "enum KoRelationType.causes；建议 defect → device|process（软约束）"@zh .
+
+:mitigates a owl:ObjectProperty ;
+    rdfs:label "mitigates"@en ;
+    rdfs:label "缓解/处置"@zh ;
+    rdfs:domain :KnowledgeObject ;
+    rdfs:range :KnowledgeObject ;
+    rdfs:comment "enum KoRelationType.mitigates；建议 policy|faq|qa → defect（软约束）"@zh .
+
+:appliesTo a owl:ObjectProperty ;
+    rdfs:label "applies to"@en ;
+    rdfs:label "适用于"@zh ;
+    rdfs:domain :KnowledgeObject ;
+    rdfs:range :KnowledgeObject ;
+    rdfs:comment "enum KoRelationType.applies_to；建议 policy → device|process|it_term（软约束）"@zh .
+
+#################################################################
+# Structured link properties (structured_entity_links semantics)
+#################################################################
+
+:linkedToTerminology a owl:ObjectProperty ;
+    rdfs:label "linked to terminology"@en ;
+    rdfs:label "挂接术语"@zh ;
+    rdfs:domain :StructuredObject ;
+    rdfs:range :TerminologyEntity ;
+    rdfs:comment "structured_entity_links.terminology_entity_id"@en .
+
+:linkedToKnowledgeObject a owl:ObjectProperty ;
+    rdfs:label "linked to knowledge object"@en ;
+    rdfs:label "挂接知识条目"@zh ;
+    rdfs:domain :StructuredObject ;
+    rdfs:range :KnowledgeObject ;
+    rdfs:comment "structured_entity_links.ko_id"@en .
+
+:hasAlias a owl:DatatypeProperty ;
+    rdfs:label "has alias"@en ;
+    rdfs:label "别名"@zh ;
+    rdfs:domain :TerminologyEntity ;
+    rdfs:range xsd:string ;
+    rdfs:comment "terminology_aliases.alias"@en .
+
+:externalId a owl:DatatypeProperty ;
+    rdfs:label "external id"@en ;
+    rdfs:label "外部编号"@zh ;
+    rdfs:domain :StructuredObject ;
+    rdfs:range xsd:string ;
+    rdfs:comment "equip_* / structured_records.external_id"@en .

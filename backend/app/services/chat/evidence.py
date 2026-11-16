@@ -23,6 +23,7 @@ class Hit:
 class EvidenceKind(StrEnum):
     PARENT = "parent"
     CHUNKS = "chunks"
+    ENTITY = "entity"
     KO = "ko"
 
 

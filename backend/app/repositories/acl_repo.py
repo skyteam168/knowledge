@@ -5,6 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import ResourceAcl
 
+EFFECT_ALLOW = "allow"
+EFFECT_DENY = "deny"
+
 
 def principal_clause(principals: Iterable[tuple[str, str]]) -> ColumnElement[bool]:
     pairs = list(principals)
@@ -26,10 +29,23 @@ class ResourceAclRepository:
     def granted_ids_stmt(
         org_id: str, resource_type: str, principals: Iterable[tuple[str, str]]
     ) -> Select[str]:
-        """Ids of resources of `resource_type` on which any of `principals` holds a grant."""
+        """Ids of resources of `resource_type` on which any of `principals` holds an allow grant."""
         return select(ResourceAcl.resource_id).where(
             ResourceAcl.org_id == org_id,
             ResourceAcl.resource_type == resource_type,
+            ResourceAcl.effect == EFFECT_ALLOW,
+            principal_clause(principals),
+        )
+
+    @staticmethod
+    def denied_ids_stmt(
+        org_id: str, resource_type: str, principals: Iterable[tuple[str, str]]
+    ) -> Select[str]:
+        """Ids of resources explicitly denied for any of `principals`."""
+        return select(ResourceAcl.resource_id).where(
+            ResourceAcl.org_id == org_id,
+            ResourceAcl.resource_type == resource_type,
+            ResourceAcl.effect == EFFECT_DENY,
             principal_clause(principals),
         )
 
@@ -39,16 +55,21 @@ class ResourceAclRepository:
         resource_type: str,
         resource_ids: Iterable[str],
         principals: Iterable[tuple[str, str]],
+        *,
+        effect: str | None = None,
     ) -> list[ResourceAcl]:
         ids = list(resource_ids)
         if not ids:
             return []
-        stmt = select(ResourceAcl).where(
+        filters = [
             ResourceAcl.org_id == org_id,
             ResourceAcl.resource_type == resource_type,
             ResourceAcl.resource_id.in_(ids),
             principal_clause(principals),
-        )
+        ]
+        if effect is not None:
+            filters.append(ResourceAcl.effect == effect)
+        stmt = select(ResourceAcl).where(*filters)
         return list((await self.session.execute(stmt)).scalars())
 
     async def delete_for_resource(self, org_id: str, resource_type: str, resource_id: str) -> int:
@@ -77,11 +98,13 @@ class ResourceAclRepository:
         resource_type: str,
         resource_id: str,
         principals: Iterable[tuple[str, str]],
+        *,
+        effect: str | None = None,
     ) -> list[ResourceAcl]:
         pairs = list(principals)
         if not pairs:
             return []
-        stmt = select(ResourceAcl).where(
+        filters = [
             ResourceAcl.org_id == org_id,
             ResourceAcl.resource_type == resource_type,
             ResourceAcl.resource_id == resource_id,
@@ -91,7 +114,10 @@ class ResourceAclRepository:
                     for ptype, pid in pairs
                 )
             ),
-        )
+        ]
+        if effect is not None:
+            filters.append(ResourceAcl.effect == effect)
+        stmt = select(ResourceAcl).where(*filters)
         return list((await self.session.execute(stmt)).scalars())
 
     async def find(
@@ -102,6 +128,8 @@ class ResourceAclRepository:
         principal_type: str,
         principal_id: str,
         permission: str,
+        *,
+        effect: str = EFFECT_ALLOW,
     ) -> ResourceAcl | None:
         stmt = select(ResourceAcl).where(
             ResourceAcl.org_id == org_id,
@@ -110,6 +138,7 @@ class ResourceAclRepository:
             ResourceAcl.principal_type == principal_type,
             ResourceAcl.principal_id == principal_id,
             ResourceAcl.permission == permission,
+            ResourceAcl.effect == effect,
         )
         return (await self.session.execute(stmt)).scalar_one_or_none()
 
@@ -126,6 +155,8 @@ class ResourceAclRepository:
         principal_type: str,
         principal_id: str,
         permission: str | None = None,
+        *,
+        effect: str | None = None,
     ) -> int:
         stmt = delete(ResourceAcl).where(
             ResourceAcl.org_id == org_id,
@@ -136,5 +167,7 @@ class ResourceAclRepository:
         )
         if permission is not None:
             stmt = stmt.where(ResourceAcl.permission == permission)
+        if effect is not None:
+            stmt = stmt.where(ResourceAcl.effect == effect)
         result = await self.session.execute(stmt)
         return int(getattr(result, "rowcount", 0) or 0)

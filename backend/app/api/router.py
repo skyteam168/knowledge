@@ -17,6 +17,7 @@ from app.api.v1 import (
     groups,
     guides,
     indexing,
+    integrations_bot,
     knowledge_bases,
     models_admin,
     notifications,
@@ -26,6 +27,8 @@ from app.api.v1 import (
     retrieval_admin,
     roles,
     search,
+    structured_admin,
+    terminology_admin,
     users,
 )
 
@@ -44,6 +47,8 @@ api_router.include_router(directory_admin.router)
 api_router.include_router(indexing.router)
 api_router.include_router(search.router)
 api_router.include_router(retrieval_admin.router)
+api_router.include_router(terminology_admin.router)
+api_router.include_router(structured_admin.router)
 api_router.include_router(chat.router)
 api_router.include_router(curation.router)
 api_router.include_router(notifications.router)
@@ -53,6 +58,7 @@ api_router.include_router(evaluation.router)
 api_router.include_router(models_admin.router)
 api_router.include_router(open_admin.router)
 api_router.include_router(open_api.router)
+api_router.include_router(integrations_bot.router)
 api_router.include_router(admin_agent.router)
 api_router.include_router(assets.router)
 api_router.include_router(collab.router)

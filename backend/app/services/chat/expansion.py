@@ -5,6 +5,8 @@ Strategies (configurable):
   yield a single evidence;
 - neighbors: hits not covered by a parent get +/- N adjacent child chunks; overlapping
   windows of one document are merged into one evidence;
+- entity: additional child chunks in the same hit documents that share terminology
+  entity_ids with the hits (ingest-time tags);
 - ko: published knowledge objects citing the hit documents are added.
 Retrieved KO entries (is_ko=true) are used as they are. Evidences are then ordered (KO
 first, then rerank score) and cut to the token budget.
@@ -33,6 +35,8 @@ class ExpansionConfig:
     parent: bool = True
     neighbors: int = 1
     ko: bool = False
+    # Max extra evidences from chunks sharing terminology entity_ids (0 disables).
+    entity_limit: int = 0
     token_budget: int = 6000
 
 
@@ -146,6 +150,13 @@ class KnowledgeExpansion:
                 runs = [self._single(h, rows.get(h.chunk_id)) for h in rest]
                 stats["singles"] = len(runs)
             evidences += runs
+
+        if cfg.entity_limit > 0 and hits:
+            used_ids = {cid for ev in evidences for cid in ev.chunk_ids}
+            used_ids.update(h.chunk_id for h in hits)
+            entity_evs = await self._entity_related(hits, rows, used_ids)
+            evidences += entity_evs
+            stats["entity"] = len(entity_evs)
 
         if cfg.ko and hits:
             kos = await self.ko_source.related(hits, seen_kos)
@@ -275,6 +286,62 @@ class KnowledgeExpansion:
                     )
                 )
         return evidences + singles
+
+    async def _entity_related(
+        self,
+        hits: Sequence[Hit],
+        rows: dict[str, Chunk],
+        exclude_ids: set[str],
+    ) -> list[Evidence]:
+        entity_ids: list[str] = []
+        seen_entities: set[str] = set()
+        doc_ids: set[str] = set()
+        # Best hit per document supplies DocumentInfo + score/rank for related chunks.
+        best_by_doc: dict[str, Hit] = {}
+        for hit in hits:
+            chunk = rows.get(hit.chunk_id)
+            if chunk is None:
+                continue
+            doc_ids.add(chunk.document_id)
+            prev = best_by_doc.get(chunk.document_id)
+            if prev is None or hit.rank < prev.rank:
+                best_by_doc[chunk.document_id] = hit
+            for eid in chunk.entity_ids or []:
+                if eid not in seen_entities:
+                    seen_entities.add(eid)
+                    entity_ids.append(eid)
+        if not entity_ids or not doc_ids:
+            return []
+        related = await self.repo.children_sharing_entities(
+            self.org_id,
+            document_ids=list(doc_ids),
+            entity_ids=entity_ids,
+            exclude_ids=list(exclude_ids),
+            limit=self.config.entity_limit,
+        )
+        evidences: list[Evidence] = []
+        for chunk in related:
+            hit = best_by_doc.get(chunk.document_id)
+            if hit is None:
+                continue
+            evidences.append(
+                Evidence(
+                    kind=EvidenceKind.ENTITY,
+                    document=hit.passage.document,
+                    chunk_ids=[chunk.id],
+                    hit_chunk_ids=[],
+                    content=chunk.content,
+                    heading_path=list(chunk.heading_path or []),
+                    score=hit.score,
+                    best_rank=hit.rank,
+                    quote=chunk.content,
+                    page_start=chunk.page_start,
+                    page_end=chunk.page_end,
+                    sheet_name=chunk.sheet_name,
+                    slide_number=chunk.slide_number,
+                )
+            )
+        return evidences
 
     @staticmethod
     def _single(hit: Hit, chunk: Chunk | None) -> Evidence:

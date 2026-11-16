@@ -17,10 +17,15 @@ from app.repositories.indexing_repo import INDEXED_CHUNK_LEVEL
 from app.repositories.search_repo import SearchRepository
 from app.retrieval.pipeline import KO_DOC_TYPE, DocumentInfo, HydrationResult, Passage
 from app.services.authz import CurrentUser
+from app.services.authz.acl import AclPermission
 from app.services.indexing.indexer import document_type
 from app.services.indexing.ko_indexer import KO_CHUNK_TYPE, ko_entry_text
 from app.services.knowledge.access import KnowledgeAccess
-from app.services.knowledge.document_effect import in_effect, lifecycle_retrievable
+from app.services.knowledge.document_effect import (
+    in_effect,
+    lifecycle_retrievable,
+    retrieval_min_acl,
+)
 from app.services.knowledge.ko_access import KoAccess, LiveEntry
 
 
@@ -62,17 +67,27 @@ class PassageHydrator:
         docs_by_kb: dict[str, dict[str, Document]] = defaultdict(dict)
         for _, doc, kb in live:
             docs_by_kb[kb.id][doc.id] = doc
-        readable: set[str] = set()
+        readable: dict[str, AclPermission] = {}
         for kb_id, docs in docs_by_kb.items():
             perms = await self.access.document_permissions(
                 self.user, list(docs.values()), kb_perms.get(kb_id)
             )
-            readable |= {doc_id for doc_id, perm in perms.items() if perm is not None}
+            for doc_id, perm in perms.items():
+                if perm is not None:
+                    readable[doc_id] = perm
 
         passages: dict[str, Passage] = {}
         for chunk, doc, kb in live:
-            if doc.id not in readable:
+            perm = readable.get(doc.id)
+            if perm is None:
                 dropped["no_access"] += 1
+                continue
+            needed = retrieval_min_acl(doc.classification)
+            if needed == AclPermission.MANAGE.value and perm.level < AclPermission.MANAGE.level:
+                dropped["classification"] += 1
+                continue
+            if needed == AclPermission.EDIT.value and perm.level < AclPermission.EDIT.level:
+                dropped["classification"] += 1
                 continue
             passages[chunk.id] = Passage(
                 chunk_id=chunk.id,

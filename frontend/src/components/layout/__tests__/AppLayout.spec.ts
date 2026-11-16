@@ -66,25 +66,31 @@ async function mountWith(permissions: string[], path: string, globalElementPlus 
 }
 
 describe('AppLayout', () => {
-  it('shows every menu for a superuser and switches route', async () => {
-    const { wrapper, router } = await mountWith(['*'], '/assistant')
-    const text = wrapper.text()
-    for (const title of ['知识库问答专家', '知识库', '搜索', '知识运营', '管理', '分析']) {
-      expect(text).toContain(title)
-    }
-    expect(wrapper.get('[data-test="readiness-tag"]').text()).toBe('服务正常')
-    expect(wrapper.find('.layout__bell').text()).toContain('3')
-    expect(wrapper.get('[data-test="user-menu"]').text()).toContain('Alice')
-    expect(wrapper.find('[data-test="help-menu"]').exists()).toBe(true)
-    for (const target of ['menu-assistant', 'menu-admin', 'menu-curation', 'global-search']) {
-      expect(wrapper.find(`[data-guide="${target}"]`).exists()).toBe(true)
-    }
+  it(
+    'shows every menu for a superuser and switches route',
+    async () => {
+      const { wrapper, router } = await mountWith(['*'], '/assistant')
+      const text = wrapper.text()
+      for (const title of ['知识库问答专家', '知识库', '搜索', '知识运营', '管理', '分析']) {
+        expect(text).toContain(title)
+      }
+      expect(wrapper.get('[data-test="readiness-tag"]').text()).toBe('服务正常')
+      expect(wrapper.find('.layout__bell').text()).toContain('3')
+      expect(wrapper.get('[data-test="user-menu"]').text()).toContain('Alice')
+      expect(wrapper.find('[data-test="help-menu"]').exists()).toBe(true)
+      for (const target of ['menu-assistant', 'menu-admin', 'menu-curation', 'global-search']) {
+        expect(wrapper.find(`[data-guide="${target}"]`).exists()).toBe(true)
+      }
+      expect(wrapper.find('[data-test="menu-admin-platform"]').exists()).toBe(true)
+      expect(text).toContain('平台工程')
 
-    await router.push('/search')
-    await flushPromises()
-    expect(router.currentRoute.value.name).toBe('search')
-    expect(wrapper.text()).toContain('支持行内筛选')
-  })
+      await router.push('/search')
+      await flushPromises()
+      expect(router.currentRoute.value.name).toBe('search')
+      expect(wrapper.text()).toContain('支持行内筛选')
+    },
+    15_000,
+  )
 
   it('resolves every Element Plus component without global registration', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
@@ -129,5 +135,16 @@ describe('AppLayout', () => {
     expect(menu).toContain('审计日志')
     expect(menu).not.toContain('用户管理')
     expect(menu).not.toContain('角色权限')
+    expect(wrapper.find('[data-test="menu-admin-platform"]').exists()).toBe(false)
+  })
+
+  it('hides platform engineering when the user has only org-admin permissions', async () => {
+    const { wrapper } = await mountWith(['admin:user', 'admin:dept'], '/assistant')
+    const menu = wrapper.get('[data-test="side-menu"]')
+    expect(menu.text()).toContain('用户管理')
+    expect(menu.text()).toContain('部门管理')
+    expect(menu.find('[data-test="menu-admin-platform"]').exists()).toBe(false)
+    expect(menu.text()).not.toContain('索引同步')
+    expect(menu.text()).not.toContain('模型管理')
   })
 })

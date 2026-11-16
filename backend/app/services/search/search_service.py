@@ -1,7 +1,7 @@
 import logging
 import time
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 
 from sqlalchemy import ColumnElement, or_, true
@@ -18,6 +18,7 @@ from app.repositories.search_repo import RetrievalTraceRepository, SearchReposit
 from app.retrieval.cache import principals_hash
 from app.retrieval.config import Route
 from app.retrieval.filters import SearchFilter
+from app.retrieval.graph import GraphRetriever
 from app.retrieval.highlight import mark, query_terms, snippet
 from app.retrieval.pipeline import (
     RankedResult,
@@ -48,6 +49,7 @@ from app.services.knowledge.access import RESOURCE_DOCUMENT, KnowledgeAccess
 from app.services.search.hydrator import PassageHydrator
 from app.services.search.profile_service import ResolvedProfile, RetrievalProfileService
 from app.services.security.pii import PiiMasker
+from app.services.terminology.service import TerminologyService
 
 logger = logging.getLogger(__name__)
 
@@ -252,6 +254,11 @@ class SearchService(BaseService):
                 "Unknown document type", detail={"doc_types": unknown_types, "allowed": DOC_TYPES}
             )
 
+        terminology = TerminologyService(self.session, self.ctx, self.authz_cache, self.settings)
+        expanded_text, alias_expansion = await terminology.expand_search_text(parsed.text)
+        if expanded_text != parsed.text:
+            parsed = replace(parsed, text=expanded_text)
+
         scope = await self._scope(parsed.filters, params.allowed_kb_ids)
         acl = AclService.build_filter(
             user.principals,
@@ -283,7 +290,11 @@ class SearchService(BaseService):
                 top_k=params.top_k,
             )
             try:
-                outcome = await self.pipeline.run(request, PassageHydrator(self.session, user))
+                outcome = await self.pipeline.run(
+                    request,
+                    PassageHydrator(self.session, user),
+                    graph=GraphRetriever(self.session, user),
+                )
             except RetrievalUnavailableError as exc:
                 await self._record_trace(
                     params,
@@ -295,12 +306,24 @@ class SearchService(BaseService):
                     None,
                     started,
                     error=exc.reasons,
+                    terminology=alias_expansion.describe(),
                 )
                 await self.session.commit()
                 raise SearchUnavailableError(detail={"reasons": exc.reasons}) from exc
 
+        if outcome is not None and alias_expansion.matches:
+            outcome.stages = {**outcome.stages, "terminology": alias_expansion.describe()}
+
         trace = await self._record_trace(
-            params, parsed, profile, search_filter, scope_hash, target, outcome, started
+            params,
+            parsed,
+            profile,
+            search_filter,
+            scope_hash,
+            target,
+            outcome,
+            started,
+            terminology=alias_expansion.describe() if alias_expansion.matches else None,
         )
         return SearchRun(
             parsed=parsed,
@@ -352,12 +375,14 @@ class SearchService(BaseService):
             scores=StageScores(
                 dense=c.scores.get(Route.DENSE),
                 bm25=c.scores.get(Route.SPARSE),
+                graph=c.scores.get(Route.GRAPH),
                 rrf=round(c.rrf_score, 6),
                 rerank=result.rerank_score,
             ),
             ranks=StageRanks(
                 dense=c.ranks.get(Route.DENSE),
                 bm25=c.ranks.get(Route.SPARSE),
+                graph=c.ranks.get(Route.GRAPH),
                 rrf=c.rrf_rank,
                 rerank=result.rerank_rank,
             ),
@@ -375,8 +400,11 @@ class SearchService(BaseService):
         started: float,
         *,
         error: list[str] | None = None,
+        terminology: dict[str, object] | None = None,
     ) -> RetrievalTrace:
         raw_stages = outcome.stages if outcome else {"error": error or self._empty_reason(target)}
+        if terminology and "terminology" not in raw_stages:
+            raw_stages = {**raw_stages, "terminology": terminology}
         stages, truncated = truncate_stages(raw_stages, self.settings.retrieval_trace_max_bytes)
         total_ms = (time.perf_counter() - started) * 1000
         return await self.traces.add(

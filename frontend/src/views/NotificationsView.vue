@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { listNotifications, markNotificationsRead } from '@/api/curation'
 import type { Notification } from '@/api/types'
+import EmptyState from '@/components/EmptyState.vue'
 import { useNotificationStore } from '@/stores/notifications'
 import { formatDateTime } from '@/utils/format'
 
@@ -59,7 +60,10 @@ onMounted(load)
         t('layout.notificationsPage.markAllRead')
       }}</el-button>
     </div>
-    <el-empty v-if="!loading && !items.length" :description="t('layout.notificationsPage.empty')" />
+    <EmptyState
+      v-if="!loading && !items.length"
+      :description="t('layout.notificationsPage.empty')"
+    />
     <div v-loading="loading">
       <div
         v-for="n in items"

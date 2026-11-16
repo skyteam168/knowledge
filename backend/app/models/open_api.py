@@ -31,6 +31,7 @@ class ApiScope(StrEnum):
     RETRIEVE = "retrieve"
     CHAT = "chat"
     MCP = "mcp"
+    ENTITY = "entity"
 
 
 class ApiClient(IdMixin, TenantMixin, TimestampMixin, Base):

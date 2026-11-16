@@ -4,3 +4,163 @@
 {"id": "en-expense", "lang": "en", "query": "expense reimbursement process", "expected_document_ids": ["doc-expense-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5}
 {"id": "vi-leave-days", "lang": "vi", "query": "bao nhieu ngay nghi phep nam", "expected_document_ids": ["doc-leave-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5}
 {"id": "vi-onboarding", "lang": "vi", "query": "quy trinh nhan su moi", "expected_document_ids": ["doc-onboarding"], "min_recall_at_5": 1.0, "min_mrr": 0.5}
+{"id": "zh-leave-00", "lang": "zh", "query": "年假相关规定是什么", "expected_document_ids": ["doc-leave-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "leave"]}
+{"id": "zh-leave-01", "lang": "zh", "query": "如何处理年假问题", "expected_document_ids": ["doc-leave-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "leave"]}
+{"id": "zh-leave-02", "lang": "zh", "query": "年假流程怎么走", "expected_document_ids": ["doc-leave-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "leave"]}
+{"id": "zh-leave-03", "lang": "zh", "query": "年假注意事项有哪些", "expected_document_ids": ["doc-leave-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "leave"]}
+{"id": "zh-leave-04", "lang": "zh", "query": "遇到年假应该找谁", "expected_document_ids": ["doc-leave-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "leave"]}
+{"id": "zh-leave-05", "lang": "zh", "query": "年假常见错误怎么排查", "expected_document_ids": ["doc-leave-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "leave"]}
+{"id": "zh-leave-06", "lang": "zh", "query": "年假标准是什么", "expected_document_ids": ["doc-leave-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "leave"]}
+{"id": "zh-leave-07", "lang": "zh", "query": "关于年假的制度条款", "expected_document_ids": ["doc-leave-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "leave"]}
+{"id": "zh-leave-08", "lang": "zh", "query": "年假需要哪些材料", "expected_document_ids": ["doc-leave-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "leave"]}
+{"id": "zh-leave-09", "lang": "zh", "query": "年假时效要求是多久", "expected_document_ids": ["doc-leave-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "leave"]}
+{"id": "en-leave-00", "lang": "en", "query": "what is the policy for PTO", "expected_document_ids": ["doc-leave-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "leave"]}
+{"id": "en-leave-01", "lang": "en", "query": "how to handle PTO", "expected_document_ids": ["doc-leave-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "leave"]}
+{"id": "en-leave-02", "lang": "en", "query": "PTO process steps", "expected_document_ids": ["doc-leave-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "leave"]}
+{"id": "en-leave-03", "lang": "en", "query": "PTO checklist", "expected_document_ids": ["doc-leave-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "leave"]}
+{"id": "vi-leave-00", "lang": "vi", "query": "quy dinh ve nghi phep", "expected_document_ids": ["doc-leave-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "leave"]}
+{"id": "vi-leave-01", "lang": "vi", "query": "xu ly nghi phep nhu the nao", "expected_document_ids": ["doc-leave-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "leave"]}
+{"id": "zh-expense-00", "lang": "zh", "query": "报销相关规定是什么", "expected_document_ids": ["doc-expense-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "expense"]}
+{"id": "zh-expense-01", "lang": "zh", "query": "如何处理报销问题", "expected_document_ids": ["doc-expense-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "expense"]}
+{"id": "zh-expense-02", "lang": "zh", "query": "报销流程怎么走", "expected_document_ids": ["doc-expense-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "expense"]}
+{"id": "zh-expense-03", "lang": "zh", "query": "报销注意事项有哪些", "expected_document_ids": ["doc-expense-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "expense"]}
+{"id": "zh-expense-04", "lang": "zh", "query": "遇到报销应该找谁", "expected_document_ids": ["doc-expense-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "expense"]}
+{"id": "zh-expense-05", "lang": "zh", "query": "报销常见错误怎么排查", "expected_document_ids": ["doc-expense-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "expense"]}
+{"id": "zh-expense-06", "lang": "zh", "query": "报销标准是什么", "expected_document_ids": ["doc-expense-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "expense"]}
+{"id": "zh-expense-07", "lang": "zh", "query": "关于报销的制度条款", "expected_document_ids": ["doc-expense-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "expense"]}
+{"id": "zh-expense-08", "lang": "zh", "query": "报销需要哪些材料", "expected_document_ids": ["doc-expense-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "expense"]}
+{"id": "zh-expense-09", "lang": "zh", "query": "报销时效要求是多久", "expected_document_ids": ["doc-expense-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "expense"]}
+{"id": "en-expense-00", "lang": "en", "query": "what is the policy for expense", "expected_document_ids": ["doc-expense-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "expense"]}
+{"id": "en-expense-01", "lang": "en", "query": "how to handle expense", "expected_document_ids": ["doc-expense-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "expense"]}
+{"id": "en-expense-02", "lang": "en", "query": "expense process steps", "expected_document_ids": ["doc-expense-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "expense"]}
+{"id": "en-expense-03", "lang": "en", "query": "expense checklist", "expected_document_ids": ["doc-expense-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "expense"]}
+{"id": "vi-expense-00", "lang": "vi", "query": "quy dinh ve hoan ung", "expected_document_ids": ["doc-expense-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "expense"]}
+{"id": "vi-expense-01", "lang": "vi", "query": "xu ly hoan ung nhu the nao", "expected_document_ids": ["doc-expense-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "expense"]}
+{"id": "zh-onboard-00", "lang": "zh", "query": "入职相关规定是什么", "expected_document_ids": ["doc-onboarding"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "onboard"]}
+{"id": "zh-onboard-01", "lang": "zh", "query": "如何处理入职问题", "expected_document_ids": ["doc-onboarding"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "onboard"]}
+{"id": "zh-onboard-02", "lang": "zh", "query": "入职流程怎么走", "expected_document_ids": ["doc-onboarding"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "onboard"]}
+{"id": "zh-onboard-03", "lang": "zh", "query": "入职注意事项有哪些", "expected_document_ids": ["doc-onboarding"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "onboard"]}
+{"id": "zh-onboard-04", "lang": "zh", "query": "遇到入职应该找谁", "expected_document_ids": ["doc-onboarding"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "onboard"]}
+{"id": "zh-onboard-05", "lang": "zh", "query": "入职常见错误怎么排查", "expected_document_ids": ["doc-onboarding"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "onboard"]}
+{"id": "zh-onboard-06", "lang": "zh", "query": "入职标准是什么", "expected_document_ids": ["doc-onboarding"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "onboard"]}
+{"id": "zh-onboard-07", "lang": "zh", "query": "关于入职的制度条款", "expected_document_ids": ["doc-onboarding"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "onboard"]}
+{"id": "zh-onboard-08", "lang": "zh", "query": "入职需要哪些材料", "expected_document_ids": ["doc-onboarding"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "onboard"]}
+{"id": "zh-onboard-09", "lang": "zh", "query": "入职时效要求是多久", "expected_document_ids": ["doc-onboarding"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "onboard"]}
+{"id": "en-onboard-00", "lang": "en", "query": "what is the policy for onboarding", "expected_document_ids": ["doc-onboarding"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "onboard"]}
+{"id": "en-onboard-01", "lang": "en", "query": "how to handle onboarding", "expected_document_ids": ["doc-onboarding"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "onboard"]}
+{"id": "en-onboard-02", "lang": "en", "query": "onboarding process steps", "expected_document_ids": ["doc-onboarding"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "onboard"]}
+{"id": "en-onboard-03", "lang": "en", "query": "onboarding checklist", "expected_document_ids": ["doc-onboarding"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "onboard"]}
+{"id": "vi-onboard-00", "lang": "vi", "query": "quy dinh ve nhan su moi", "expected_document_ids": ["doc-onboarding"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "onboard"]}
+{"id": "vi-onboard-01", "lang": "vi", "query": "xu ly nhan su moi nhu the nao", "expected_document_ids": ["doc-onboarding"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "onboard"]}
+{"id": "zh-vpn-00", "lang": "zh", "query": "VPN相关规定是什么", "expected_document_ids": ["doc-vpn-guide"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "vpn"]}
+{"id": "zh-vpn-01", "lang": "zh", "query": "如何处理VPN问题", "expected_document_ids": ["doc-vpn-guide"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "vpn"]}
+{"id": "zh-vpn-02", "lang": "zh", "query": "VPN流程怎么走", "expected_document_ids": ["doc-vpn-guide"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "vpn"]}
+{"id": "zh-vpn-03", "lang": "zh", "query": "VPN注意事项有哪些", "expected_document_ids": ["doc-vpn-guide"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "vpn"]}
+{"id": "zh-vpn-04", "lang": "zh", "query": "遇到VPN应该找谁", "expected_document_ids": ["doc-vpn-guide"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "vpn"]}
+{"id": "zh-vpn-05", "lang": "zh", "query": "VPN常见错误怎么排查", "expected_document_ids": ["doc-vpn-guide"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "vpn"]}
+{"id": "zh-vpn-06", "lang": "zh", "query": "VPN标准是什么", "expected_document_ids": ["doc-vpn-guide"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "vpn"]}
+{"id": "zh-vpn-07", "lang": "zh", "query": "关于VPN的制度条款", "expected_document_ids": ["doc-vpn-guide"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "vpn"]}
+{"id": "zh-vpn-08", "lang": "zh", "query": "VPN需要哪些材料", "expected_document_ids": ["doc-vpn-guide"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "vpn"]}
+{"id": "zh-vpn-09", "lang": "zh", "query": "VPN时效要求是多久", "expected_document_ids": ["doc-vpn-guide"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "vpn"]}
+{"id": "en-vpn-00", "lang": "en", "query": "what is the policy for VPN dial", "expected_document_ids": ["doc-vpn-guide"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "vpn"]}
+{"id": "en-vpn-01", "lang": "en", "query": "how to handle VPN dial", "expected_document_ids": ["doc-vpn-guide"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "vpn"]}
+{"id": "en-vpn-02", "lang": "en", "query": "VPN dial process steps", "expected_document_ids": ["doc-vpn-guide"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "vpn"]}
+{"id": "en-vpn-03", "lang": "en", "query": "VPN dial checklist", "expected_document_ids": ["doc-vpn-guide"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "vpn"]}
+{"id": "vi-vpn-00", "lang": "vi", "query": "quy dinh ve VPN", "expected_document_ids": ["doc-vpn-guide"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "vpn"]}
+{"id": "vi-vpn-01", "lang": "vi", "query": "xu ly VPN nhu the nao", "expected_document_ids": ["doc-vpn-guide"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "vpn"]}
+{"id": "zh-mail-00", "lang": "zh", "query": "邮件出错相关规定是什么", "expected_document_ids": ["doc-mail-errors"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "mail"]}
+{"id": "zh-mail-01", "lang": "zh", "query": "如何处理邮件出错问题", "expected_document_ids": ["doc-mail-errors"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "mail"]}
+{"id": "zh-mail-02", "lang": "zh", "query": "邮件出错流程怎么走", "expected_document_ids": ["doc-mail-errors"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "mail"]}
+{"id": "zh-mail-03", "lang": "zh", "query": "邮件出错注意事项有哪些", "expected_document_ids": ["doc-mail-errors"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "mail"]}
+{"id": "zh-mail-04", "lang": "zh", "query": "遇到邮件出错应该找谁", "expected_document_ids": ["doc-mail-errors"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "mail"]}
+{"id": "zh-mail-05", "lang": "zh", "query": "邮件出错常见错误怎么排查", "expected_document_ids": ["doc-mail-errors"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "mail"]}
+{"id": "zh-mail-06", "lang": "zh", "query": "邮件出错标准是什么", "expected_document_ids": ["doc-mail-errors"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "mail"]}
+{"id": "zh-mail-07", "lang": "zh", "query": "关于邮件出错的制度条款", "expected_document_ids": ["doc-mail-errors"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "mail"]}
+{"id": "zh-mail-08", "lang": "zh", "query": "邮件出错需要哪些材料", "expected_document_ids": ["doc-mail-errors"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "mail"]}
+{"id": "zh-mail-09", "lang": "zh", "query": "邮件出错时效要求是多久", "expected_document_ids": ["doc-mail-errors"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "mail"]}
+{"id": "en-mail-00", "lang": "en", "query": "what is the policy for mailbox full", "expected_document_ids": ["doc-mail-errors"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "mail"]}
+{"id": "en-mail-01", "lang": "en", "query": "how to handle mailbox full", "expected_document_ids": ["doc-mail-errors"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "mail"]}
+{"id": "en-mail-02", "lang": "en", "query": "mailbox full process steps", "expected_document_ids": ["doc-mail-errors"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "mail"]}
+{"id": "en-mail-03", "lang": "en", "query": "mailbox full checklist", "expected_document_ids": ["doc-mail-errors"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "mail"]}
+{"id": "vi-mail-00", "lang": "vi", "query": "quy dinh ve email loi", "expected_document_ids": ["doc-mail-errors"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "mail"]}
+{"id": "vi-mail-01", "lang": "vi", "query": "xu ly email loi nhu the nao", "expected_document_ids": ["doc-mail-errors"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "mail"]}
+{"id": "zh-fw-00", "lang": "zh", "query": "防火墙相关规定是什么", "expected_document_ids": ["doc-firewall"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "fw"]}
+{"id": "zh-fw-01", "lang": "zh", "query": "如何处理防火墙问题", "expected_document_ids": ["doc-firewall"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "fw"]}
+{"id": "zh-fw-02", "lang": "zh", "query": "防火墙流程怎么走", "expected_document_ids": ["doc-firewall"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "fw"]}
+{"id": "zh-fw-03", "lang": "zh", "query": "防火墙注意事项有哪些", "expected_document_ids": ["doc-firewall"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "fw"]}
+{"id": "zh-fw-04", "lang": "zh", "query": "遇到防火墙应该找谁", "expected_document_ids": ["doc-firewall"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "fw"]}
+{"id": "zh-fw-05", "lang": "zh", "query": "防火墙常见错误怎么排查", "expected_document_ids": ["doc-firewall"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "fw"]}
+{"id": "zh-fw-06", "lang": "zh", "query": "防火墙标准是什么", "expected_document_ids": ["doc-firewall"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "fw"]}
+{"id": "zh-fw-07", "lang": "zh", "query": "关于防火墙的制度条款", "expected_document_ids": ["doc-firewall"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "fw"]}
+{"id": "zh-fw-08", "lang": "zh", "query": "防火墙需要哪些材料", "expected_document_ids": ["doc-firewall"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "fw"]}
+{"id": "zh-fw-09", "lang": "zh", "query": "防火墙时效要求是多久", "expected_document_ids": ["doc-firewall"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "fw"]}
+{"id": "en-fw-00", "lang": "en", "query": "what is the policy for firewall", "expected_document_ids": ["doc-firewall"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "fw"]}
+{"id": "en-fw-01", "lang": "en", "query": "how to handle firewall", "expected_document_ids": ["doc-firewall"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "fw"]}
+{"id": "en-fw-02", "lang": "en", "query": "firewall process steps", "expected_document_ids": ["doc-firewall"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "fw"]}
+{"id": "en-fw-03", "lang": "en", "query": "firewall checklist", "expected_document_ids": ["doc-firewall"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "fw"]}
+{"id": "vi-fw-00", "lang": "vi", "query": "quy dinh ve tuong lua", "expected_document_ids": ["doc-firewall"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "fw"]}
+{"id": "vi-fw-01", "lang": "vi", "query": "xu ly tuong lua nhu the nao", "expected_document_ids": ["doc-firewall"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "fw"]}
+{"id": "zh-backup-00", "lang": "zh", "query": "备份相关规定是什么", "expected_document_ids": ["doc-backup"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "backup"]}
+{"id": "zh-backup-01", "lang": "zh", "query": "如何处理备份问题", "expected_document_ids": ["doc-backup"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "backup"]}
+{"id": "zh-backup-02", "lang": "zh", "query": "备份流程怎么走", "expected_document_ids": ["doc-backup"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "backup"]}
+{"id": "zh-backup-03", "lang": "zh", "query": "备份注意事项有哪些", "expected_document_ids": ["doc-backup"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "backup"]}
+{"id": "zh-backup-04", "lang": "zh", "query": "遇到备份应该找谁", "expected_document_ids": ["doc-backup"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "backup"]}
+{"id": "zh-backup-05", "lang": "zh", "query": "备份常见错误怎么排查", "expected_document_ids": ["doc-backup"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "backup"]}
+{"id": "zh-backup-06", "lang": "zh", "query": "备份标准是什么", "expected_document_ids": ["doc-backup"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "backup"]}
+{"id": "zh-backup-07", "lang": "zh", "query": "关于备份的制度条款", "expected_document_ids": ["doc-backup"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "backup"]}
+{"id": "zh-backup-08", "lang": "zh", "query": "备份需要哪些材料", "expected_document_ids": ["doc-backup"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "backup"]}
+{"id": "zh-backup-09", "lang": "zh", "query": "备份时效要求是多久", "expected_document_ids": ["doc-backup"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "backup"]}
+{"id": "en-backup-00", "lang": "en", "query": "what is the policy for backup restore", "expected_document_ids": ["doc-backup"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "backup"]}
+{"id": "en-backup-01", "lang": "en", "query": "how to handle backup restore", "expected_document_ids": ["doc-backup"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "backup"]}
+{"id": "en-backup-02", "lang": "en", "query": "backup restore process steps", "expected_document_ids": ["doc-backup"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "backup"]}
+{"id": "en-backup-03", "lang": "en", "query": "backup restore checklist", "expected_document_ids": ["doc-backup"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "backup"]}
+{"id": "vi-backup-00", "lang": "vi", "query": "quy dinh ve sao luu", "expected_document_ids": ["doc-backup"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "backup"]}
+{"id": "vi-backup-01", "lang": "vi", "query": "xu ly sao luu nhu the nao", "expected_document_ids": ["doc-backup"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "backup"]}
+{"id": "zh-device-00", "lang": "zh", "query": "设备保养相关规定是什么", "expected_document_ids": ["doc-device-pm"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "device"]}
+{"id": "zh-device-01", "lang": "zh", "query": "如何处理设备保养问题", "expected_document_ids": ["doc-device-pm"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "device"]}
+{"id": "zh-device-02", "lang": "zh", "query": "设备保养流程怎么走", "expected_document_ids": ["doc-device-pm"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "device"]}
+{"id": "zh-device-03", "lang": "zh", "query": "设备保养注意事项有哪些", "expected_document_ids": ["doc-device-pm"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "device"]}
+{"id": "zh-device-04", "lang": "zh", "query": "遇到设备保养应该找谁", "expected_document_ids": ["doc-device-pm"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "device"]}
+{"id": "zh-device-05", "lang": "zh", "query": "设备保养常见错误怎么排查", "expected_document_ids": ["doc-device-pm"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "device"]}
+{"id": "zh-device-06", "lang": "zh", "query": "设备保养标准是什么", "expected_document_ids": ["doc-device-pm"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "device"]}
+{"id": "zh-device-07", "lang": "zh", "query": "关于设备保养的制度条款", "expected_document_ids": ["doc-device-pm"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "device"]}
+{"id": "zh-device-08", "lang": "zh", "query": "设备保养需要哪些材料", "expected_document_ids": ["doc-device-pm"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "device"]}
+{"id": "zh-device-09", "lang": "zh", "query": "设备保养时效要求是多久", "expected_document_ids": ["doc-device-pm"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "device"]}
+{"id": "en-device-00", "lang": "en", "query": "what is the policy for preventive maintenance", "expected_document_ids": ["doc-device-pm"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "device"]}
+{"id": "en-device-01", "lang": "en", "query": "how to handle preventive maintenance", "expected_document_ids": ["doc-device-pm"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "device"]}
+{"id": "en-device-02", "lang": "en", "query": "preventive maintenance process steps", "expected_document_ids": ["doc-device-pm"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "device"]}
+{"id": "en-device-03", "lang": "en", "query": "preventive maintenance checklist", "expected_document_ids": ["doc-device-pm"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "device"]}
+{"id": "vi-device-00", "lang": "vi", "query": "quy dinh ve bao duong", "expected_document_ids": ["doc-device-pm"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "device"]}
+{"id": "vi-device-01", "lang": "vi", "query": "xu ly bao duong nhu the nao", "expected_document_ids": ["doc-device-pm"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "device"]}
+{"id": "zh-yarn-00", "lang": "zh", "query": "断纱相关规定是什么", "expected_document_ids": ["doc-yarn-defect"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "yarn"]}
+{"id": "zh-yarn-01", "lang": "zh", "query": "如何处理断纱问题", "expected_document_ids": ["doc-yarn-defect"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "yarn"]}
+{"id": "zh-yarn-02", "lang": "zh", "query": "断纱流程怎么走", "expected_document_ids": ["doc-yarn-defect"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "yarn"]}
+{"id": "zh-yarn-03", "lang": "zh", "query": "断纱注意事项有哪些", "expected_document_ids": ["doc-yarn-defect"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "yarn"]}
+{"id": "zh-yarn-04", "lang": "zh", "query": "遇到断纱应该找谁", "expected_document_ids": ["doc-yarn-defect"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "yarn"]}
+{"id": "zh-yarn-05", "lang": "zh", "query": "断纱常见错误怎么排查", "expected_document_ids": ["doc-yarn-defect"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "yarn"]}
+{"id": "zh-yarn-06", "lang": "zh", "query": "断纱标准是什么", "expected_document_ids": ["doc-yarn-defect"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "yarn"]}
+{"id": "zh-yarn-07", "lang": "zh", "query": "关于断纱的制度条款", "expected_document_ids": ["doc-yarn-defect"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "yarn"]}
+{"id": "zh-yarn-08", "lang": "zh", "query": "断纱需要哪些材料", "expected_document_ids": ["doc-yarn-defect"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "yarn"]}
+{"id": "zh-yarn-09", "lang": "zh", "query": "断纱时效要求是多久", "expected_document_ids": ["doc-yarn-defect"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "yarn"]}
+{"id": "en-yarn-00", "lang": "en", "query": "what is the policy for yarn break", "expected_document_ids": ["doc-yarn-defect"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "yarn"]}
+{"id": "en-yarn-01", "lang": "en", "query": "how to handle yarn break", "expected_document_ids": ["doc-yarn-defect"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "yarn"]}
+{"id": "en-yarn-02", "lang": "en", "query": "yarn break process steps", "expected_document_ids": ["doc-yarn-defect"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "yarn"]}
+{"id": "en-yarn-03", "lang": "en", "query": "yarn break checklist", "expected_document_ids": ["doc-yarn-defect"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "yarn"]}
+{"id": "vi-yarn-00", "lang": "vi", "query": "quy dinh ve dut soi", "expected_document_ids": ["doc-yarn-defect"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "yarn"]}
+{"id": "vi-yarn-01", "lang": "vi", "query": "xu ly dut soi nhu the nao", "expected_document_ids": ["doc-yarn-defect"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "yarn"]}
+{"id": "zh-acl-00", "lang": "zh", "query": "访问控制相关规定是什么", "expected_document_ids": ["doc-acl-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "acl"]}
+{"id": "zh-acl-01", "lang": "zh", "query": "如何处理访问控制问题", "expected_document_ids": ["doc-acl-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "acl"]}
+{"id": "zh-acl-02", "lang": "zh", "query": "访问控制流程怎么走", "expected_document_ids": ["doc-acl-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "acl"]}
+{"id": "zh-acl-03", "lang": "zh", "query": "访问控制注意事项有哪些", "expected_document_ids": ["doc-acl-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "acl"]}
+{"id": "zh-acl-04", "lang": "zh", "query": "遇到访问控制应该找谁", "expected_document_ids": ["doc-acl-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "acl"]}
+{"id": "zh-acl-05", "lang": "zh", "query": "访问控制常见错误怎么排查", "expected_document_ids": ["doc-acl-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "acl"]}
+{"id": "zh-acl-06", "lang": "zh", "query": "访问控制标准是什么", "expected_document_ids": ["doc-acl-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "acl"]}
+{"id": "zh-acl-07", "lang": "zh", "query": "关于访问控制的制度条款", "expected_document_ids": ["doc-acl-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "acl"]}
+{"id": "zh-acl-08", "lang": "zh", "query": "访问控制需要哪些材料", "expected_document_ids": ["doc-acl-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "acl"]}
+{"id": "zh-acl-09", "lang": "zh", "query": "访问控制时效要求是多久", "expected_document_ids": ["doc-acl-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "acl"]}
+{"id": "en-acl-00", "lang": "en", "query": "what is the policy for ACL policy", "expected_document_ids": ["doc-acl-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "acl"]}
+{"id": "en-acl-01", "lang": "en", "query": "how to handle ACL policy", "expected_document_ids": ["doc-acl-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "acl"]}
+{"id": "en-acl-02", "lang": "en", "query": "ACL policy process steps", "expected_document_ids": ["doc-acl-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "acl"]}
+{"id": "en-acl-03", "lang": "en", "query": "ACL policy checklist", "expected_document_ids": ["doc-acl-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "acl"]}
+{"id": "vi-acl-00", "lang": "vi", "query": "quy dinh ve kiem soat truy cap", "expected_document_ids": ["doc-acl-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "acl"]}
+{"id": "vi-acl-01", "lang": "vi", "query": "xu ly kiem soat truy cap nhu the nao", "expected_document_ids": ["doc-acl-policy"], "min_recall_at_5": 1.0, "min_mrr": 0.5, "tags": ["expanded", "acl"]}

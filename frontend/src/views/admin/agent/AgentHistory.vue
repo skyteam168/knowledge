@@ -4,6 +4,7 @@ import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { getAgentRun, listAgentRuns } from '@/api/adminAgent'
 import type { AgentRun, AgentRunDetail, AgentRunStatus } from '@/api/types'
+import EmptyState from '@/components/EmptyState.vue'
 import { formatDateTime } from '@/utils/format'
 
 const visible = defineModel<boolean>({ required: true })
@@ -59,7 +60,7 @@ watch(visible, (shown) => {
 <template>
   <el-drawer v-model="visible" :title="t('adminAgent.runs.title')" size="420px">
     <div v-loading="loading && !runs.length" class="runs" data-test="agent-runs">
-      <el-empty v-if="!loading && !runs.length" :description="t('adminAgent.runs.empty')" />
+      <EmptyState v-if="!loading && !runs.length" :description="t('adminAgent.runs.empty')" />
       <button
         v-for="run in runs"
         :key="run.id"

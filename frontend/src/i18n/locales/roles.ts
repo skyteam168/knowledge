@@ -150,4 +150,81 @@ export default {
         'Revoked "{name}" from {changed} users, skipped {skipped}; effective immediately',
     },
   },
+  vi: {
+    permissionGroups: {
+      super: 'Quyền siêu cấp',
+      kb: 'Cơ sở tri thức',
+      doc: 'Tài liệu',
+      review: 'Duyệt',
+      chat: 'Chuyên gia hỏi đáp tri thức',
+      search: 'Tìm kiếm',
+      analytics: 'Phân tích',
+      admin: 'Quản trị hệ thống',
+    },
+    list: {
+      title: 'Vai trò',
+      create: 'Vai trò mới',
+      role: 'Vai trò',
+      type: 'Loại',
+      system: 'Tích hợp sẵn',
+      default: 'Mặc định',
+      defaultTip: 'Người dùng tạo khi đồng bộ hoặc đăng nhập lần đầu tự động nhận vai trò này',
+    },
+    permissions: {
+      title: 'Quyền của "{name}"',
+      selectRole: 'Chọn vai trò',
+      selectRoleHint: 'Chọn vai trò ở bên trái',
+      save: 'Lưu quyền',
+      saved: 'Đã lưu quyền; bộ đệm quyền của người dùng liên quan đã được làm mới',
+    },
+    editor: {
+      createTitle: 'Vai trò mới',
+      editTitle: 'Chỉnh sửa vai trò',
+      code: 'Mã',
+      isDefault: 'Vai trò mặc định',
+      privilegedDefaultHint:
+        'Vai trò có quyền siêu cấp hoặc quản trị hệ thống không thể là vai trò mặc định',
+      defaultHint:
+        'Người dùng tạo khi đồng bộ tổ chức hoặc đăng nhập lần đầu tự động nhận vai trò này. Người dùng hiện có không bị ảnh hưởng; dùng "Gán hàng loạt" để cấp.',
+    },
+    rules: {
+      codeRequired: 'Vui lòng nhập mã vai trò',
+      codePattern: 'Bắt đầu bằng chữ thường; chỉ dùng chữ thường, số và dấu gạch dưới',
+      nameRequired: 'Vui lòng nhập tên vai trò',
+    },
+    saveSuccess: 'Đã lưu',
+    deleteConfirm: 'Xóa vai trò "{name}"?',
+    bulk: {
+      open: 'Gán hàng loạt',
+      title: 'Gán hàng loạt "{name}"',
+      titleFallback: 'Gán hàng loạt',
+      action: 'Thao tác',
+      grant: 'Cấp',
+      revoke: 'Thu hồi',
+      departments: 'Phòng ban',
+      departmentsPlaceholder: 'Chọn phòng ban (gồm cấp con); tìm theo đường dẫn đầy đủ',
+      groups: 'Nhóm người dùng',
+      groupsPlaceholder: 'Chọn nhóm, ví dụ "Chức danh/Trưởng nhóm"',
+      includeInactive: 'Bao gồm người dùng đã tắt',
+      privilegedBlocked:
+        'Vai trò có quyền siêu cấp hoặc quản trị hệ thống không thể cấp hàng loạt; gán từng người trong quản lý người dùng',
+      previewGrant:
+        'Khớp {matched} người; sẽ cấp cho {changed} ({unchanged} đã có vai trò này)',
+      previewRevoke:
+        'Khớp {matched} người; sẽ thu hồi {changed} ({unchanged} chưa có vai trò này)',
+      previewRevokeSkipped:
+        'Khớp {matched} người; sẽ thu hồi {changed} ({unchanged} chưa có vai trò này; giữ {skipped} vì vai trò từ Keycloak hoặc là chính bạn)',
+      preview: 'Xem trước số lượng',
+      run: 'Thực hiện',
+      confirmTitle: 'Gán vai trò hàng loạt',
+      confirmGrant: 'Cấp vai trò "{name}" cho {changed} người (khớp {matched})?',
+      confirmRevoke: 'Thu hồi vai trò "{name}" khỏi {changed} người (khớp {matched})?',
+      grantDone: 'Đã cấp "{name}" cho {changed} người; có hiệu lực ngay',
+      grantDoneSkipped:
+        'Đã cấp "{name}" cho {changed} người, bỏ qua {skipped}; có hiệu lực ngay',
+      revokeDone: 'Đã thu hồi "{name}" khỏi {changed} người; có hiệu lực ngay',
+      revokeDoneSkipped:
+        'Đã thu hồi "{name}" khỏi {changed} người, bỏ qua {skipped}; có hiệu lực ngay',
+    },
+  },
 } satisfies LocaleModule

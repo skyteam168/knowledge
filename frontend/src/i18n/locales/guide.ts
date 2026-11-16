@@ -26,4 +26,16 @@ export default {
       skip: 'Skip tour',
     },
   },
+  vi: {
+    view: {
+      title: 'Hướng dẫn sử dụng',
+      faq: 'Câu hỏi thường gặp',
+      tryIt: 'Thử ngay',
+      playTour: 'Phát hướng dẫn trang',
+      noTour: 'Trang này chưa có hướng dẫn',
+    },
+    tour: {
+      skip: 'Bỏ qua hướng dẫn',
+    },
+  },
 } satisfies LocaleModule

@@ -12,6 +12,7 @@ import {
   updateGroup,
 } from '@/api/admin'
 import type { Group, User } from '@/api/types'
+import EmptyState from '@/components/EmptyState.vue'
 
 const { t } = useI18n()
 
@@ -137,7 +138,14 @@ onMounted(load)
       </el-form-item>
     </el-form>
 
-    <el-table v-loading="loading" :data="rows" :empty-text="t('groups.empty')">
+    <el-table v-loading="loading" :data="rows">
+      <template #empty>
+        <EmptyState
+          :description="t('groups.empty')"
+          :action-label="t('groups.create')"
+          @action="openCreate"
+        />
+      </template>
       <el-table-column prop="name" :label="t('groups.columns.name')" min-width="140" />
       <el-table-column prop="description" :label="t('common.description')" min-width="200" />
       <el-table-column :label="t('groups.columns.source')" width="110">

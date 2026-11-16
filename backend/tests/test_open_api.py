@@ -541,3 +541,91 @@ async def test_calls_logged_and_preview(
     assert (
         await api.post(f"{ADMIN}/clients/{client_id}/preview", json={"query": "x"}, headers=CAROL)
     ).status_code == 403
+
+
+# ---- entity / graph ------------------------------------------------------------------
+
+
+async def test_entity_scope_denied_without_capability(
+    api: httpx.AsyncClient, agent: dict[str, Any]
+) -> None:
+    denied = await api.post(
+        f"{OPEN}/entity/read",
+        json={"name": "织机"},
+        headers=agent["headers"],
+    )
+    assert denied.status_code == 403
+    assert denied.json()["code"] == "SCOPE_DENIED"
+
+    tools = (await mcp(api, agent["headers"], {"jsonrpc": "2.0", "id": 1, "method": "tools/list"})).json()
+    names = {t["name"] for t in tools["result"]["tools"]}
+    assert "entity_read" not in names
+    assert "graph_traverse" not in names
+    assert "entity" in (await options(api))["scopes"]
+
+
+async def test_entity_read_and_graph_with_scope(
+    api: httpx.AsyncClient, corpus: dict[str, Any], engine: AsyncEngine
+) -> None:
+    from app.core.db import create_session_factory
+    from app.models import KnowledgeBase, KoRelation, KoRelationType
+    from app.models.base import new_id
+    from app.services.structured.seed_equipment import seed_equipment
+    from tests.test_open_entity import _published_ko
+
+    opts = await options(api)
+    client = await create_client(
+        api,
+        name="概念 Agent",
+        kb_ids=[corpus["public_kb"]["id"]],
+        principals=[{"type": "group", "id": named(opts["groups"], "sales")}],
+        scopes=["retrieve", "mcp", "entity"],
+    )
+    key = await issue_key(api, client["id"])
+    headers = key_headers(key["secret"])
+
+    async with create_session_factory(engine)() as session:
+        kb = await session.get(KnowledgeBase, corpus["public_kb"]["id"])
+        assert kb is not None
+        org_id = kb.org_id
+        await seed_equipment(session, org_id)
+        a = await _published_ko(
+            session, org_id=org_id, kb_id=kb.id, title="Open-Seed"
+        )
+        b = await _published_ko(
+            session, org_id=org_id, kb_id=kb.id, title="Open-Neigh"
+        )
+        session.add(
+            KoRelation(
+                id=new_id(),
+                org_id=org_id,
+                from_ko_id=a.id,
+                to_ko_id=b.id,
+                relation_type=KoRelationType.RELATED_TO.value,
+            )
+        )
+        await session.commit()
+        seed_id, neigh_id = a.id, b.id
+
+    tools = (await mcp(api, headers, {"jsonrpc": "2.0", "id": 1, "method": "tools/list"})).json()
+    names = {t["name"] for t in tools["result"]["tools"]}
+    assert {"list_knowledge_bases", "search_knowledge", "entity_read", "graph_traverse"} <= names
+    assert "ask_knowledge" not in names
+
+    read = await api.post(
+        f"{OPEN}/entity/read",
+        json={"object_type": "device", "external_id": "EQ-LOOM-01"},
+        headers=headers,
+    )
+    assert read.status_code == 200, read.text
+    body = read.json()
+    assert body["mirror"]["label"] == "1号飞织机"
+    assert body["terminology"]["canonical_name"] == "织机"
+
+    graph = await api.post(
+        f"{OPEN}/graph/traverse",
+        json={"ko_id": seed_id, "max_hops": 1},
+        headers=headers,
+    )
+    assert graph.status_code == 200, graph.text
+    assert {n["ko_id"] for n in graph.json()["neighbors"]} == {neigh_id}

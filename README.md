@@ -53,6 +53,8 @@ Keycloak 预置 realm `ekb`：客户端 `ekb-frontend`（public + PKCE）、`ekb
 
 生产部署见 [docs/ops/deployment.md](docs/ops/deployment.md)；复用服务器已有 PostgreSQL / Redis、局域网 IP + 自签 HTTPS 的单机部署（含 Keycloak 管理员创建与排障）见 [docs/ops/deployment-server.md](docs/ops/deployment-server.md)。
 
+**使用说明（入门 + 运营）**：登录后顶栏 **帮助 → 使用说明**（`/guide`，按权限显示章节）；仓库入口与运维文档索引见 [docs/user-guide.md](docs/user-guide.md)。
+
 ## 本地开发
 
 依赖：Docker、Python 3.11 + [uv](https://docs.astral.sh/uv/)、Node 22。
@@ -125,22 +127,40 @@ MOCK_EMBEDDING_DIM=1024
 模型组合：`text-embedding-v4`（1024 维）+ `qwen3-rerank` + `deepseek-v4-flash`（同时作为裁判模型），
 索引代次 v4（23 篇文档 / 174 个 chunk），检索策略 `builtin`，开启大模型评分。
 
-评测集「真实模型基线」共 32 题：
+评测集「真实模型基线」共 **32** 题（仍保留，便于与扩展集对比）：
 
 - 可回答 24 题：覆盖 IT 运维（ESXI、机房巡检、锁屏、离职权限）、网络安全培训（仿冒邮件、防火墙、WannaCry、杀毒）、
   邮件错误码、思科 ACL、邮箱诊断地址、视频会议 IP、差旅制度、飞织工艺、季度经营回顾、设备考核，每题标注期望文档和参考答案。
 - 知识库外 8 题：年假、加班费、VPN 申请、发薪日、打印机卡纸、食堂、五险一金、出国住宿标准，期望拒答。
 
-检索与回答质量（两次运行一致）：
+### 扩展集（2026-11-16，≥120）
 
-| 指标 | 结果 |
-| --- | --- |
-| Recall@5 / Recall@10 | 1.0 / 1.0 |
-| MRR / nDCG@10 | 1.0 / 1.0（24 题的期望文档都排第 1） |
-| 忠实度 / 切题度 / 引用正确率（裁判打分） | 1.0 / 1.0 / 1.0 |
-| 引用精确率 | 0.97 |
-| 单题平均耗时 | 约 3.2 s |
-| 降级 / 错误 | 0 / 0 |
+站内另建「**真实模型基线扩展**」**138** 题（原 32 + 中/英/越改写 + 新文档题 + 增补拒答）。  
+夹具：`backend/tests/fixtures/eval_baseline_expanded.jsonl`（按文档**标题**绑定，导入时解析为 id）。
+
+```bash
+python -m app.cli eval seed-dataset --name "真实模型基线扩展" \
+  --cases tests/fixtures/eval_baseline_expanded.jsonl --replace
+python -m app.cli eval start-run --name "真实模型基线扩展" \
+  --run-name "扩展集真实模型+裁判-20261116"
+```
+
+完整纪要（含推广口径）：[`docs/testing/eval-baseline-expand-20261116.md`](docs/testing/eval-baseline-expand-20261116.md)。
+
+### 扩展集真实模型 + 裁判（2026-11-16）
+
+运行 `f202ca889cfb45e7b76d26eb3d4e6153`：`text-embedding-v4` + `qwen3-rerank` + `deepseek-v4.1-flash`，阈值 0.45 / 0.7，138/138 done。
+
+| 范围 | 指标 | 结果 |
+| --- | --- | --- |
+| 可答 114 | Recall@5 / Recall@10 | **1.0 / 1.0** |
+| 可答 114 | MRR / nDCG@10 | **0.981 / 0.986** |
+| 可答 114 | 忠实度 / 切题度 / 引用正确率 | **0.997 / 0.979 / 1.0** |
+| 可答 114 | 引用精确率 | **0.913** |
+| 库外 24 | 直接拒答 / 「无法确定」软拒答 / 编造 | **19 / 5 / 0** |
+| 全量 | 单题平均耗时 / 错误 | ≈3.3 s / 0 |
+
+下方 32 题表仍为 2026-10-09 原基线（可作对照）。
 
 rerank 最高分分布：
 

@@ -421,6 +421,34 @@ async def test_failed_parse_and_reprocess(
     assert filtered.json()["total"] == 0
 
 
+async def test_batch_reprocess_failed_filter(
+    api: httpx.AsyncClient, task_queue: RecordingTaskQueue, pipeline: IngestPipeline
+) -> None:
+    await login_all(api)
+    kb = await create_kb(api, "批量重处理库")
+    # Distinct payloads so content-hash dedupe does not collapse the two docs.
+    d1 = (await upload(api, kb["id"], "a.docx", b"PK\x03\x04 broken-a")).json()["document"]
+    d2 = (await upload(api, kb["id"], "b.docx", b"PK\x03\x04 broken-b")).json()["document"]
+    ok = (await upload(api, kb["id"], "ok.md", make_markdown())).json()["document"]
+    for doc in (d1, d2):
+        with pytest.raises(ParseError):
+            await pipeline.parse(doc["id"], 1)
+        await pipeline.mark_failed(doc["id"], 1, "broken")
+
+    before = len(task_queue.calls)
+    resp = await api.post(
+        f"/api/v1/knowledge-bases/{kb['id']}/documents/reprocess",
+        json={"status": "failed", "limit": 50},
+        headers=BOB,
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert set(body["queued"]) == {d1["id"], d2["id"]}
+    assert ok["id"] not in body["queued"]
+    assert body["total_candidates"] == 2
+    assert len([c for c in task_queue.calls[before:] if c[0] == "parse"]) == 2
+
+
 async def test_update_document_metadata(api: httpx.AsyncClient) -> None:
     await login_all(api)
     kb = await create_kb(api, "元数据库")

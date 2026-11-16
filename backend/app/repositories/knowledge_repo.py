@@ -1,7 +1,7 @@
 from collections.abc import Iterable, Sequence
 from datetime import datetime
 
-from sqlalchemy import ColumnElement, Select, delete, func, or_, select, true
+from sqlalchemy import ColumnElement, Select, and_, delete, func, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
@@ -109,6 +109,7 @@ class DocumentRepository:
         visible: ColumnElement[bool] | None = None,
         review_due: tuple[datetime | None, datetime | None] | None = None,
         owner_id: str | None = None,
+        missing_page_images: bool = False,
     ) -> Select[Document]:
         """`review_due` = (from, until): due dates in [from, until]; either end may be open."""
         stmt = self._active(org_id).where(Document.kb_id == kb_id)
@@ -133,6 +134,17 @@ class DocumentRepository:
         if keyword:
             like = f"%{keyword.strip()}%"
             stmt = stmt.where(or_(Document.title.ilike(like), Document.filename.ilike(like)))
+        if missing_page_images:
+            # Parsed docs that should have rasters but recorded 0 / an extraction error.
+            page_images = Document.meta["parse"]["page_images"].as_string()
+            page_err = Document.meta["parse"]["page_image_error"].as_string()
+            expected = Document.meta["parse"]["page_image_expected"].as_string()
+            stmt = stmt.where(
+                or_(
+                    and_(expected == "true", or_(page_images == "0", page_images.is_(None))),
+                    page_err.is_not(None),
+                )
+            )
         return stmt.order_by(Document.updated_at.desc(), Document.id)
 
     async def inheriting_review(self, org_id: str, kb_id: str) -> list[Document]:

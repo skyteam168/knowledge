@@ -1,0 +1,16 @@
+# Optional API horizontal scale (stage 1 — same host, not dual-node HA).
+# See docs/adr/0003-single-node-ha-stages.md
+#
+#   docker compose -f docker-compose.prod.yml -f docker-compose.ha-api.yml \
+#     --env-file .env.prod up -d --scale backend=2
+#
+# Do NOT scale outbox-dispatcher or scheduler.
+# After scaling, revisit WEB_CONCURRENCY × DATABASE_POOL_* vs Postgres max_connections.
+#
+# frontend-ha.conf uses Docker DNS + variable proxy_pass so nginx re-resolves
+# when backend replica IPs change.
+
+services:
+  frontend:
+    volumes:
+      - ./nginx/frontend-ha.conf:/etc/nginx/conf.d/default.conf:ro

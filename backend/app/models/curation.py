@@ -42,10 +42,26 @@ class GapCluster(IdMixin, TenantMixin, TimestampMixin, Base):
 
 
 class KoType(StrEnum):
+    # Content shape (legacy presentation forms).
     FAQ = "faq"
     QA = "qa"
     CARD = "card"
     POLICY_SUMMARY = "policy_summary"
+    # Business entity kinds (aligned with terminology entity_type strings).
+    DEVICE = "device"
+    PROCESS = "process"
+    DEFECT = "defect"
+    POLICY = "policy"
+    IT_TERM = "it_term"
+
+
+class KoRelationType(StrEnum):
+    RELATED_TO = "related_to"
+    PART_OF = "part_of"
+    DEPENDS_ON = "depends_on"
+    CAUSES = "causes"
+    MITIGATES = "mitigates"
+    APPLIES_TO = "applies_to"
 
 
 class KoStatus(StrEnum):
@@ -173,6 +189,38 @@ class KoSourceRef(IdMixin, TenantMixin, Base):
     )
     document_id: Mapped[str] = mapped_column(String(32), nullable=False)
     chunk_id: Mapped[str | None] = mapped_column(String(32))
+
+
+class KoRelation(IdMixin, TenantMixin, TimestampMixin, Base):
+    """Directed edge between two knowledge objects (light ontology; not versioned)."""
+
+    __tablename__ = "ko_relations"
+    __table_args__ = (
+        UniqueConstraint(
+            "org_id",
+            "from_ko_id",
+            "to_ko_id",
+            "relation_type",
+            name="uq_ko_relations_edge",
+        ),
+        Index("ix_ko_relations_from", "org_id", "from_ko_id"),
+        Index("ix_ko_relations_to", "org_id", "to_ko_id"),
+    )
+
+    from_ko_id: Mapped[str] = mapped_column(
+        String(32),
+        ForeignKey("knowledge_objects.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    to_ko_id: Mapped[str] = mapped_column(
+        String(32),
+        ForeignKey("knowledge_objects.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    relation_type: Mapped[str] = mapped_column(
+        String(32), default=KoRelationType.RELATED_TO.value, nullable=False
+    )
+    created_by: Mapped[str | None] = mapped_column(String(32))
 
 
 class ReviewStatus(StrEnum):

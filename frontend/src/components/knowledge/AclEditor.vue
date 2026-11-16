@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getDirectoryDepartments, searchPrincipals } from '@/api/knowledge'
 import type {
+  AclEffect,
   AclEntryOut,
   AclPermission,
   DirectoryDepartment,
@@ -12,11 +13,19 @@ import type {
 import { permissionLabels, principalLabel, principalLabels } from '@/utils/document'
 
 const entries = defineModel<AclEntryOut[]>({ required: true })
-const props = defineProps<{ disabled?: boolean }>()
+const props = defineProps<{
+  disabled?: boolean
+  /** When true, new rows are DENY-only (used under inherit). */
+  denyOnly?: boolean
+}>()
 const { t } = useI18n()
 
 const permissionOptions = computed(() => permissionLabels())
 const principalOptions = computed(() => principalLabels())
+const effectOptions = computed(() => ({
+  allow: t('knowledge.acl.effectAllow'),
+  deny: t('knowledge.acl.effectDeny'),
+}))
 
 const departments = ref<DirectoryDepartment[]>([])
 const departmentNames = computed(() => {
@@ -34,6 +43,7 @@ const draft = reactive({
   type: 'group' as PrincipalType,
   ids: [] as string[],
   permission: 'read' as AclPermission,
+  effect: (props.denyOnly ? 'deny' : 'allow') as AclEffect,
 })
 const options = ref<PrincipalOption[]>([])
 const searching = ref(false)
@@ -53,7 +63,6 @@ function changeType(): void {
   if (draft.type !== 'dept') void search('')
 }
 
-// Matches on the full path so "织造车间" under different factories can be told apart.
 function filterDepartment(keyword: string, node: Record<string, unknown>): boolean {
   const dept = node as unknown as DirectoryDepartment
   return (dept.path_name ?? dept.name).toLowerCase().includes(keyword.toLowerCase())
@@ -69,16 +78,25 @@ function nameOf(type: PrincipalType, id: string): string {
 }
 
 function add(): void {
+  const effect: AclEffect = props.denyOnly ? 'deny' : draft.effect
+  const permission: AclPermission = effect === 'deny' ? 'read' : draft.permission
   const next = [...entries.value]
   for (const id of draft.ids) {
-    const existing = next.find((e) => e.principal_type === draft.type && e.principal_id === id)
+    const existing = next.find(
+      (e) =>
+        e.principal_type === draft.type &&
+        e.principal_id === id &&
+        (e.effect ?? 'allow') === effect,
+    )
     if (existing) {
-      existing.permission = draft.permission
+      existing.permission = permission
+      existing.effect = effect
     } else {
       next.push({
         principal_type: draft.type,
         principal_id: id,
-        permission: draft.permission,
+        permission,
+        effect,
         principal_name: nameOf(draft.type, id),
         principal_detail: draft.type === 'user' ? optionOf(draft.type, id)?.description : null,
         principal_active: true,
@@ -142,7 +160,23 @@ onMounted(async () => {
           <span v-if="o.description" class="option-desc">{{ o.description }}</span>
         </el-option>
       </el-select>
-      <el-select v-model="draft.permission" style="width: 96px">
+      <el-select
+        v-if="!denyOnly"
+        v-model="draft.effect"
+        style="width: 96px"
+      >
+        <el-option
+          v-for="(label, key) in effectOptions"
+          :key="key"
+          :label="label"
+          :value="key"
+        />
+      </el-select>
+      <el-select
+        v-if="!denyOnly && draft.effect !== 'deny'"
+        v-model="draft.permission"
+        style="width: 96px"
+      >
         <el-option
           v-for="(label, key) in permissionOptions"
           :key="key"
@@ -163,7 +197,7 @@ onMounted(async () => {
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column :label="t('common.name')" min-width="200" show-overflow-tooltip>
+      <el-table-column :label="t('common.name')" min-width="180" show-overflow-tooltip>
         <template #default="{ row }">
           <span :class="{ 'entry--inactive': (row as AclEntryOut).principal_active === false }">
             {{ (row as AclEntryOut).principal_name ?? (row as AclEntryOut).principal_id }}
@@ -189,9 +223,30 @@ onMounted(async () => {
           </el-tooltip>
         </template>
       </el-table-column>
+      <el-table-column :label="t('knowledge.acl.effect')" width="110">
+        <template #default="{ row }">
+          <el-tag
+            :type="((row as AclEntryOut).effect ?? 'allow') === 'deny' ? 'danger' : 'success'"
+            size="small"
+            effect="plain"
+          >
+            {{
+              ((row as AclEntryOut).effect ?? 'allow') === 'deny'
+                ? t('knowledge.acl.effectDeny')
+                : t('knowledge.acl.effectAllow')
+            }}
+          </el-tag>
+        </template>
+      </el-table-column>
       <el-table-column :label="t('knowledge.acl.permission')" width="120">
         <template #default="{ row }">
-          <el-select v-model="(row as AclEntryOut).permission" size="small" :disabled="disabled">
+          <template v-if="((row as AclEntryOut).effect ?? 'allow') === 'deny'">—</template>
+          <el-select
+            v-else
+            v-model="(row as AclEntryOut).permission"
+            size="small"
+            :disabled="disabled"
+          >
             <el-option
               v-for="(label, key) in permissionOptions"
               :key="key"

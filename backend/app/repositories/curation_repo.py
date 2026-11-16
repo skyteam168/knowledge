@@ -24,6 +24,7 @@ from app.models import (
     KnowledgeGap,
     KnowledgeObject,
     KoEntry,
+    KoRelation,
     KoSourceRef,
     KoStatus,
     KoVersion,
@@ -490,3 +491,44 @@ class NotificationRepository:
             stmt = stmt.where(Notification.id.in_(list(ids)))
         result = await self.session.execute(stmt)
         return int(getattr(result, "rowcount", 0) or 0)
+
+
+class KoRelationRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def get(self, org_id: str, relation_id: str) -> KoRelation | None:
+        stmt = select(KoRelation).where(KoRelation.org_id == org_id, KoRelation.id == relation_id)
+        return (await self.session.execute(stmt)).scalar_one_or_none()
+
+    async def find_edge(
+        self,
+        org_id: str,
+        from_ko_id: str,
+        to_ko_id: str,
+        relation_type: str,
+    ) -> KoRelation | None:
+        stmt = select(KoRelation).where(
+            KoRelation.org_id == org_id,
+            KoRelation.from_ko_id == from_ko_id,
+            KoRelation.to_ko_id == to_ko_id,
+            KoRelation.relation_type == relation_type,
+        )
+        return (await self.session.execute(stmt)).scalar_one_or_none()
+
+    async def list_for_ko(self, org_id: str, ko_id: str) -> list[KoRelation]:
+        stmt = (
+            select(KoRelation)
+            .where(
+                KoRelation.org_id == org_id,
+                or_(KoRelation.from_ko_id == ko_id, KoRelation.to_ko_id == ko_id),
+            )
+            .order_by(KoRelation.created_at.desc(), KoRelation.id)
+        )
+        return list((await self.session.execute(stmt)).scalars())
+
+    def add(self, row: KoRelation) -> None:
+        self.session.add(row)
+
+    async def delete(self, row: KoRelation) -> None:
+        await self.session.delete(row)

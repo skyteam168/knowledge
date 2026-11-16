@@ -218,6 +218,8 @@ class Chunk(TenantMixin, Base):
     level: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     seq: Mapped[int] = mapped_column(Integer, nullable=False)
     heading_path: Mapped[list[str]] = mapped_column(JsonType, default=list, nullable=False)
+    # Terminology entity ids matched in content at ingest (org-scoped; PG-only).
+    entity_ids: Mapped[list[str]] = mapped_column(JsonType, default=list, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     token_count: Mapped[int] = mapped_column(Integer, nullable=False)
     page_start: Mapped[int | None] = mapped_column(Integer)

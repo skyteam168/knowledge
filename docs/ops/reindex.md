@@ -103,33 +103,40 @@ $DC exec backend python -m app.cli index drop <OLD_VERSION>
 全量重建只会把 PG 中已有的 chunk 重新写入索引。修改 `CHUNK_*` 参数、启用 OCR / Docling / MinerU 等变更需要重新解析：
 
 - 单个文档：文档详情页“重新处理”，或 `POST /api/v1/documents/{document_id}/reprocess`。
-- 批量：按知识库遍历文档调用上述接口（脚本示例）：
+- 批量（推荐）：
+  - 管理端：知识库详情 → 勾选文档 →「批量重新处理」；可筛「失败」「缺页图」。
+  - API：`POST /api/v1/knowledge-bases/{kb_id}/documents/reprocess`  
+    Body 示例：`{"status":"failed","limit":100}` 或 `{"missing_page_images":true}` 或 `{"document_ids":["…"]}`。
+  - CLI（运维，无 ACL）：  
+    `python -m app.cli documents reprocess --kb <KB_ID> [--failed] [--missing-pages] [--ids a,b] [--limit 100] [--dry-run]`
 
-  ```python
-  import httpx
-  API, H = "https://kb.example.com/api/v1", {"Authorization": "Bearer <TOKEN>"}
-  page = 1
-  while True:
-      docs = httpx.get(f"{API}/knowledge-bases/<KB_ID>/documents",
-                       params={"page": page, "size": 100}, headers=H).json()
-      for d in docs["items"]:
-          httpx.post(f"{API}/documents/{d['id']}/reprocess", headers=H)
-      if page * 100 >= docs["total"]:
-          break
-      page += 1
-  ```
+页图：parse 后写入 `meta.parse.page_images` / `page_image_expected` / `page_image_error`；缺页图筛选项与批量入口共用该元数据。文档列表「页图」列可看数量或失败原因。
 
 重新解析按文档逐个进行，新 chunk 写入后旧 chunk 的索引条目由 outbox 事件删除。注意接口限流（`RATE_LIMIT_*`），大批量处理时分批执行，并观察 `ekb_queue_backlog{queue="ingest"}`。
 
 ## 6. 同义词词典
 
-编辑 `deploy/opensearch/analysis/synonyms.txt` 后（目录以只读方式挂载，容器内立即可见）：
+OpenSearch 搜索分析器使用 `deploy/opensearch/analysis/synonyms.txt`（Solr 格式）。compose 将该目录挂到 OpenSearch（只读）与 backend（可写：`OPENSEARCH_SYNONYMS_FILE=/opensearch-analysis/synonyms.txt`）。
+
+### 6.1 从术语表同步（推荐）
+
+将当前组织启用术语的「规范名 + 别名」写入文件中 `# <<<ekb-terminology>>>` … `# <<<end-ekb-terminology>>>` 区块（区块外手工行保留），并热加载分析器：
+
+```bash
+$DC exec backend python -m app.cli terminology sync-synonyms --org default
+```
+
+或在「术语表」页点击「同步同义词」；也可只写文件：`--no-reload`，再单独 reload。
+
+### 6.2 仅热加载
+
+编辑文件后（含手工同义词行）：
 
 ```bash
 $DC exec backend python -m app.cli index reload-synonyms
 ```
 
-或在“索引同步”页点击“重新加载同义词”（平台管理员）。多节点 OpenSearch 需要把文件同步到每个节点。
+或在「索引同步」页点击「重新加载同义词」（平台管理员）。多节点 OpenSearch 需要把文件同步到每个节点。
 
 ## 7. 监控指标
 

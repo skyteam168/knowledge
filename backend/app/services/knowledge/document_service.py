@@ -40,6 +40,9 @@ from app.repositories.knowledge_repo import (
 from app.repositories.user_repo import UserRepository
 from app.schemas.common import Page
 from app.schemas.knowledge import (
+    BatchReprocessIn,
+    BatchReprocessOut,
+    BatchReprocessSkip,
     ChunkOut,
     DiffLineOut,
     DocumentAclOut,
@@ -195,8 +198,16 @@ def _aware(value: datetime) -> datetime:
     return value if value.tzinfo else value.replace(tzinfo=UTC)
 
 
-def _entry_strings(rows: Sequence[tuple[str, str, str]]) -> list[str]:
-    return sorted(f"{t}:{i}:{p}" for t, i, p in rows)
+def _entry_strings(rows: Sequence[tuple[str, str, str] | tuple[str, str, str, str]]) -> list[str]:
+    out: list[str] = []
+    for row in rows:
+        if len(row) == 4:
+            t, i, p, effect = row
+        else:
+            t, i, p = row  # type: ignore[misc]
+            effect = "allow"
+        out.append(f"{t}:{i}:{p}:{effect}")
+    return sorted(out)
 
 
 class DocumentService(BaseService):
@@ -509,6 +520,7 @@ class DocumentService(BaseService):
         keyword: str | None = None,
         review: ReviewFilter | None = None,
         mine: bool = False,
+        missing_page_images: bool = False,
     ) -> Page[DocumentOut]:
         """`review`: due_soon (within the notice period), overdue, or attention (both)."""
         kb, kb_perm = await self._kb(kb_id, AclPermission.READ)
@@ -527,6 +539,7 @@ class DocumentService(BaseService):
             visible=self.access.visible_document_clause(self.ctx.user, kb_perm),
             review_due=windows[review] if review else None,
             owner_id=self.ctx.user.id if mine else None,
+            missing_page_images=missing_page_images,
         )
         if review:
             stmt = stmt.order_by(None).order_by(Document.review_due_at, Document.id)
@@ -997,6 +1010,70 @@ class DocumentService(BaseService):
         self._enqueue_parse(doc)
         return self._out(doc, perm, kb)
 
+    async def reprocess_many(self, kb_id: str, data: BatchReprocessIn) -> BatchReprocessOut:
+        """Batch re-enqueue parse. Skips in-flight parses and docs without EDIT."""
+        kb, kb_perm = await self._kb(kb_id, AclPermission.READ)
+        ids = list(dict.fromkeys(data.document_ids))
+        if ids:
+            stmt = self.repo.search_stmt(
+                self.org_id,
+                kb.id,
+                visible=self.access.visible_document_clause(self.ctx.user, kb_perm),
+            ).where(Document.id.in_(ids))
+        else:
+            stmt = self.repo.search_stmt(
+                self.org_id,
+                kb.id,
+                status=data.status,
+                visible=self.access.visible_document_clause(self.ctx.user, kb_perm),
+                missing_page_images=data.missing_page_images,
+            )
+        docs = list((await self.session.execute(stmt.limit(data.limit))).scalars())
+        perms = await self.access.document_permissions(self.ctx.user, docs, kb_perm)
+        queued: list[str] = []
+        skipped: list[BatchReprocessSkip] = []
+        for doc in docs:
+            perm = perms.get(doc.id)
+            if perm is None or perm.level < AclPermission.EDIT.level:
+                skipped.append(BatchReprocessSkip(id=doc.id, reason="no_edit"))
+                continue
+            if doc.status == DocumentStatus.PARSING.value:
+                skipped.append(BatchReprocessSkip(id=doc.id, reason="parsing"))
+                continue
+            before = snapshot(doc)
+            doc.status = DocumentStatus.UPLOADED.value
+            doc.error_message = None
+            await self.session.flush()
+            await self.audit.record(
+                self.audit_ctx,
+                "document.reprocess",
+                RESOURCE_DOCUMENT,
+                doc.id,
+                before,
+                snapshot(doc),
+            )
+            self._enqueue_parse(doc)
+            queued.append(doc.id)
+        if queued or skipped:
+            await self.audit.record(
+                self.audit_ctx,
+                "document.reprocess_batch",
+                RESOURCE_KB,
+                kb.id,
+                None,
+                {
+                    "queued": len(queued),
+                    "skipped": len(skipped),
+                    "status": data.status,
+                    "missing_page_images": data.missing_page_images,
+                    "document_ids": ids or None,
+                    "limit": data.limit,
+                },
+            )
+        return BatchReprocessOut(
+            queued=queued, skipped=skipped, total_candidates=len(docs)
+        )
+
     # ---- ACL ----
 
     async def get_acl(self, document_id: str) -> DocumentAclOut:
@@ -1008,23 +1085,29 @@ class DocumentService(BaseService):
             inherit=doc.acl_inherit,
             kb_visibility=kb.visibility,
             kb_entries=await directory.describe(
-                (r.principal_type, r.principal_id, r.permission) for r in kb_rows
+                (r.principal_type, r.principal_id, r.permission, r.effect or "allow")
+                for r in kb_rows
             ),
             entries=await directory.describe(
-                (r.principal_type, r.principal_id, r.permission) for r in doc_rows
+                (r.principal_type, r.principal_id, r.permission, r.effect or "allow")
+                for r in doc_rows
             ),
         )
 
     async def set_acl(self, document_id: str, data: DocumentAclUpdate) -> DocumentAclOut:
         doc, kb, _ = await self._doc(document_id, AclPermission.MANAGE)
         entries = await PrincipalDirectory(self.session, self.org_id).validate(data.entries)
-        new_rows = (
-            []
+        # inherit=True: keep DENY exceptions only (org-visible library exclusions).
+        kept = (
+            [e for e in entries if e.effect == "deny"]
             if data.inherit
-            else [(e.principal_type, e.principal_id, e.permission) for e in entries]
+            else entries
         )
+        new_rows = [
+            (e.principal_type, e.principal_id, e.permission, e.effect or "allow") for e in kept
+        ]
         old_rows = [
-            (r.principal_type, r.principal_id, r.permission)
+            (r.principal_type, r.principal_id, r.permission, r.effect or "allow")
             for r in await self.access.entries(self.org_id, RESOURCE_DOCUMENT, doc.id)
         ]
         before = {"inherit": doc.acl_inherit, "entries": _entry_strings(old_rows)}

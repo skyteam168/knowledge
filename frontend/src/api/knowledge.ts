@@ -9,6 +9,7 @@ import type {
   DocumentDetail,
   DocumentLifecycleIn,
   DocumentQuery,
+  DocumentStatus,
   DocumentUpdate,
   KbAcl,
   KbAclUpdate,
@@ -77,6 +78,20 @@ export const updateDocument = (id: string, body: DocumentUpdate) =>
   put<KbDocument>(`/documents/${id}`, body)
 export const deleteDocument = (id: string) => del<void>(`/documents/${id}`)
 export const reprocessDocument = (id: string) => post<KbDocument>(`/documents/${id}/reprocess`)
+export const batchReprocessDocuments = (
+  kbId: string,
+  body: {
+    document_ids?: string[]
+    status?: DocumentStatus
+    missing_page_images?: boolean
+    limit?: number
+  },
+) =>
+  post<{
+    queued: string[]
+    skipped: { id: string; reason: string }[]
+    total_candidates: number
+  }>(`/knowledge-bases/${kbId}/documents/reprocess`, body)
 export const createMarkdownDocument = (
   kbId: string,
   body: { title: string; content: string; tags?: string[] },

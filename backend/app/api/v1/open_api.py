@@ -20,6 +20,10 @@ from app.retrieval.pipeline import RetrievalPipeline
 from app.schemas.open_api import (
     OpenChatIn,
     OpenChatOut,
+    OpenEntityReadIn,
+    OpenEntityReadOut,
+    OpenGraphTraverseIn,
+    OpenGraphTraverseOut,
     OpenKbOut,
     OpenRetrieveIn,
     OpenRetrieveOut,
@@ -379,6 +383,66 @@ async def chat(
                 )
 
     return StreamingResponse(events(), media_type="text/event-stream", headers=SSE_HEADERS)
+
+
+@router.post("/entity/read", response_model=OpenEntityReadOut)
+async def entity_read(
+    data: OpenEntityReadIn,
+    request: Request,
+    caller: CallerDep,
+    sink: CallLogSinkDep,
+    session: DbSessionDep,
+    cache: AuthzCacheDep,
+    resources: ResourcesDep,
+    settings: SettingsDep,
+) -> OpenEntityReadOut:
+    call = _Call(request, caller, sink, settings, "entity/read")
+    query = data.entity_id or data.name or f"{data.object_type}:{data.external_id}"
+    try:
+        caller.require_scope(ApiScope.ENTITY)
+        out = await _service(session, request, caller, cache, resources, settings).entity_read(
+            data
+        )
+    except Exception as exc:
+        await call.fail(exc, query=query)
+        raise
+    await call.log(
+        200,
+        query=query,
+        result_count=len(out.knowledge_objects) + (1 if out.terminology or out.mirror else 0),
+        document_ids=[k.id for k in out.knowledge_objects],
+    )
+    return out
+
+
+@router.post("/graph/traverse", response_model=OpenGraphTraverseOut)
+async def graph_traverse(
+    data: OpenGraphTraverseIn,
+    request: Request,
+    caller: CallerDep,
+    sink: CallLogSinkDep,
+    session: DbSessionDep,
+    cache: AuthzCacheDep,
+    resources: ResourcesDep,
+    settings: SettingsDep,
+) -> OpenGraphTraverseOut:
+    call = _Call(request, caller, sink, settings, "graph/traverse")
+    try:
+        caller.require_scope(ApiScope.ENTITY)
+        out = await _service(
+            session, request, caller, cache, resources, settings
+        ).graph_traverse(data)
+    except Exception as exc:
+        await call.fail(exc, query=data.ko_id, kb_ids=data.kb_ids)
+        raise
+    await call.log(
+        200,
+        query=data.ko_id,
+        kb_ids=data.kb_ids,
+        result_count=len(out.neighbors),
+        document_ids=[out.seed.id, *[n.ko_id for n in out.neighbors]],
+    )
+    return out
 
 
 @router.post("/mcp")

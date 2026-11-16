@@ -14,6 +14,8 @@ x-backend-env: &backend-env
   MINERU_API_URL: ${MINERU_API_URL:-}
   QDRANT_URL: http://qdrant:6333
   OPENSEARCH_URL: http://opensearch:9200
+  # Writable copy of deploy/opensearch/analysis (same host dir OpenSearch mounts).
+  OPENSEARCH_SYNONYMS_FILE: /opensearch-analysis/synonyms.txt
   KEYCLOAK_URL: http://keycloak:8080
   KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL:-http://localhost:8080}
   KEYCLOAK_REALM: ekb
@@ -42,6 +44,11 @@ x-backend-env: &backend-env
   OPEN_API_ENABLED: ${OPEN_API_ENABLED:-true}
   OPEN_API_KEY_PEPPER: ${OPEN_API_KEY_PEPPER:-change-me-open-api-pepper}
   OPEN_API_TRUSTED_PROXIES: ${OPEN_API_TRUSTED_PROXIES:-[]}
+  INTEGRATIONS_BOT_ENABLED: ${INTEGRATIONS_BOT_ENABLED:-false}
+  INTEGRATIONS_BOT_TOKEN: ${INTEGRATIONS_BOT_TOKEN:-}
+  INTEGRATIONS_BOT_OPEN_API_KEY: ${INTEGRATIONS_BOT_OPEN_API_KEY:-}
+  INTEGRATIONS_BOT_MAX_ANSWER_CHARS: ${INTEGRATIONS_BOT_MAX_ANSWER_CHARS:-1200}
+  INTEGRATIONS_BOT_MAX_CITATIONS: ${INTEGRATIONS_BOT_MAX_CITATIONS:-5}
   LLM_API_KEY: ${LLM_API_KEY:-EMPTY}
   LLM_PROVIDER: ${LLM_PROVIDER:-openai}
   INDEX_ALIAS: ${INDEX_ALIAS:-kb_chunks}
@@ -62,6 +69,8 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-ekb}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ekb}
       POSTGRES_DB: ${POSTGRES_DB:-ekb}
+    # Dev convenience: publishes to all interfaces. Prefer "127.0.0.1:5432:5432" on shared LANs
+    # (see docs/ops/exposure-checklist.md).
     ports:
       - "5432:5432"
     volumes:
@@ -93,6 +102,7 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    # Do not expose MinIO to untrusted networks with default credentials.
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -106,6 +116,7 @@ services:
 
   qdrant:
     image: qdrant/qdrant:v1.13.6
+    # No auth in this profile; bind 127.0.0.1 in shared environments.
     ports:
       - "6333:6333"
       - "6334:6334"
@@ -132,6 +143,7 @@ services:
       discovery.type: single-node
       bootstrap.memory_lock: "true"
       OPENSEARCH_JAVA_OPTS: ${OPENSEARCH_JAVA_OPTS:--Xms1g -Xmx1g}
+      # Security plugin off → HTTP with no RBAC. Never publish 9200 to the public internet.
       DISABLE_SECURITY_PLUGIN: "true"
       DISABLE_INSTALL_DEMO_CONFIG: "true"
     ulimits:
@@ -191,7 +203,7 @@ services:
       EKB_BRIDGE_INTERNAL_URL: ${OIDC_BRIDGE_INTERNAL_URL:-http://backend:8000}
       OIDC_BRIDGE_CLIENT_SECRET: ${OIDC_BRIDGE_CLIENT_SECRET:-change-me-oidc-bridge-secret}
     ports:
-      - "8080:8080"
+      - "${KEYCLOAK_HOST_PORT:-8080}:8080"
     volumes:
       - ./keycloak/realm-ekb.json:/opt/keycloak/data/import/realm-ekb.json:ro
       - ./keycloak/themes/ekb:/opt/keycloak/themes/ekb:ro
@@ -234,6 +246,8 @@ services:
     environment:
       <<: *backend-env
       LLM_CONFIG_IMPORT_ON_STARTUP: "true"
+    volumes:
+      - ./opensearch/analysis:/opensearch-analysis
     ports:
       - "8000:8000"
     depends_on:

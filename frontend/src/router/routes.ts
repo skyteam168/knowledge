@@ -16,7 +16,13 @@ declare module 'vue-router' {
 export interface MenuRoute {
   path: string
   name: string
-  meta: { title: string; icon: string; permission?: PermissionRequirement }
+  meta: {
+    title: string
+    icon: string
+    permission?: PermissionRequirement
+    /** Nested under「平台工程」; collapsed by default for day-to-day ops. */
+    menuGroup?: 'platform'
+  }
   children?: MenuRoute[]
 }
 
@@ -90,40 +96,82 @@ const adminChildren: (RouteRecordRaw & MenuRoute)[] = [
     meta: { title: 'route.adminAuditLogs', icon: 'Document', permission: 'admin:audit' },
   },
   {
+    path: '/admin/terminology',
+    name: 'admin-terminology',
+    component: () => import('@/views/admin/TerminologyView.vue'),
+    meta: { title: 'route.adminTerminology', icon: 'Collection', permission: 'admin:retrieval' },
+  },
+  {
+    path: '/admin/structured',
+    name: 'admin-structured',
+    component: () => import('@/views/admin/StructuredEquipmentView.vue'),
+    meta: { title: 'route.adminStructured', icon: 'SetUp', permission: 'admin:retrieval' },
+  },
+  {
     path: '/admin/indexing',
     name: 'admin-indexing',
     component: () => import('@/views/admin/IndexingView.vue'),
-    meta: { title: 'route.adminIndexing', icon: 'Refresh', permission: 'admin:index' },
+    meta: {
+      title: 'route.adminIndexing',
+      icon: 'Refresh',
+      permission: 'admin:index',
+      menuGroup: 'platform',
+    },
   },
   {
     path: '/admin/models',
     name: 'admin-models',
     component: () => import('@/views/admin/models/ModelsView.vue'),
-    meta: { title: 'route.adminModels', icon: 'Cpu', permission: 'admin:model' },
+    meta: {
+      title: 'route.adminModels',
+      icon: 'Cpu',
+      permission: 'admin:model',
+      menuGroup: 'platform',
+    },
   },
   {
     path: '/admin/retrieval',
     name: 'admin-retrieval',
     component: () => import('@/views/admin/RetrievalView.vue'),
-    meta: { title: 'route.adminRetrieval', icon: 'Operation', permission: 'admin:retrieval' },
+    meta: {
+      title: 'route.adminRetrieval',
+      icon: 'Operation',
+      permission: 'admin:retrieval',
+      menuGroup: 'platform',
+    },
   },
   {
     path: '/admin/eval-datasets',
     name: 'admin-eval-datasets',
     component: () => import('@/views/admin/evaluation/EvalDatasetsView.vue'),
-    meta: { title: 'route.adminEvalDatasets', icon: 'Files', permission: 'admin:retrieval' },
+    meta: {
+      title: 'route.adminEvalDatasets',
+      icon: 'Files',
+      permission: 'admin:retrieval',
+      menuGroup: 'platform',
+    },
   },
   {
     path: '/admin/eval-runs',
     name: 'admin-eval-runs',
     component: () => import('@/views/admin/evaluation/EvalRunsView.vue'),
-    meta: { title: 'route.adminEvalRuns', icon: 'TrendCharts', permission: 'admin:retrieval' },
+    meta: {
+      title: 'route.adminEvalRuns',
+      icon: 'TrendCharts',
+      permission: 'admin:retrieval',
+      menuGroup: 'platform',
+    },
   },
   {
     path: '/admin/open-api',
     name: 'admin-open-api',
     component: () => import('@/views/admin/openApi/ApiClientsView.vue'),
-    meta: { title: 'route.adminOpenApi', icon: 'Connection', permission: 'admin:openapi' },
+    meta: {
+      title: 'route.adminOpenApi',
+      icon: 'Connection',
+      permission: 'admin:openapi',
+      menuGroup: 'platform',
+    },
   },
 ]
 

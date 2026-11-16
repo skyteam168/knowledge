@@ -6,6 +6,7 @@ import json
 import logging
 import uuid
 from posixpath import dirname
+from typing import Any
 
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -16,12 +17,18 @@ from app.models import Chunk, Document, DocumentPageAsset, DocumentStatus
 from app.models.base import new_id, utcnow
 from app.repositories.knowledge_repo import DocumentPageAssetRepository
 from app.services.ingest.chunker import Chunker
-from app.services.ingest.page_images import PageImage, asset_key, extract_page_images
+from app.services.ingest.page_images import (
+    PageImage,
+    PageImageExtractResult,
+    asset_key,
+    extract_page_images_result,
+)
 from app.services.ingest.parsers import ParserRegistry
 from app.services.ingest.queue import TaskQueue
 from app.services.ingest.sections import ParsedDocument
 from app.services.outbox_service import DOCUMENT_CHUNKS_READY, OutboxService
 from app.services.security.pii import PiiMasker
+from app.services.terminology.tagger import load_alias_index, tag_texts
 
 logger = logging.getLogger(__name__)
 CHUNK_ID_NAMESPACE = uuid.UUID("5b0c2f4e-7d38-4f8a-9a8e-0c1d2e3f4a5b")
@@ -87,26 +94,27 @@ class IngestPipeline:
             json.dumps(parsed.to_dict(), ensure_ascii=False).encode("utf-8"),
             "application/json",
         )
-        page_images = await asyncio.to_thread(self._extract_page_images, data, filename)
-        await self._store_page_images(key, page_images)
+        page_result = await asyncio.to_thread(self._extract_page_images, data, filename)
+        await self._store_page_images(key, page_result.images)
 
         async with self.session_factory() as session:
             doc = await self._current(session, document_id, version)
             if doc is None:
                 return False
-            await self._persist_page_assets(session, doc, version, key, page_images)
+            await self._persist_page_assets(session, doc, version, key, page_result.images)
             doc.status = DocumentStatus.PARSED.value
             doc.parsed_at = utcnow()
             doc.chunk_count = None
             doc.chunked_at = None
-            doc.meta = {
-                **doc.meta,
-                "parse": {
-                    "parser": parsed.parser,
-                    **parsed.metadata,
-                    "page_images": len(page_images),
-                },
+            parse_meta: dict[str, Any] = {
+                "parser": parsed.parser,
+                **parsed.metadata,
+                "page_images": len(page_result.images),
+                "page_image_expected": page_result.expected,
             }
+            if page_result.error:
+                parse_meta["page_image_error"] = page_result.error[:500]
+            doc.meta = {**doc.meta, "parse": parse_meta}
             await session.commit()
         self.queue.enqueue_chunk(document_id, version)
         logger.info(
@@ -114,20 +122,21 @@ class IngestPipeline:
             extra={
                 "document_id": document_id,
                 "version": version,
-                "page_images": len(page_images),
+                "page_images": len(page_result.images),
+                "page_image_error": page_result.error,
             },
         )
         return True
 
-    def _extract_page_images(self, data: bytes, filename: str) -> list[PageImage]:
+    def _extract_page_images(self, data: bytes, filename: str) -> PageImageExtractResult:
         settings = self.settings
         if settings is not None and not settings.page_image_enabled:
-            return []
+            return PageImageExtractResult(images=[], expected=False)
         dpi = settings.page_image_dpi if settings else 144
         max_edge = settings.page_image_max_edge if settings else 1600
         max_pages = settings.page_image_max_pages if settings else 200
         soffice = settings.page_image_soffice_path if settings else None
-        return extract_page_images(
+        return extract_page_images_result(
             data,
             filename,
             dpi=dpi,
@@ -190,6 +199,8 @@ class IngestPipeline:
             await session.execute(delete(Chunk).where(Chunk.document_id == document_id))
             ids = [chunk_id(document_id, version, d.seq) for d in drafts]
             texts = [self._text(d.content) for d in drafts]
+            alias_index = await load_alias_index(session, doc.org_id)
+            entity_id_lists = tag_texts(texts, alias_index)
             session.add_all(
                 Chunk(
                     id=ids[d.seq],
@@ -201,6 +212,7 @@ class IngestPipeline:
                     level=d.level,
                     seq=d.seq,
                     heading_path=d.heading_path,
+                    entity_ids=entity_id_lists[i],
                     content=texts[i],
                     token_count=d.token_count,
                     page_start=d.page_start,

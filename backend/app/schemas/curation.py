@@ -3,7 +3,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.models import GapStatus, GapType, KoStatus, KoType, ReviewStatus
+from app.models import GapStatus, GapType, KoRelationType, KoStatus, KoType, ReviewStatus
 
 GapSort = Literal["frequency", "recent"]
 ReviewDecision = Literal["approve", "reject"]
@@ -305,6 +305,30 @@ class KoDeprecateIn(BaseModel):
 class FaqGenerateIn(BaseModel):
     max_items: int = Field(default=5, ge=1, le=20)
     ko_type: KoType = KoType.FAQ
+
+
+class KoRelationCreate(BaseModel):
+    to_ko_id: str = Field(min_length=1, max_length=32)
+    relation_type: KoRelationType = KoRelationType.RELATED_TO
+
+
+class KoRelationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    from_ko_id: str
+    to_ko_id: str
+    relation_type: KoRelationType
+    # Direction relative to the KO that was queried: outbound | inbound.
+    direction: Literal["outbound", "inbound"]
+    peer_id: str
+    peer_title: str
+    peer_ko_type: KoType
+    peer_status: KoStatus
+    created_at: datetime
+    created_by: str | None = None
+    # Ontology soft-constraint hints (never blocks create). Empty on list responses.
+    warnings: list[str] = Field(default_factory=list)
 
 
 # ---- notifications -------------------------------------------------------------------------

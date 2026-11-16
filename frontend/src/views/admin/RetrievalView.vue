@@ -43,6 +43,7 @@ function summary(c: RetrievalConfig): string {
   const routes = [
     c.dense.enabled ? `Dense top${c.dense.top_k}` : null,
     c.sparse.enabled ? `BM25 top${c.sparse.top_k}` : null,
+    c.graph?.enabled ? `Graph hop${c.graph.max_hops}` : null,
   ].filter(Boolean)
   const weights = Object.entries(c.fusion.weights)
     .map(([r, w]) => `${r}×${w}`)

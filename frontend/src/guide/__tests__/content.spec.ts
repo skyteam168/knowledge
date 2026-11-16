@@ -37,12 +37,14 @@ describe('guide content per locale', () => {
     i18n.global.locale.value = 'zh-CN'
   })
 
-  it('manual has the same structure in zh-CN and en', () => {
+  it('manual has the same structure in zh-CN, en and vi', () => {
     expect(manualShape('en')).toEqual(manualShape('zh-CN'))
+    expect(manualShape('vi')).toEqual(manualShape('zh-CN'))
   })
 
-  it('tours have the same structure in zh-CN and en', () => {
+  it('tours have the same structure in zh-CN, en and vi', () => {
     expect(tourShape('en')).toEqual(tourShape('zh-CN'))
+    expect(tourShape('vi')).toEqual(tourShape('zh-CN'))
   })
 
   it('every manual tourKey points to an existing tour', () => {
@@ -52,8 +54,8 @@ describe('guide content per locale', () => {
     }
   })
 
-  it('has no empty text in either locale', () => {
-    for (const locale of ['zh-CN', 'en'] as const) {
+  it('has no empty text in any locale', () => {
+    for (const locale of ['zh-CN', 'en', 'vi'] as const) {
       const { sections, faq } = MANUAL_CONTENT[locale]
       const texts = [
         ...sections.flatMap((s) => [
@@ -80,6 +82,11 @@ describe('guide content per locale', () => {
     expect(visibleManual(() => true).sections[0]!.title).toBe(MANUAL_CONTENT.en.sections[0]!.title)
     expect(findTour('search')).toBe(TOUR_CONTENT.en.find((t) => t.key === 'search'))
     expect(tourForRoute('search')?.title).toBe('Search tour')
+
+    i18n.global.locale.value = 'vi'
+    expect(manualContent()).toBe(MANUAL_CONTENT.vi)
+    expect(visibleManual(() => true).sections[0]!.title).toBe(MANUAL_CONTENT.vi.sections[0]!.title)
+    expect(findTour('search')).toBe(TOUR_CONTENT.vi.find((t) => t.key === 'search'))
 
     i18n.global.locale.value = 'zh-CN'
     expect(manualContent()).toBe(MANUAL_CONTENT['zh-CN'])

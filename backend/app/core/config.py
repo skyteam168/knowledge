@@ -78,6 +78,9 @@ class Settings(BaseSettings):
     opensearch_replicas: int = 0
     # Relative to the OpenSearch config dir; must exist on every node.
     opensearch_synonyms_path: str = "analysis/synonyms.txt"
+    # Host-writable synonyms file shared with OpenSearch (empty = sync disabled).
+    # Compose mounts deploy/opensearch/analysis → /opensearch-analysis on backend.
+    opensearch_synonyms_file: str = ""
 
     # Readers use the aliases; physical names are `{alias}_v{generation}`.
     index_alias: str = "kb_chunks"
@@ -173,14 +176,26 @@ class Settings(BaseSettings):
     retrieval_trace_max_bytes: int = 64 * 1024
     # Knowledge objects (is_ko=true) first: RRF score multiplier and rerank score bonus.
     retrieval_ko_boost_enabled: bool = True
-    retrieval_ko_rrf_weight: float = 1.5
-    retrieval_ko_rerank_bonus: float = 0.1
+    # Prefer curated KO hits (e.g. seed maintenance cards) over long-tail process decks.
+    retrieval_ko_rrf_weight: float = 2.0
+    retrieval_ko_rerank_bonus: float = 0.15
+    # Third RRF route: KO relation multi-hop (PG recursive CTE; seeds from dense/sparse).
+    retrieval_graph_enabled: bool = True
+    retrieval_graph_top_k: int = 20
+    retrieval_graph_max_hops: int = 2
+    retrieval_graph_rrf_weight: float = 1.0
 
     # ---- AI assistant (question answering) ----
     # Previous user/assistant turns given to the rewriter and the answer prompt.
     chat_history_turns: int = 3
     chat_rewrite_enabled: bool = True
     chat_rewrite_timeout_seconds: float = 15.0
+    # Terminology alias expansion after rewrite / before retrieval (org-scoped PG table).
+    terminology_expand_enabled: bool = True
+    # Max extra synonym queries appended beyond the original rewrite queries.
+    terminology_expand_max_extra: int = 3
+    # When true, terminology sync-synonyms also reloads OpenSearch analyzers.
+    terminology_synonyms_reload: bool = True
     # Sub-queries of a decomposed complex question (each retrieved separately, then merged).
     chat_max_subqueries: int = 3
     chat_retrieval_top_k: int = 8
@@ -190,6 +205,8 @@ class Settings(BaseSettings):
     chat_expand_ko: bool = True
     # Published KOs citing the hit documents added to the context (besides KO hits).
     chat_expand_ko_limit: int = 2
+    # Extra child chunks in hit documents that share terminology entity_ids (0 = off).
+    chat_expand_entity_limit: int = 2
     chat_context_token_budget: int = 6000
     # Evidence gate on the best rerank score: below min -> refuse without calling the LLM;
     # between min and confident -> answer, but uncertain parts must be called out.
@@ -199,6 +216,10 @@ class Settings(BaseSettings):
     chat_temperature: float = 0.2
     chat_max_tokens: int = 1500
     chat_quote_max_chars: int = 300
+    # Re-check Evidence ACL every N streamed chars during generation (0 = only
+    # pre-generate + post-generate). Tokens already flushed to the client before
+    # a mid-stream revoke remain a residual window; generation stops afterwards.
+    chat_acl_recheck_every_chars: int = 200
     # Controlled documents (copy-protect / no download): shorten outward text further.
     controlled_export_max_chars: int = 200
     controlled_quote_max_chars: int = 120
@@ -323,6 +344,15 @@ class Settings(BaseSettings):
     # otherwise an agent could spoof its address past the client's IP allowlist.
     open_api_trusted_proxies: list[str] = []
 
+    # ---- WeCom / DingTalk group bots (stage 1: token + Open API key, no cloud crypto) ----
+    integrations_bot_enabled: bool = False
+    # Shared callback token (X-Bot-Token / Bearer / ?token=); required when enabled.
+    integrations_bot_token: str = ""
+    # Open API key of the dedicated bot application (scope chat + authorized KBs).
+    integrations_bot_open_api_key: str = ""
+    integrations_bot_max_answer_chars: int = 1200
+    integrations_bot_max_citations: int = 5
+
     # ---- organization directory sync (WeCom / DingTalk / Weaver / Excel) ----
     # Encrypts stored source credentials; changing it makes existing sources unreadable.
     directory_secret_key: str = DEV_DIRECTORY_SECRET
@@ -336,6 +366,10 @@ class Settings(BaseSettings):
     directory_db_timeout_seconds: int = 60
     # Changes kept per category in a sync run record (counts are always complete).
     directory_sync_max_change_details: int = 500
+
+    # ---- structured mirror connectors (CSV / REST → equip_* tables) ----
+    structured_sync_check_interval_seconds: float = 60.0
+    structured_http_timeout_seconds: float = 30.0
 
     # ---- QR-code login: OIDC bridge for WeCom / DingTalk (Keycloak identity provider) ----
     # Browser-facing base URL of this platform (nginx), used in OAuth redirect URIs.

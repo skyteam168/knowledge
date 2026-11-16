@@ -72,4 +72,40 @@ export default {
       updated: 'Members updated',
     },
   },
+  vi: {
+    filters: {
+      keyword: 'Tên nhóm',
+      query: 'Tìm kiếm',
+    },
+    create: 'Tạo nhóm người dùng',
+    empty: 'Không có nhóm người dùng',
+    columns: {
+      name: 'Tên nhóm',
+      source: 'Nguồn',
+      memberCount: 'Thành viên',
+    },
+    source: {
+      keycloak: 'Keycloak',
+      local: 'Cục bộ',
+    },
+    members: 'Thành viên',
+    editor: {
+      createTitle: 'Tạo nhóm người dùng',
+      editTitle: 'Chỉnh sửa nhóm người dùng',
+      name: 'Tên nhóm',
+    },
+    rules: {
+      nameRequired: 'Vui lòng nhập tên nhóm',
+    },
+    saveSuccess: 'Đã lưu',
+    deleteConfirm: 'Xóa nhóm người dùng "{name}"?',
+    membersDialog: {
+      title: 'Quản lý thành viên: {name}',
+      keycloakHint:
+        'Thành viên đồng bộ từ Keycloak sẽ được đồng bộ lại từ token khi người dùng đăng nhập lần sau; chỉ duy trì thành viên cục bộ tại đây',
+      placeholder: 'Tìm theo tên đăng nhập / họ tên để thêm thành viên',
+      option: '{name} ({username})',
+      updated: 'Đã cập nhật thành viên',
+    },
+  },
 } satisfies LocaleModule

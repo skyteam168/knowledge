@@ -1,7 +1,7 @@
 import type { ApiPrincipalType, ApiScope } from '@/api/types'
 import { t } from '@/i18n'
 
-export const SCOPES: readonly ApiScope[] = ['retrieve', 'chat', 'mcp']
+export const SCOPES: readonly ApiScope[] = ['retrieve', 'chat', 'mcp', 'entity']
 
 export function scopeLabel(scope: ApiScope): string {
   return t(`openApi.scopes.${scope}.label`)

@@ -1,6 +1,7 @@
 import type { PermissionRequirement } from '@/utils/permission'
 import { currentLocale, type AppLocale } from '@/i18n'
 import { TOURS as EN_TOURS } from './content/tours.en'
+import { TOURS as VI_TOURS } from './content/tours.vi'
 import { TOURS as ZH_CN_TOURS } from './content/tours.zh-CN'
 
 export type TourPlacement = 'top' | 'bottom' | 'left' | 'right' | 'bottom-start' | 'right-start'
@@ -38,6 +39,7 @@ export const LAYOUT_TOUR = 'layout'
 export const TOUR_CONTENT: Record<AppLocale, TourDef[]> = {
   'zh-CN': ZH_CN_TOURS,
   en: EN_TOURS,
+  vi: VI_TOURS,
 }
 
 /** Tours for the current UI locale; reactive when read inside a computed or render. */

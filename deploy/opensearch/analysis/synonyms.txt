@@ -1,7 +1,25 @@
 # Solr synonym format, used by the search-time `ekb_synonym` filter (updateable).
 # After editing, call POST /api/v1/admin/index/synonyms/reload or
 # `python -m app.cli index reload-synonyms`; no reindex is needed.
+# Lines outside the markers are kept; the block is overwritten by
+# `python -m app.cli terminology sync-synonyms` / POST /admin/terminology/synonyms/sync.
 知识库, 知识中心
 报销, 费用报销
 请假, 休假
 人力资源, HR, 人事
+
+# <<<ekb-terminology>>>
+ACL, access control list, 访问控制, 访问控制列表
+DNS, domain name system, 域名系统, 域名解析
+LDAP, AD, active directory, 目录服务
+SMTP, smtp server, 简单邮件传输协议, 邮件发送协议
+VLAN, virtual lan, 虚拟局域网
+VPN, virtual private network, 虚拟专用网络
+交换机, cisco switch, switch, 思科交换机, 网络交换机
+备份, DR, backup, 数据备份, 灾难恢复
+定型机, heat setter, stenter, 定型设备
+浏览器测试术语, browser-e2e, 浏览器e2e
+织机, knitting machine, loom, stoll编织横机, 飞织机
+邮件退信, bounce, mail bounce, 发送失败, 退信
+防火墙, firewall, 安全网关
+# <<<end-ekb-terminology>>>

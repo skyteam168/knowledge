@@ -76,13 +76,14 @@
 
 ## 6. 未完成的恢复演练
 
+- [x] 本机 compose：`ekb` dump → 临时库 restore → 计数（2026-11-14，见 [`docs/testing/backup-drill-20261114.md`](../testing/backup-drill-20261114.md)）  
 - [ ] 季度全量恢复到隔离环境并计时 RTO  
 - [ ] 校验最近一次 dump 可读（`pg_restore -l`）自动化  
 - [ ] 异地 MinIO/S3 拉通  
 - [ ] WAL/PITR 演练到指定时间点  
 - [ ] 仅索引损坏时的 rebuild 演练  
 
-签署人 / 日期：____________（演练前保持空白）
+签署人 / 日期：____________（全量隔离演练后填写）
 
 ---
 

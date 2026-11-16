@@ -277,6 +277,7 @@ class EvalRunner:
                 parent=settings.chat_expand_parent,
                 neighbors=max(0, settings.chat_expand_neighbors),
                 ko=settings.chat_expand_ko,
+                entity_limit=max(0, settings.chat_expand_entity_limit),
                 token_budget=settings.chat_context_token_budget,
             ),
             PublishedKnowledgeObjects(session, ctx.user, settings.chat_expand_ko_limit),

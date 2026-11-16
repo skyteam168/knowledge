@@ -1,0 +1,42 @@
+{
+  "without_graph": {
+    "mh-fw-acl": ["ko-firewall", "doc-noise-net", "doc-noise-ops", "doc-noise-hr", "doc-noise-finance"],
+    "mh-vpn-mfa": ["ko-vpn", "doc-noise-net", "doc-noise-ops", "doc-noise-hr", "doc-noise-finance"],
+    "mh-dns-dhcp": ["ko-dns", "doc-noise-net", "doc-noise-ops", "doc-noise-hr", "doc-noise-finance"],
+    "mh-switch-vlan": ["ko-access-switch", "doc-noise-net", "doc-noise-ops", "doc-noise-hr", "doc-noise-finance"],
+    "mh-backup-restore": ["ko-backup-job", "doc-noise-ops", "doc-noise-net", "doc-noise-hr", "doc-noise-finance"],
+    "mh-ldap-sso": ["ko-ldap", "doc-noise-ops", "doc-noise-net", "doc-noise-hr", "doc-noise-finance"],
+    "mh-waf-ratelimit": ["ko-waf", "doc-noise-net", "doc-noise-ops", "doc-noise-hr", "doc-noise-finance"],
+    "mh-cert-tls": ["ko-cert-monitor", "doc-noise-net", "doc-noise-ops", "doc-noise-hr", "doc-noise-finance"],
+    "mh-fw-acl-audit": ["ko-firewall", "ko-acl-policy", "doc-noise-ops", "doc-noise-hr", "doc-noise-finance"],
+    "mh-vpn-mfa-helpdesk": ["ko-vpn", "ko-mfa-guide", "doc-noise-ops", "doc-noise-hr", "doc-noise-finance"],
+    "mh-device-repair": ["ko-device-damage", "doc-noise-equip", "doc-noise-ops", "doc-noise-hr", "doc-noise-finance"],
+    "mh-lube-pm": ["ko-lubrication", "doc-noise-equip", "doc-noise-ops", "doc-noise-hr", "doc-noise-finance"],
+    "mh-spare-procure": ["ko-spare-parts", "doc-noise-equip", "doc-noise-ops", "doc-noise-hr", "doc-noise-finance"],
+    "mh-defect-mitigate": ["ko-yarn-defect", "doc-noise-equip", "doc-noise-ops", "doc-noise-hr", "doc-noise-finance"],
+    "mh-process-safety": ["ko-heat-set-process", "doc-noise-equip", "doc-noise-ops", "doc-noise-hr", "doc-noise-finance"],
+    "mh-device-repair-audit": ["ko-device-damage", "ko-repair-penalty", "doc-noise-ops", "doc-noise-hr", "doc-noise-finance"],
+    "mh-en-fw-acl": ["ko-firewall", "doc-noise-net", "doc-noise-ops", "doc-noise-hr", "doc-noise-finance"],
+    "mh-en-pm": ["ko-lubrication", "doc-noise-equip", "doc-noise-ops", "doc-noise-hr", "doc-noise-finance"]
+  },
+  "with_graph": {
+    "mh-fw-acl": ["ko-acl-policy", "ko-firewall", "doc-noise-net", "doc-noise-ops", "doc-noise-hr"],
+    "mh-vpn-mfa": ["ko-mfa-guide", "ko-vpn", "doc-noise-net", "doc-noise-ops", "doc-noise-hr"],
+    "mh-dns-dhcp": ["ko-dhcp-pool", "ko-dns", "doc-noise-net", "doc-noise-ops", "doc-noise-hr"],
+    "mh-switch-vlan": ["ko-vlan-spec", "ko-access-switch", "doc-noise-net", "doc-noise-ops", "doc-noise-hr"],
+    "mh-backup-restore": ["ko-restore-drill", "ko-backup-job", "doc-noise-ops", "doc-noise-net", "doc-noise-hr"],
+    "mh-ldap-sso": ["ko-sso-bridge", "ko-ldap", "doc-noise-ops", "doc-noise-net", "doc-noise-hr"],
+    "mh-waf-ratelimit": ["ko-rate-limit", "ko-waf", "doc-noise-net", "doc-noise-ops", "doc-noise-hr"],
+    "mh-cert-tls": ["ko-tls-renew", "ko-cert-monitor", "doc-noise-net", "doc-noise-ops", "doc-noise-hr"],
+    "mh-fw-acl-audit": ["ko-change-audit", "ko-acl-policy", "ko-firewall", "doc-noise-ops", "doc-noise-hr"],
+    "mh-vpn-mfa-helpdesk": ["ko-helpdesk-sla", "ko-mfa-guide", "ko-vpn", "doc-noise-ops", "doc-noise-hr"],
+    "mh-device-repair": ["ko-repair-penalty", "ko-device-damage", "doc-noise-equip", "doc-noise-ops", "doc-noise-hr"],
+    "mh-lube-pm": ["ko-pm-schedule", "ko-lubrication", "doc-noise-equip", "doc-noise-ops", "doc-noise-hr"],
+    "mh-spare-procure": ["ko-spare-procure", "ko-spare-parts", "doc-noise-equip", "doc-noise-ops", "doc-noise-hr"],
+    "mh-defect-mitigate": ["ko-defect-mitigation", "ko-yarn-defect", "doc-noise-equip", "doc-noise-ops", "doc-noise-hr"],
+    "mh-process-safety": ["ko-safety-stop", "ko-heat-set-process", "doc-noise-equip", "doc-noise-ops", "doc-noise-hr"],
+    "mh-device-repair-audit": ["ko-device-scorecard", "ko-repair-penalty", "ko-device-damage", "doc-noise-ops", "doc-noise-hr"],
+    "mh-en-fw-acl": ["ko-acl-policy", "ko-firewall", "doc-noise-net", "doc-noise-ops", "doc-noise-hr"],
+    "mh-en-pm": ["ko-pm-schedule", "ko-lubrication", "doc-noise-equip", "doc-noise-ops", "doc-noise-hr"]
+  }
+}

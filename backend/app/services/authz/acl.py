@@ -21,6 +21,11 @@ class AclPermission(StrEnum):
         return _LEVELS[self]
 
 
+class AclEffect(StrEnum):
+    ALLOW = "allow"
+    DENY = "deny"
+
+
 _LEVELS = {AclPermission.READ: 1, AclPermission.EDIT: 2, AclPermission.MANAGE: 3}
 
 
@@ -75,14 +80,28 @@ class AclService:
     def __init__(self, session: AsyncSession) -> None:
         self.repo = ResourceAclRepository(session)
 
+    async def is_denied(self, principals: Principals, resource: ResourceRef) -> bool:
+        rows = await self.repo.list_matching(
+            principals.org_id,
+            resource.type,
+            resource.id,
+            principals.pairs(),
+            effect=AclEffect.DENY.value,
+        )
+        return bool(rows)
+
     async def effective_permission(
         self, principals: Principals, resource: ResourceRef
     ) -> AclPermission | None:
         rows = await self.repo.list_matching(
             principals.org_id, resource.type, resource.id, principals.pairs()
         )
+        if any((row.effect or AclEffect.ALLOW.value) == AclEffect.DENY.value for row in rows):
+            return None
         best: AclPermission | None = None
         for row in rows:
+            if (row.effect or AclEffect.ALLOW.value) != AclEffect.ALLOW.value:
+                continue
             perm = AclPermission(row.permission)
             if best is None or perm.level > best.level:
                 best = perm
@@ -102,9 +121,17 @@ class AclService:
         principal_id: str,
         perm: AclPermission,
         granted_by: str | None = None,
+        *,
+        effect: AclEffect = AclEffect.ALLOW,
     ) -> ResourceAcl:
         existing = await self.repo.find(
-            org_id, resource.type, resource.id, principal_type, principal_id, perm
+            org_id,
+            resource.type,
+            resource.id,
+            principal_type,
+            principal_id,
+            perm,
+            effect=effect.value,
         )
         if existing:
             return existing
@@ -116,6 +143,7 @@ class AclService:
                 principal_type=principal_type.value,
                 principal_id=principal_id,
                 permission=perm.value,
+                effect=effect.value,
                 created_by=granted_by,
             )
         )

@@ -68,4 +68,38 @@ export default {
     saveSuccess: 'Saved',
     deleteConfirm: 'Delete department "{name}"?',
   },
+  vi: {
+    tree: {
+      title: 'Cây phòng ban',
+      addRoot: 'Thêm phòng ban gốc',
+      searchPlaceholder: 'Tìm phòng ban (hỗ trợ đường dẫn đầy đủ)',
+      showArchived: 'Hiện đã lưu trữ ({count})',
+      empty: 'Không có phòng ban',
+      archived: 'Đã lưu trữ',
+      addChild: 'Thêm phòng ban con',
+    },
+    members: {
+      title: 'Thành viên của "{name}" (gồm cấp dưới, tổng {total} người)',
+      selectDepartment: 'Chọn phòng ban',
+      empty: 'Không có thành viên',
+      username: 'Tên đăng nhập',
+      displayName: 'Họ tên',
+      jobTitle: 'Chức danh',
+    },
+    editor: {
+      createTitle: 'Thêm phòng ban',
+      editTitle: 'Chỉnh sửa phòng ban',
+      managedHint:
+        'Phòng ban này được duy trì bởi đồng bộ tổ chức. Tên và phòng ban cấp trên chỉ đọc; hãy chỉnh sửa trong hệ thống nguồn.',
+      name: 'Tên phòng ban',
+      parent: 'Phòng ban cấp trên',
+      parentPlaceholder: 'Không có (phòng ban gốc)',
+      sortOrder: 'Thứ tự sắp xếp',
+    },
+    rules: {
+      nameRequired: 'Vui lòng nhập tên phòng ban',
+    },
+    saveSuccess: 'Đã lưu',
+    deleteConfirm: 'Xóa phòng ban "{name}"?',
+  },
 } satisfies LocaleModule

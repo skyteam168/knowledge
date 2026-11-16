@@ -5,6 +5,7 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 Visibility = Literal["org", "restricted"]
 AclPermissionName = Literal["read", "edit", "manage"]
+AclEffectName = Literal["allow", "deny"]
 GrantablePrincipal = Literal["user", "group", "role", "dept"]
 ReviewDays = Annotated[int, Field(ge=1, le=3650)]
 ReviewStateName = Literal["none", "ok", "due_soon", "overdue"]
@@ -23,7 +24,8 @@ class ORMModel(BaseModel):
 class AclEntryIn(BaseModel):
     principal_type: GrantablePrincipal
     principal_id: str = Field(min_length=1, max_length=64)
-    permission: AclPermissionName
+    permission: AclPermissionName = "read"
+    effect: AclEffectName = "allow"
 
 
 class AclEntryOut(AclEntryIn):
@@ -304,6 +306,26 @@ class PreviewOut(BaseModel):
     mime_type: str
     expires_in: int
     pages: list[PagePreviewOut] = Field(default_factory=list)
+
+
+class BatchReprocessIn(BaseModel):
+    """Re-enqueue parse for selected documents in a knowledge base."""
+
+    document_ids: list[str] = Field(default_factory=list, max_length=500)
+    status: str | None = Field(default=None, max_length=32)
+    missing_page_images: bool = False
+    limit: int = Field(default=100, ge=1, le=500)
+
+
+class BatchReprocessSkip(BaseModel):
+    id: str
+    reason: str
+
+
+class BatchReprocessOut(BaseModel):
+    queued: list[str]
+    skipped: list[BatchReprocessSkip]
+    total_candidates: int
 
 
 # ---- directory (principal picker) -----------------------------------------------------

@@ -14,7 +14,12 @@ from pydantic import ValidationError
 
 from app.core.exceptions import AppError
 from app.models import ApiScope
-from app.schemas.open_api import OpenChatIn, OpenRetrieveIn
+from app.schemas.open_api import (
+    OpenChatIn,
+    OpenEntityReadIn,
+    OpenGraphTraverseIn,
+    OpenRetrieveIn,
+)
 from app.services.open_api.open_service import OpenApiService
 
 logger = logging.getLogger(__name__)
@@ -23,6 +28,7 @@ SUPPORTED_VERSIONS = ("2025-06-18", "2025-03-26", "2024-11-05")
 SERVER_INFO = {"name": "ekb-knowledge", "title": "企业知识库", "version": "1.0.0"}
 INSTRUCTIONS = (
     "企业知识库工具。先用 list_knowledge_bases 查看可访问的知识库；"
+    "可用 entity_read 读取术语/外部编号映射，用 graph_traverse 沿知识条目关系多跳；"
     "用 search_knowledge 检索原文片段（带出处，适合自行组织回答）；"
     "用 ask_knowledge 直接获得带引用的回答。只能访问管理员授权的知识库。"
 )
@@ -88,9 +94,67 @@ TOOLS: dict[str, dict[str, Any]] = {
         },
         "annotations": {"readOnlyHint": True},
     },
+    "entity_read": {
+        "name": "entity_read",
+        "title": "读取实体",
+        "description": (
+            "按术语 id、名称/别名，或结构化外部编号（object_type+external_id）读取概念元数据；"
+            "可返回关联的已授权知识条目（仅 id/title，无正文）。三选一查询。"
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "entity_id": {"type": "string", "description": "术语实体 id"},
+                "name": {"type": "string", "description": "术语规范名或别名"},
+                "object_type": {
+                    "type": "string",
+                    "description": "结构化对象类型，如 device / recipe",
+                },
+                "external_id": {"type": "string", "description": "外部系统编号"},
+                "source_id": {"type": "string", "description": "可选数据源 id"},
+            },
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": True},
+    },
+    "graph_traverse": {
+        "name": "graph_traverse",
+        "title": "遍历知识关系图",
+        "description": (
+            "从已发布知识条目出发，沿 ko_relations 双向多跳（最多 2 跳），"
+            "返回授权范围内可读的邻居条目（id/title）。"
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "ko_id": {"type": "string", "description": "起始知识条目 id"},
+                "max_hops": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2,
+                    "default": 2,
+                    "description": "最大跳数",
+                },
+                "relation_types": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "可选关系类型过滤",
+                },
+                "kb_ids": KB_IDS_SCHEMA,
+            },
+            "required": ["ko_id"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": True},
+    },
 }
 
-TOOL_SCOPES = {"search_knowledge": ApiScope.RETRIEVE, "ask_knowledge": ApiScope.CHAT}
+TOOL_SCOPES = {
+    "search_knowledge": ApiScope.RETRIEVE,
+    "ask_knowledge": ApiScope.CHAT,
+    "entity_read": ApiScope.ENTITY,
+    "graph_traverse": ApiScope.ENTITY,
+}
 
 Recorder = Callable[[str, dict[str, Any]], Awaitable[None]]
 
@@ -212,19 +276,52 @@ class McpServer:
                     },
                 )
             return out.model_dump(mode="json")
-        service.caller.require_scope(ApiScope.CHAT)
-        chat, outcome = await service.chat(OpenChatIn.model_validate({**args, "stream": False}))
-        if self.on_tool:
-            await self.on_tool(
-                name,
-                {
-                    "query": args.get("question"),
-                    "result_count": len(chat.citations),
-                    "document_ids": outcome.document_ids,
-                    "trace_id": chat.trace_id,
-                },
+        if name == "ask_knowledge":
+            service.caller.require_scope(ApiScope.CHAT)
+            chat, outcome = await service.chat(
+                OpenChatIn.model_validate({**args, "stream": False})
             )
-        return chat.model_dump(mode="json")
+            if self.on_tool:
+                await self.on_tool(
+                    name,
+                    {
+                        "query": args.get("question"),
+                        "result_count": len(chat.citations),
+                        "document_ids": outcome.document_ids,
+                        "trace_id": chat.trace_id,
+                    },
+                )
+            return chat.model_dump(mode="json")
+        if name == "entity_read":
+            service.caller.require_scope(ApiScope.ENTITY)
+            entity = await service.entity_read(OpenEntityReadIn.model_validate(args))
+            if self.on_tool:
+                await self.on_tool(
+                    name,
+                    {
+                        "query": args.get("entity_id")
+                        or args.get("name")
+                        or f"{args.get('object_type')}:{args.get('external_id')}",
+                        "result_count": len(entity.knowledge_objects),
+                        "document_ids": [k.id for k in entity.knowledge_objects],
+                    },
+                )
+            return entity.model_dump(mode="json")
+        if name == "graph_traverse":
+            service.caller.require_scope(ApiScope.ENTITY)
+            graph = await service.graph_traverse(OpenGraphTraverseIn.model_validate(args))
+            if self.on_tool:
+                await self.on_tool(
+                    name,
+                    {
+                        "query": args.get("ko_id"),
+                        "kb_ids": args.get("kb_ids") or [],
+                        "result_count": len(graph.neighbors),
+                        "document_ids": [graph.seed.id, *[n.ko_id for n in graph.neighbors]],
+                    },
+                )
+            return graph.model_dump(mode="json")
+        raise _RpcError(INVALID_PARAMS, f"Unknown tool: {name}")
 
 
 class _RpcError(Exception):
