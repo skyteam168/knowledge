@@ -72,6 +72,7 @@ class ApiCaller:
     rate_limit_per_minute: int
     daily_quota: int
     user: CurrentUser
+    on_behalf_of: str | None = None
 
     def require_scope(self, scope: ApiScope) -> None:
         if scope.value not in self.scopes:
@@ -236,7 +237,12 @@ async def caller_user(session: AsyncSession, client: ApiClient) -> CurrentUser:
 
 
 def build_caller(
-    key_id: str, client: ApiClient, user: CurrentUser, settings: Settings
+    key_id: str,
+    client: ApiClient,
+    user: CurrentUser,
+    settings: Settings,
+    *,
+    on_behalf_of: str | None = None,
 ) -> ApiCaller:
     return ApiCaller(
         client_id=client.id,
@@ -248,6 +254,75 @@ def build_caller(
         rate_limit_per_minute=effective_rate(client, settings),
         daily_quota=client.daily_quota,
         user=user,
+        on_behalf_of=on_behalf_of,
+    )
+
+
+def client_principal_overlap(
+    principals: Principals, client_refs: list[dict[str, object]]
+) -> bool:
+    """End user must share at least one dept/group/role with the client's bound scope."""
+    for ref in client_refs:
+        kind = str(ref.get("type") or "")
+        pid = str(ref.get("id") or "")
+        if not kind or not pid:
+            continue
+        if kind == "group" and pid in principals.group_ids:
+            return True
+        if kind == "role" and pid in principals.role_ids:
+            return True
+        if kind == "dept" and pid in principals.dept_ids:
+            return True
+    return False
+
+
+async def resolve_on_behalf_user(
+    session: AsyncSession,
+    client: ApiClient,
+    *,
+    ref: str,
+    cache: KeyValueCache,
+    authz_ttl_seconds: int = 300,
+) -> CurrentUser:
+    """S4: switch Open API identity to an end user within the client's principal scope."""
+    from app.services.authz import AuthzCache, PrincipalResolver
+
+    if ApiScope.ON_BEHALF.value not in set(client.scopes or []):
+        raise ScopeDeniedError(detail={"required": ApiScope.ON_BEHALF.value})
+    needle = ref.strip()
+    if not needle:
+        raise PermissionDeniedError(
+            "Missing on-behalf-of user", code="ON_BEHALF_USER_REQUIRED"
+        )
+    user = await session.scalar(
+        select(User).where(User.org_id == client.org_id, User.id == needle)
+    )
+    if user is None:
+        user = await session.scalar(
+            select(User).where(User.org_id == client.org_id, User.username == needle)
+        )
+    if user is None or not user.is_active:
+        raise PermissionDeniedError(
+            "On-behalf-of user not found", code="ON_BEHALF_USER_NOT_FOUND"
+        )
+    authz = AuthzCache(cache, authz_ttl_seconds)
+    principals = await PrincipalResolver(session, authz).resolve(client.org_id, user.id)
+    if not client_principal_overlap(principals, list(client.principals or [])):
+        raise PermissionDeniedError(
+            "On-behalf-of user outside client principal scope",
+            code="ON_BEHALF_OUT_OF_SCOPE",
+        )
+    permissions = {"search:use"}
+    if ApiScope.CHAT.value in set(client.scopes or []):
+        permissions.add("chat:use")
+    return CurrentUser(
+        id=user.id,
+        org_id=client.org_id,
+        username=user.username,
+        display_name=user.display_name,
+        principals=principals,
+        permissions=frozenset(permissions),
+        is_platform_admin=False,
     )
 
 

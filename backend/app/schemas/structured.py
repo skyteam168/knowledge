@@ -3,6 +3,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.schemas.knowledge import AclEntryIn, AclEntryOut
+
 
 class StructuredSourceCreate(BaseModel):
     name: str = Field(min_length=1, max_length=128)
@@ -49,6 +51,8 @@ class StructuredRecordCreate(BaseModel):
     title: str = Field(min_length=1, max_length=512)
     status: str = Field(default="active", max_length=32)
     attrs: dict[str, Any] = Field(default_factory=dict)
+    parent_object_type: str | None = Field(default=None, max_length=64)
+    parent_external_id: str | None = Field(default=None, max_length=64)
 
 
 class StructuredRecordOut(BaseModel):
@@ -59,6 +63,11 @@ class StructuredRecordOut(BaseModel):
     external_id: str
     title: str
     status: str
+    parent_object_type: str | None = None
+    parent_external_id: str | None = None
+    occurred_at: datetime | None = None
+    ended_at: datetime | None = None
+    event_type: str | None = None
     attrs: dict[str, Any]
     created_by: str | None
     created_at: datetime
@@ -103,7 +112,7 @@ class EquipSparePartOut(BaseModel):
 
 
 class StructuredLinkCreate(BaseModel):
-    object_type: str = Field(max_length=32)
+    object_type: str = Field(max_length=64)
     object_id: str = Field(min_length=1, max_length=32)
     terminology_entity_id: str | None = Field(default=None, max_length=32)
     ko_id: str | None = Field(default=None, max_length=32)
@@ -143,7 +152,74 @@ class StructuredSyncResult(BaseModel):
     connector: str
     status: str
     dry_run: bool = False
+    force_full: bool = False
+    mode: str = "full"
     stats: dict[str, Any] = Field(default_factory=dict)
     warnings: list[str] = Field(default_factory=list)
     synced_at: str | None = None
     triggered_by: str | None = None
+    sync_cursor: dict[str, Any] | None = None
+
+
+class StructuredObjectAclOut(BaseModel):
+    object_type: str
+    object_id: str
+    entries: list[AclEntryOut] = Field(default_factory=list)
+
+
+class StructuredObjectAclUpdate(BaseModel):
+    entries: list[AclEntryIn] = Field(default_factory=list, max_length=500)
+
+
+class StructuredAttrDefOut(BaseModel):
+    name: str
+    kind: str
+    required: bool
+    description: str = ""
+    unit: str | None = None
+    allowed_units: list[str] | None = None
+    minimum: float | None = None
+    maximum: float | None = None
+    enum_values: list[str] | None = None
+
+
+class StructuredAttrSchemaOut(BaseModel):
+    object_type: str
+    label: str
+    description: str
+    attributes: list[StructuredAttrDefOut]
+    json_schema: dict[str, Any]
+
+
+class ObjectRelationCreate(BaseModel):
+    relation_type: str = Field(min_length=1, max_length=32)
+    from_kind: str = Field(min_length=1, max_length=16)
+    from_id: str = Field(min_length=1, max_length=32)
+    from_object_type: str | None = Field(default=None, max_length=64)
+    to_kind: str = Field(min_length=1, max_length=16)
+    to_id: str = Field(min_length=1, max_length=32)
+    to_object_type: str | None = Field(default=None, max_length=64)
+    cardinality: str | None = Field(default=None, max_length=16)
+    attrs: dict[str, Any] = Field(default_factory=dict)
+    valid_from: datetime | None = None
+    valid_to: datetime | None = None
+
+
+class ObjectRelationOut(BaseModel):
+    id: str
+    relation_type: str
+    relation_local_name: str
+    from_kind: str
+    from_id: str
+    from_object_type: str | None
+    to_kind: str
+    to_id: str
+    to_object_type: str | None
+    cardinality: str = "one_to_many"
+    attrs: dict[str, Any] = Field(default_factory=dict)
+    valid_from: datetime | None = None
+    valid_to: datetime | None = None
+    created_by: str | None
+    created_at: datetime
+    updated_at: datetime
+    warnings: list[str] = Field(default_factory=list)

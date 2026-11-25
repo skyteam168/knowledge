@@ -1,10 +1,53 @@
-# 结构化镜像连接器（CSV / REST）
+# 结构化镜像连接器（CSV / REST / MySQL）
 
 阶段 1：把 ERP/MES 设备域数据定时或手动拉取进 PostgreSQL `equip_*` 本地镜像。不做 Ontop / SPARQL。
 
 ## 配置
 
 在管理端「结构化数据」新建源（类型建议 `mes` / `erp`），或直接写 `structured_sources.meta`：
+
+### MySQL（S1.2 真实源）
+
+密码**只**放环境变量，勿写入 `meta` / git：
+
+```bash
+export MES_MYSQL_PASSWORD='***'
+```
+
+```json
+{
+  "connector": "mysql",
+  "sync_interval_minutes": 60,
+  "incremental": { "enabled": true, "field": "create_time" },
+  "mysql": {
+    "host": "10.10.130.199",
+    "port": 3306,
+    "database": "maintaince",
+    "user": "knowledge",
+    "password_env": "MES_MYSQL_PASSWORD",
+    "table": "device_info"
+  },
+  "column_map": {
+    "devices": {
+      "external_id": "id",
+      "name": "device_name",
+      "status": "status",
+      "location": "device_location",
+      "updated_at": "create_time"
+    }
+  }
+}
+```
+
+探测表结构（读库只读；列名确认后再填 `column_map`）：
+
+```bash
+cd backend
+MES_MYSQL_PASSWORD='***' python -m app.cli structured probe-mysql \
+  --host 10.10.130.199 --database maintaince --table device_info --user knowledge
+```
+
+未配置 `column_map` 时会尝试常见列名（`device_number` / `device_name` / `create_time` 等）。MySQL 账号须授权当前应用主机访问（`GRANT ... TO 'knowledge'@'<client-host>'` 或 `'%'`）。`device_number` 若有重复须用主键 `id` 作 `external_id`（资产号写入 `meta.col_device_number`）。表无独立 `update_time` 时可用 `create_time` 作水位（仅捕获新增）。
 
 ### CSV
 
@@ -71,3 +114,8 @@ POST /api/admin/structured/sources/{source_id}/sync?dry_run=false
 2. 跑一次 CLI 或 API sync，`equip_devices` 出现行
 3. `GET /api/admin/structured/resolve?object_type=device&external_id=...` 可解析
 4. 再跑一次 sync，`created=0`、多为 `unchanged`
+
+## 属性 schema（O1.2）
+
+工业对象类型（`site`…`event` 等）写入 `structured_records.attrs` 时走类型化校验；数量必须 `{value,unit}`。  
+契约与 JSON Schema：`GET /api/admin/structured/attribute-schemas`。详见 [`docs/ontology.md`](../ontology.md)「类型化属性 schema」。

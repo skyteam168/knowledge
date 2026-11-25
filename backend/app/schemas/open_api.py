@@ -285,6 +285,9 @@ class OpenWhoAmIOut(BaseModel):
     kbs: list[OpenKbOut]
     rate_limit_per_minute: int
     daily_quota: int
+    on_behalf_of: str | None = None
+    acting_user_id: str | None = None
+    acting_username: str | None = None
 
 
 class OpenEntityReadIn(BaseModel):
@@ -331,6 +334,14 @@ class OpenEntityTermOut(BaseModel):
     aliases: list[str] = Field(default_factory=list)
 
 
+class OpenRelatedTermOut(BaseModel):
+    id: str
+    canonical_name: str
+    entity_type: str
+    kind: str
+    direction: str  # out | in
+
+
 class OpenEntityMirrorOut(BaseModel):
     object_type: str
     object_id: str
@@ -351,13 +362,15 @@ class OpenEntityReadOut(BaseModel):
     terminology: OpenEntityTermOut | None = None
     mirror: OpenEntityMirrorOut | None = None
     knowledge_objects: list[OpenEntityKoOut] = Field(default_factory=list)
+    related_terms: list[OpenRelatedTermOut] = Field(default_factory=list)
 
 
 class OpenGraphTraverseIn(BaseModel):
     ko_id: str = Field(min_length=1, max_length=32)
-    max_hops: int = Field(default=2, ge=1, le=2)
+    max_hops: int = Field(default=2, ge=1, le=3)
     relation_types: list[str] = Field(default_factory=list, max_length=20)
     kb_ids: list[str] = Field(default_factory=list, max_length=100)
+    direction: Literal["out", "in", "both"] = "both"
 
     @field_validator("ko_id")
     @classmethod
@@ -384,6 +397,7 @@ class OpenGraphNeighborOut(BaseModel):
     seed_id: str
     ko_type: str
     kb_id: str
+    path: str = ""
 
 
 class OpenGraphSeedOut(BaseModel):
@@ -397,3 +411,258 @@ class OpenGraphTraverseOut(BaseModel):
     seed: OpenGraphSeedOut
     neighbors: list[OpenGraphNeighborOut] = Field(default_factory=list)
     max_hops: int
+    direction: Literal["out", "in", "both"] = "both"
+
+
+class OpenOntologyDescribeOut(BaseModel):
+    namespace: str
+    classes: list[str]
+    ko_relation_properties: list[str]
+    industrial_relation_properties: list[str]
+    attribute_schemas: list[dict[str, Any]] = Field(default_factory=list)
+    hard_object_relations: list[str]
+    soft_object_relations: list[str]
+    # OS1: published org extension + scope control
+    scope: str = "summary"
+    version: str | None = None
+    version_id: str | None = None
+    version_name: str | None = None
+    published_at: str | None = None
+    org_entities: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class OpenGetObjectIn(BaseModel):
+    object_type: str = Field(min_length=1, max_length=64)
+    object_id: str | None = Field(default=None, max_length=32)
+    external_id: str | None = Field(default=None, max_length=64)
+    source_id: str | None = Field(default=None, max_length=32)
+    include_neighbors: bool = True
+    neighbor_hops: int = Field(default=1, ge=0, le=3)
+
+    @model_validator(mode="after")
+    def _id_or_ext(self) -> "OpenGetObjectIn":
+        self.object_type = self.object_type.strip().lower()
+        oid = (self.object_id or "").strip() or None
+        ext = (self.external_id or "").strip() or None
+        if bool(oid) == bool(ext):
+            raise ValueError("provide exactly one of object_id | external_id")
+        self.object_id = oid
+        self.external_id = ext
+        if self.source_id:
+            self.source_id = self.source_id.strip() or None
+        return self
+
+
+class OpenObjectNeighborOut(BaseModel):
+    kind: str
+    object_id: str
+    object_type: str | None = None
+    hops: int
+    path: str = ""
+    via_relation_types: str = ""
+
+
+class OpenObjectLinkOut(BaseModel):
+    """Terminology / KO link attached to a structured object."""
+
+    id: str
+    terminology_entity_id: str | None = None
+    terminology_name: str | None = None
+    ko_id: str | None = None
+    ko_title: str | None = None
+
+
+class OpenObjectIdentifierOut(BaseModel):
+    """External identifier under a source system for a canonical entity."""
+
+    system: str
+    id_kind: str
+    external_id: str
+    is_primary: bool = False
+
+
+class OpenGetObjectOut(BaseModel):
+    kind: str = "structured"
+    object_type: str
+    object_id: str
+    external_id: str
+    title: str
+    status: str
+    standard_status: str | None = None
+    status_label: str | None = None
+    attrs: dict[str, Any] = Field(default_factory=dict)
+    neighbors: list[OpenObjectNeighborOut] = Field(default_factory=list)
+    links: list[OpenObjectLinkOut] = Field(default_factory=list)
+    canonical_id: str | None = None
+    identifiers: list[OpenObjectIdentifierOut] = Field(default_factory=list)
+
+
+class OpenQueryObjectsIn(BaseModel):
+    object_type: str = Field(min_length=1, max_length=64)
+    status: str | None = Field(default=None, max_length=32)
+    q: str | None = Field(default=None, max_length=200)
+    line_external_id: str | None = Field(default=None, max_length=64)
+    equipment_external_id: str | None = Field(default=None, max_length=64)
+    event_type: str | None = Field(default=None, max_length=32)
+    occurred_from: datetime | None = None
+    occurred_to: datetime | None = None
+    page: int = Field(default=1, ge=1)
+    size: int = Field(default=20, ge=1, le=100)
+
+    @field_validator("object_type")
+    @classmethod
+    def _ot(cls, value: str) -> str:
+        return value.strip().lower()
+
+    @field_validator("event_type")
+    @classmethod
+    def _et(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        text = value.strip().lower()
+        return text or None
+
+
+class OpenQueryObjectItem(BaseModel):
+    object_type: str
+    object_id: str
+    external_id: str
+    title: str
+    status: str
+    attrs: dict[str, Any] = Field(default_factory=dict)
+    occurred_at: datetime | None = None
+    ended_at: datetime | None = None
+    event_type: str | None = None
+
+
+class OpenQueryObjectsOut(BaseModel):
+    items: list[OpenQueryObjectItem]
+    total: int
+    page: int
+    size: int
+
+
+class OpenAggregateObjectsIn(BaseModel):
+    """Count (or future metrics) over structured objects with ACL applied."""
+
+    object_type: str = Field(min_length=1, max_length=64)
+    metric: Literal["count"] = "count"
+    status: str | None = Field(default=None, max_length=32)
+    event_type: str | None = Field(default=None, max_length=32)
+    equipment_external_id: str | None = Field(default=None, max_length=64)
+    line_external_id: str | None = Field(default=None, max_length=64)
+    occurred_from: datetime | None = None
+    occurred_to: datetime | None = None
+
+    @field_validator("object_type")
+    @classmethod
+    def _ot(cls, value: str) -> str:
+        return value.strip().lower()
+
+    @field_validator("event_type")
+    @classmethod
+    def _et(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        text = value.strip().lower()
+        return text or None
+
+
+class OpenAggregateObjectsOut(BaseModel):
+    object_type: str
+    metric: str
+    value: int
+    filters: dict[str, Any] = Field(default_factory=dict)
+
+
+class OpenTraverseIn(BaseModel):
+    """Unified directed traverse: KO graph or industrial object_relations."""
+
+    mode: Literal["ko", "object"] = "ko"
+    ko_id: str | None = Field(default=None, max_length=32)
+    kind: str | None = Field(default=None, max_length=16)
+    object_id: str | None = Field(default=None, max_length=32)
+    object_type: str | None = Field(default=None, max_length=64)
+    direction: Literal["out", "in", "both"] = "out"
+    relation_types: list[str] = Field(default_factory=list, max_length=20)
+    max_hops: int = Field(default=2, ge=1, le=3)
+    kb_ids: list[str] = Field(default_factory=list, max_length=100)
+
+    @model_validator(mode="after")
+    def _mode_fields(self) -> "OpenTraverseIn":
+        self.relation_types = _dedupe([v.lower() for v in self.relation_types])
+        self.kb_ids = _dedupe(self.kb_ids)
+        if self.mode == "ko":
+            if not (self.ko_id and self.ko_id.strip()):
+                raise ValueError("ko_id is required when mode=ko")
+            self.ko_id = self.ko_id.strip()
+        else:
+            if not (self.kind and self.object_id):
+                raise ValueError("kind and object_id are required when mode=object")
+            self.kind = self.kind.strip().lower()
+            self.object_id = self.object_id.strip()
+            self.object_type = (self.object_type or "").strip().lower() or None
+        return self
+
+
+class OpenTraverseNeighborOut(BaseModel):
+    kind: str
+    object_id: str
+    object_type: str | None = None
+    title: str | None = None
+    hops: int
+    path: str = ""
+    via_relation_types: str = ""
+    ko_type: str | None = None
+    kb_id: str | None = None
+
+
+class OpenTraverseOut(BaseModel):
+    mode: Literal["ko", "object"]
+    direction: Literal["out", "in", "both"]
+    max_hops: int
+    seed: dict[str, Any]
+    neighbors: list[OpenTraverseNeighborOut] = Field(default_factory=list)
+
+
+class OpenActionTypeOut(BaseModel):
+    name: str
+    description: str | None = None
+    input_schema: dict[str, Any] = Field(default_factory=dict)
+    preconditions: dict[str, Any] = Field(default_factory=dict)
+    risk: str
+    systems: list[str] = Field(default_factory=list)
+
+
+class OpenActionListOut(BaseModel):
+    items: list[OpenActionTypeOut] = Field(default_factory=list)
+
+
+class OpenActionApproveIn(BaseModel):
+    action_type: str = Field(min_length=1, max_length=128)
+    input: dict[str, Any] = Field(default_factory=dict)
+    acknowledge_risk: bool = False
+
+
+class OpenActionApproveOut(BaseModel):
+    approval_id: str
+    expires_at: datetime
+    action_type: str
+
+
+class OpenActionInvokeIn(BaseModel):
+    action_type: str = Field(min_length=1, max_length=128)
+    input: dict[str, Any] = Field(default_factory=dict)
+    idempotency_key: str = Field(min_length=1, max_length=64)
+    approval_id: str | None = Field(default=None, max_length=32)
+    dry_run: bool = False
+
+
+class OpenActionInvokeOut(BaseModel):
+    status: str
+    action_type: str
+    execution_id: str | None = None
+    result: dict[str, Any] = Field(default_factory=dict)
+    error: str | None = None
+    approval_id: str | None = None
+    rule_verdict: str | None = None

@@ -43,9 +43,13 @@ terminology sync-synonyms [--org ORG_ID] [--output PATH] [--no-reload]
                                export active aliases into OpenSearch synonyms.txt and reload
 
 structured seed-equipment [--org ORG_ID]
+structured wire-mes-chain [--org ORG_ID] [--source NAME]
+                               terminology + links + publish Studio for MES device_info Agent debug
                                upsert sample equipment MES mirror + terminology links
-structured sync --source-id ID | --source NAME [--org ORG] [--dry-run]
-                               pull CSV/REST connector configured on a structured source
+structured sync --source-id ID | --source NAME [--org ORG] [--dry-run] [--force-full]
+                               pull CSV/REST/MySQL connector configured on a structured source
+structured probe-mysql --host H --database DB --table T --user U [--password-env ENV]
+                               read-only DESCRIBE + sample rows (password from env; never log it)
 
 ontology validate [--ttl PATH]
                                check enterprise.ttl covers StrEnum classes / relations
@@ -393,6 +397,32 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="fetch and count would-be upserts without writing",
     )
+    sync_eq.add_argument(
+        "--force-full",
+        action="store_true",
+        help="ignore stored sync_cursor and pull a full snapshot",
+    )
+    wire_mes = structured_cmds.add_parser(
+        "wire-mes-chain",
+        help="wire MES device_info → terminology links → publish Ontology Studio (Agent debug)",
+    )
+    wire_mes.add_argument("--org", default="973c4ed04fcc45ac882713ad04523c39")
+    wire_mes.add_argument("--source", default="MES device_info")
+    probe_mysql = structured_cmds.add_parser(
+        "probe-mysql",
+        help="read-only MySQL table schema + samples for Steward column_map",
+    )
+    probe_mysql.add_argument("--host", required=True)
+    probe_mysql.add_argument("--port", type=int, default=3306)
+    probe_mysql.add_argument("--database", required=True)
+    probe_mysql.add_argument("--table", default="device_info")
+    probe_mysql.add_argument("--user", required=True)
+    probe_mysql.add_argument(
+        "--password-env",
+        default="MES_MYSQL_PASSWORD",
+        help="env var holding the password (default MES_MYSQL_PASSWORD)",
+    )
+    probe_mysql.add_argument("--sample-limit", type=int, default=3)
 
     ontology = groups.add_parser("ontology", help="OWL TBox contract (no SPARQL / RDF store)")
     ontology_cmds = ontology.add_subparsers(dest="command", required=True)
@@ -745,6 +775,20 @@ async def _terminology_retag_chunks(settings: Settings, args: argparse.Namespace
     return 0
 
 
+async def _structured_wire_mes_chain(settings: Settings, args: argparse.Namespace) -> int:
+    from app.services.structured.wire_mes_chain import wire_mes_debug_chain
+
+    engine = create_engine(settings)
+    try:
+        async with create_session_factory(engine)() as session:
+            out = await wire_mes_debug_chain(session, args.org, source_name=args.source)
+            await session.commit()
+        _print(out)
+    finally:
+        await engine.dispose()
+    return 0
+
+
 async def _structured_seed_equipment(settings: Settings, args: argparse.Namespace) -> int:
     from app.services.structured.seed_equipment import seed_equipment
 
@@ -756,6 +800,34 @@ async def _structured_seed_equipment(settings: Settings, args: argparse.Namespac
         _print({"org_id": args.org, **counts})
     finally:
         await engine.dispose()
+    return 0
+
+
+def _structured_probe_mysql(args: argparse.Namespace) -> int:
+    from app.services.structured.connectors.mysql import probe_mysql_table
+
+    password = os.environ.get(args.password_env) or ""
+    if not password:
+        print(f"missing password: set env {args.password_env}", file=sys.stderr)
+        return 2
+    try:
+        out = probe_mysql_table(
+            host=args.host,
+            port=args.port,
+            user=args.user,
+            password=password,
+            database=args.database,
+            table=args.table,
+            sample_limit=args.sample_limit,
+        )
+    except Exception as exc:
+        print(f"probe failed: {exc}", file=sys.stderr)
+        return 1
+    payload = json.dumps(out, ensure_ascii=False, indent=2, default=str)
+    try:
+        print(payload)
+    except UnicodeEncodeError:
+        sys.stdout.buffer.write((payload + "\n").encode("utf-8", errors="replace"))
     return 0
 
 
@@ -782,6 +854,7 @@ async def _structured_sync(settings: Settings, args: argparse.Namespace) -> int:
                 args.org,
                 source_id,
                 dry_run=bool(args.dry_run),
+                force_full=bool(getattr(args, "force_full", False)),
                 triggered_by="cli",
             )
             if not args.dry_run:
@@ -900,6 +973,10 @@ async def run(argv: list[str], settings: Settings, runtime: IndexingRuntime | No
     if args.group == "structured":
         if args.command == "sync":
             return await _structured_sync(settings, args)
+        if args.command == "probe-mysql":
+            return _structured_probe_mysql(args)
+        if args.command == "wire-mes-chain":
+            return await _structured_wire_mes_chain(settings, args)
         return await _structured_seed_equipment(settings, args)
     if args.group == "ontology":
         if args.command == "export-sample":

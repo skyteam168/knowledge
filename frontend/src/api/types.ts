@@ -1091,6 +1091,8 @@ export type KoType =
   | 'defect'
   | 'policy'
   | 'it_term'
+  | 'component'
+  | 'failure_mode'
 
 export type KoRelationType =
   | 'related_to'
@@ -1859,7 +1861,7 @@ export interface EvalCompare {
 
 // ---- open platform (mirrors backend app/schemas/open_api.py) -------------------
 
-export type ApiScope = 'retrieve' | 'chat' | 'mcp' | 'entity'
+export type ApiScope = 'retrieve' | 'chat' | 'mcp' | 'entity' | 'on_behalf' | 'action'
 export type ApiPrincipalType = 'dept' | 'group' | 'role'
 export type ApiClientStatus = 'active' | 'disabled'
 
@@ -2189,6 +2191,8 @@ export type TerminologyEntityType =
   | 'policy'
   | 'it_term'
   | 'other'
+  | 'component'
+  | 'failure_mode'
 
 export type TerminologyStatus = 'active' | 'disabled'
 
@@ -2278,10 +2282,19 @@ export interface StructuredSyncResult {
   connector: string
   status: string
   dry_run: boolean
+  force_full?: boolean
+  mode?: string
   stats: Record<string, unknown>
   warnings: string[]
   synced_at?: string | null
   triggered_by?: string | null
+  sync_cursor?: Record<string, unknown> | null
+}
+
+export interface StructuredObjectAcl {
+  object_type: string
+  object_id: string
+  entries: AclEntryOut[]
 }
 
 export interface StructuredDomain {
@@ -2325,6 +2338,52 @@ export interface StructuredRecordCreate {
   title: string
   status?: string
   attrs?: Record<string, unknown>
+}
+
+export interface StructuredAttrDef {
+  name: string
+  kind: string
+  required: boolean
+  description: string
+  unit: string | null
+  allowed_units: string[] | null
+  minimum: number | null
+  maximum: number | null
+  enum_values: string[] | null
+}
+
+export interface StructuredAttrSchema {
+  object_type: string
+  label: string
+  description: string
+  attributes: StructuredAttrDef[]
+  json_schema: Record<string, unknown>
+}
+
+export interface ObjectRelation {
+  id: string
+  relation_type: string
+  relation_local_name: string
+  from_kind: string
+  from_id: string
+  from_object_type: string | null
+  to_kind: string
+  to_id: string
+  to_object_type: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  warnings: string[]
+}
+
+export interface ObjectRelationCreate {
+  relation_type: string
+  from_kind: string
+  from_id: string
+  from_object_type?: string | null
+  to_kind: string
+  to_id: string
+  to_object_type?: string | null
 }
 
 export interface EquipDevice {
@@ -2391,4 +2450,164 @@ export interface StructuredResolve {
   label: string
   status: string
   links: StructuredLink[]
+}
+
+/** Ontology Studio (semantic layer) */
+
+export type SemanticItemStatus = 'draft' | 'approved' | 'rejected'
+export type SemanticVersionStatus = 'draft' | 'published' | 'archived'
+
+export interface SemanticVersion {
+  id: string
+  name: string
+  status: SemanticVersionStatus | string
+  is_active: boolean
+  notes: string | null
+  published_at: string | null
+  published_by: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface SemanticVersionCreate {
+  name: string
+  notes?: string | null
+}
+
+export interface SemanticEntity {
+  id: string
+  version_id: string
+  local_name: string
+  label: string
+  description: string | null
+  object_type: string | null
+  status: SemanticItemStatus | string
+  created_at: string
+  updated_at: string
+}
+
+export interface SemanticEntityCreate {
+  local_name: string
+  label: string
+  description?: string | null
+  object_type?: string | null
+}
+
+export interface SemanticAttribute {
+  id: string
+  version_id: string
+  entity_id: string
+  name: string
+  label: string
+  description: string | null
+  attr_kind: string
+  unit?: string | null
+  enum_map?: Record<string, { standard: string; label: string; labels?: Record<string, string> | null }>
+  labels?: Record<string, string>
+  status: SemanticItemStatus | string
+  created_at: string
+  updated_at: string
+}
+
+export interface SemanticAttributeCreate {
+  name: string
+  label: string
+  description?: string | null
+  attr_kind?: string
+  unit?: string | null
+  enum_map?: Record<string, unknown>
+  labels?: Record<string, string>
+}
+
+export interface SemanticAttributeUpdate {
+  label?: string | null
+  description?: string | null
+  attr_kind?: string | null
+  unit?: string | null
+  enum_map?: Record<string, unknown> | null
+  labels?: Record<string, string> | null
+}
+
+export interface SemanticMapping {
+  id: string
+  version_id: string
+  attribute_id: string
+  source_id: string | null
+  table_name: string
+  column_name: string
+  source_of_truth?: boolean
+  freshness_sla_seconds?: number | null
+  status: SemanticItemStatus | string
+  created_at: string
+  updated_at: string
+}
+
+export interface SemanticMappingCreate {
+  table_name: string
+  column_name: string
+  source_id?: string | null
+  source_of_truth?: boolean
+  freshness_sla_seconds?: number | null
+}
+
+export interface SemanticVersionDetail extends SemanticVersion {
+  entities: SemanticEntity[]
+  attributes: SemanticAttribute[]
+  mappings: SemanticMapping[]
+}
+
+export interface SchemaColumnIn {
+  name: string
+  data_type?: string | null
+  comment?: string | null
+}
+
+export interface SchemaTableIn {
+  name: string
+  columns: SchemaColumnIn[]
+  comment?: string | null
+}
+
+export interface SchemaImportIn {
+  version_id?: string | null
+  version_name?: string | null
+  source_id?: string | null
+  tables: SchemaTableIn[]
+  auto_approve?: boolean
+}
+
+export interface SchemaImportStats {
+  version_id: string
+  entities_created: number
+  entities_unchanged: number
+  attributes_created: number
+  attributes_unchanged: number
+  mappings_created: number
+  mappings_unchanged: number
+}
+
+export interface SchemaImportOut {
+  version: SemanticVersion
+  stats: SchemaImportStats
+}
+
+export interface SemanticSuggestOut {
+  version_id: string
+  entities_updated: number
+  attributes_updated: number
+  suggestions: Record<string, unknown>[]
+}
+
+export interface SemanticBatchStatusIn {
+  entity_ids?: string[]
+  attribute_ids?: string[]
+  mapping_ids?: string[]
+  status: SemanticItemStatus
+}
+
+export interface SemanticBatchStatusOut {
+  entities_updated: number
+  attributes_updated: number
+  mappings_updated: number
 }

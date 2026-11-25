@@ -93,7 +93,7 @@ def validate_enterprise_ttl(
             )
         )
 
-    # Relation properties should have domain/range KnowledgeObject.
+    # KO relation properties should have domain/range KnowledgeObject.
     ko_iri = URIRef(f"{NS}KnowledgeObject")
     for local in sorted(cat.relation_properties):
         prop = URIRef(f"{NS}{local}")
@@ -111,6 +111,28 @@ def validate_enterprise_ttl(
                 ValidationIssue(
                     "relation_range",
                     f"relation {local} range should include KnowledgeObject",
+                )
+            )
+
+    # Industrial object relations: domain/range IndustrialObject (or StructuredObject).
+    industrial_iri = URIRef(f"{NS}IndustrialObject")
+    structured_iri = URIRef(f"{NS}StructuredObject")
+    for local in sorted(cat.industrial_relation_properties):
+        prop = URIRef(f"{NS}{local}")
+        domains = set(graph.objects(prop, RDFS.domain))
+        ranges = set(graph.objects(prop, RDFS.range))
+        if industrial_iri not in domains and structured_iri not in domains:
+            issues.append(
+                ValidationIssue(
+                    "industrial_relation_domain",
+                    f"relation {local} domain should include IndustrialObject",
+                )
+            )
+        if industrial_iri not in ranges and structured_iri not in ranges:
+            issues.append(
+                ValidationIssue(
+                    "industrial_relation_range",
+                    f"relation {local} range should include IndustrialObject",
                 )
             )
 

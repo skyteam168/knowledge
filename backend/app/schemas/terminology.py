@@ -42,6 +42,22 @@ class TerminologyAliasCreate(BaseModel):
     lang: str = Field(default="any", max_length=8)
 
 
+class TerminologyRelationCreate(BaseModel):
+    from_id: str = Field(min_length=1, max_length=32)
+    to_id: str = Field(min_length=1, max_length=32)
+    kind: str = Field(min_length=1, max_length=16)
+
+
+class TerminologyRelationOut(BaseModel):
+    id: str
+    from_id: str
+    to_id: str
+    kind: str
+    created_by: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
 class ConceptGraphNode(BaseModel):
     id: str
     label: str

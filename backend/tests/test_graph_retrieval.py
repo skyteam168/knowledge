@@ -162,6 +162,92 @@ async def test_traverse_ko_relations_bidirectional_hops(session: AsyncSession) -
     from_c = await traverse_ko_relations(session, org_id, [c.id], max_hops=2, limit=10)
     assert {n.ko_id for n in from_c} == {b.id, a.id}
 
+    # O3.1 directed: outbound from A ≠ inbound from A
+    out_a = await traverse_ko_relations(
+        session, org_id, [a.id], max_hops=2, limit=10, direction="out"
+    )
+    in_a = await traverse_ko_relations(
+        session, org_id, [a.id], max_hops=2, limit=10, direction="in"
+    )
+    assert {n.ko_id for n in out_a} == {b.id, c.id}
+    assert {n.ko_id for n in in_a} == set()
+    out_c = await traverse_ko_relations(
+        session, org_id, [c.id], max_hops=2, limit=10, direction="out"
+    )
+    in_c = await traverse_ko_relations(
+        session, org_id, [c.id], max_hops=2, limit=10, direction="in"
+    )
+    assert {n.ko_id for n in out_c} == set()
+    assert {n.ko_id for n in in_c} == {b.id, a.id}
+    assert any(n.path for n in out_a)
+
+
+async def test_traverse_object_relations_caused_by_direction(
+    session: AsyncSession,
+) -> None:
+    """Diagnosis chain symptom → causedBy* → root differs from reverse walk."""
+    from app.models import ObjectRelation, ObjectRelationType
+    from app.retrieval.object_graph import ObjectGraphSeed, traverse_object_relations
+
+    org_id = "org-obj-graph"
+    symptom_id, mid_id, root_id = new_id(), new_id(), new_id()
+    session.add_all(
+        [
+            ObjectRelation(
+                id=new_id(),
+                org_id=org_id,
+                relation_type=ObjectRelationType.CAUSED_BY.value,
+                from_kind="structured",
+                from_id=symptom_id,
+                from_object_type="failure_mode",
+                to_kind="structured",
+                to_id=mid_id,
+                to_object_type="failure_mode",
+            ),
+            ObjectRelation(
+                id=new_id(),
+                org_id=org_id,
+                relation_type=ObjectRelationType.CAUSED_BY.value,
+                from_kind="structured",
+                from_id=mid_id,
+                from_object_type="failure_mode",
+                to_kind="structured",
+                to_id=root_id,
+                to_object_type="component",
+            ),
+        ]
+    )
+    await session.commit()
+
+    seed = ObjectGraphSeed("structured", symptom_id, "failure_mode")
+    forward = await traverse_object_relations(
+        session,
+        org_id,
+        [seed],
+        max_hops=3,
+        relation_types=[ObjectRelationType.CAUSED_BY.value],
+        direction="out",
+    )
+    assert {n.object_id for n in forward} == {mid_id, root_id}
+    reverse = await traverse_object_relations(
+        session,
+        org_id,
+        [seed],
+        max_hops=3,
+        relation_types=[ObjectRelationType.CAUSED_BY.value],
+        direction="in",
+    )
+    assert {n.object_id for n in reverse} == set()
+    from_root = await traverse_object_relations(
+        session,
+        org_id,
+        [ObjectGraphSeed("structured", root_id, "component")],
+        max_hops=3,
+        relation_types=[ObjectRelationType.CAUSED_BY.value],
+        direction="in",
+    )
+    assert {n.object_id for n in from_root} == {mid_id, symptom_id}
+
 
 class FakeGraph:
     def __init__(self, hits: Sequence[RouteHit], *, fail: bool = False) -> None:

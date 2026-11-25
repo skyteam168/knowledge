@@ -53,6 +53,8 @@ class KoType(StrEnum):
     DEFECT = "defect"
     POLICY = "policy"
     IT_TERM = "it_term"
+    COMPONENT = "component"
+    FAILURE_MODE = "failure_mode"
 
 
 class KoRelationType(StrEnum):

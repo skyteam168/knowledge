@@ -40,7 +40,16 @@ async function syncSynonyms(): Promise<void> {
   }
 }
 
-const ENTITY_TYPES = ['device', 'process', 'defect', 'policy', 'it_term', 'other'] as const
+const ENTITY_TYPES = [
+  'device',
+  'process',
+  'defect',
+  'policy',
+  'it_term',
+  'other',
+  'component',
+  'failure_mode',
+] as const
 const STATUSES = ['active', 'disabled'] as const
 
 const filters = reactive({ q: '', entity_type: '', status: '' })

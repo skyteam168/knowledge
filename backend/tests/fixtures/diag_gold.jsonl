@@ -1,0 +1,22 @@
+{"id":"diag-01","question":"EQ-LOOM-01 断纱可能是什么故障模式？","expect_external_ids":["FM-YARN-BREAK"],"path":"equipment→hasFailureMode"}
+{"id":"diag-02","question":"断纱根因部件是什么？","expect_external_ids":["CMP-FEED-ROLLER"],"path":"failure_mode→causedBy→component"}
+{"id":"diag-03","question":"1号飞织机相关工单有哪些？","expect_external_ids":["WO-2026-001"],"path":"workOrderFor"}
+{"id":"diag-04","question":"织机断纱用什么备件？","expect_external_ids":["SP-NEEDLE-08"],"path":"spareFor"}
+{"id":"diag-05","question":"EQ-LOOM-01 包含哪些部件？","expect_external_ids":["CMP-FEED-ROLLER"],"path":"hasPart"}
+{"id":"diag-06","question":"飞织一线有哪些设备？","expect_external_ids":["EQ-LOOM-01"],"path":"line←equipment"}
+{"id":"diag-07","question":"断纱检修指引知识条目标题？","expect_ko_titles":["【种子】断纱检修指引"],"path":"ko"}
+{"id":"diag-08","question":"织机维保要点知识条目？","expect_ko_titles":["【种子】织机维保要点"],"path":"ko"}
+{"id":"diag-09","question":"送纱轮对应哪个故障？","expect_external_ids":["FM-YARN-BREAK"],"path":"traverse in caused_by"}
+{"id":"diag-10","question":"WO-2026-001 针对哪台设备？","expect_external_ids":["EQ-LOOM-01"],"path":"workOrderFor"}
+{"id":"diag-11","question":"SP-NEEDLE-08 适用设备？","expect_external_ids":["EQ-LOOM-01"],"path":"spareFor"}
+{"id":"diag-12","question":"演示工厂下织造车间编码？","expect_external_ids":["AREA-WEAVE-A"],"path":"site→area"}
+{"id":"diag-13","question":"飞织一线所属车间？","expect_external_ids":["AREA-WEAVE-A"],"path":"line→area"}
+{"id":"diag-14","question":"断纱严重度是多少？","expect_attrs":{"severity":8},"path":"failure_mode.attrs"}
+{"id":"diag-15","question":"1号飞织机额定功率？","expect_attrs":{"rated_power":{"value":7.5,"unit":"kW"}},"path":"equipment.attrs"}
+{"id":"diag-16","question":"从断纱现象沿 causedBy 找根因","expect_external_ids":["CMP-FEED-ROLLER"],"path":"traverse out caused_by"}
+{"id":"diag-17","question":"从送纱轮反向找故障模式","expect_external_ids":["FM-YARN-BREAK"],"path":"traverse in caused_by"}
+{"id":"diag-18","question":"设备故障诊断：现象到处置 KO","expect_ko_titles":["【种子】断纱检修指引"],"path":"mitigates inbound"}
+{"id":"diag-19","question":"query_objects failure_mode by equipment","expect_external_ids":["FM-YARN-BREAK"],"path":"query_objects"}
+{"id":"diag-20","question":"get_object EQ-LOOM-01 邻居含故障模式","expect_external_ids":["FM-YARN-BREAK"],"path":"get_object neighbors"}
+{"id":"diag-21","question":"describe_ontology 含 hasFailureMode","expect_ontology":["hasFailureMode"],"path":"describe_ontology"}
+{"id":"diag-22","question":"设备→工单→备件可查","expect_external_ids":["WO-2026-001","SP-NEEDLE-08"],"path":"GATE-1"}

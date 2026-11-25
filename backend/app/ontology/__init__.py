@@ -3,7 +3,10 @@
 from typing import Any
 
 from app.ontology.catalog import NS, OntologyCatalog, snake_to_camel, snake_to_pascal
-from app.ontology.constraints import relation_soft_warnings
+from app.ontology.constraints import (
+    relation_soft_warnings,
+    validate_object_relation_endpoints,
+)
 
 __all__ = [
     "NS",
@@ -12,6 +15,7 @@ __all__ = [
     "snake_to_camel",
     "snake_to_pascal",
     "validate_enterprise_ttl",
+    "validate_object_relation_endpoints",
 ]
 
 

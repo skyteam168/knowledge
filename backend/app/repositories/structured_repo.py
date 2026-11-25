@@ -144,6 +144,33 @@ class StructuredRepository:
     def add_record(self, row: StructuredRecord) -> None:
         self.session.add(row)
 
+    async def list_records_by_parent(
+        self,
+        org_id: str,
+        *,
+        parent_object_type: str,
+        parent_external_id: str,
+        object_type: str | None = None,
+        source_id: str | None = None,
+        limit: int = 200,
+    ) -> list[StructuredRecord]:
+        filters = [
+            StructuredRecord.org_id == org_id,
+            StructuredRecord.parent_object_type == parent_object_type,
+            StructuredRecord.parent_external_id == parent_external_id,
+        ]
+        if object_type:
+            filters.append(StructuredRecord.object_type == object_type)
+        if source_id:
+            filters.append(StructuredRecord.source_id == source_id)
+        rows = await self.session.scalars(
+            select(StructuredRecord)
+            .where(*filters)
+            .order_by(StructuredRecord.object_type, StructuredRecord.external_id)
+            .limit(max(1, min(limit, 500)))
+        )
+        return list(rows)
+
     # ---- generic list helpers -----------------------------------------------------
 
     def _page(self, stmt: Select[Any], *, page: int, size: int) -> tuple[Select[Any], Select[Any]]:

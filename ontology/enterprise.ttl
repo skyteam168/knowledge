@@ -8,13 +8,14 @@
 # Flyknit Enterprise Knowledge Ontology (TBox only)
 # Runtime ABox lives in PostgreSQL; this file is the contract.
 # Enum values in backend StrEnum must stay aligned (see catalog.py).
+# versionInfo 1.1.0 — O1.1 ISA-95 / FMEA industrial object classes
 #################################################################
 
 : a owl:Ontology ;
     rdfs:label "Flyknit Enterprise Knowledge Ontology"@en ;
     rdfs:label "飞织企业知识本体"@zh ;
-    rdfs:comment "企业知识库概念层 TBox：术语类型、KO 类型、关系与结构化镜像。运行时实例存 PostgreSQL，不提供 SPARQL。"@zh ;
-    owl:versionInfo "1.0.0" .
+    rdfs:comment "企业知识库概念层 TBox：术语类型、KO 类型、关系、结构化镜像与工业对象（ISA-95/FMEA）。运行时实例存 PostgreSQL，不提供 SPARQL。"@zh ;
+    owl:versionInfo "1.1.0" .
 
 #################################################################
 # Top-level classes
@@ -40,6 +41,12 @@
     rdfs:label "结构化业务域"@zh ;
     rdfs:comment "对应 structured_domains。"@zh .
 
+:IndustrialObject a owl:Class ;
+    rdfs:subClassOf :StructuredObject ;
+    rdfs:label "Industrial object"@en ;
+    rdfs:label "工业对象"@zh ;
+    rdfs:comment "ISA-95 资产层级与 FMEA/工艺对象的公共父类；ABox 仍在 PostgreSQL。"@zh .
+
 #################################################################
 # TerminologyEntityType → subclasses
 #################################################################
@@ -48,7 +55,7 @@
     rdfs:subClassOf :TerminologyEntity ;
     rdfs:label "Device"@en ;
     rdfs:label "设备"@zh ;
-    rdfs:comment "enum TerminologyEntityType.device / KoType.device"@en .
+    rdfs:comment "enum TerminologyEntityType.device / KoType.device / StructuredObjectType.device"@en .
 
 :Process a owl:Class ;
     rdfs:subClassOf :TerminologyEntity ;
@@ -79,6 +86,18 @@
     rdfs:label "Other"@en ;
     rdfs:label "其他"@zh ;
     rdfs:comment "enum TerminologyEntityType.other"@en .
+
+:Component a owl:Class ;
+    rdfs:subClassOf :TerminologyEntity ;
+    rdfs:label "Component"@en ;
+    rdfs:label "部件"@zh ;
+    rdfs:comment "enum TerminologyEntityType.component / KoType.component / StructuredObjectType.component"@en .
+
+:FailureMode a owl:Class ;
+    rdfs:subClassOf :TerminologyEntity ;
+    rdfs:label "Failure mode"@en ;
+    rdfs:label "故障模式"@zh ;
+    rdfs:comment "enum TerminologyEntityType.failure_mode / KoType.failure_mode / StructuredObjectType.failure_mode"@en .
 
 #################################################################
 # KoType content shapes (presentation) — also under KnowledgeObject
@@ -112,22 +131,28 @@
 :Defect rdfs:subClassOf :KnowledgeObject .
 :Policy rdfs:subClassOf :KnowledgeObject .
 :ItTerm rdfs:subClassOf :KnowledgeObject .
+:Component rdfs:subClassOf :KnowledgeObject .
+:FailureMode rdfs:subClassOf :KnowledgeObject .
 
 #################################################################
-# Structured domain kinds & object types
+# Structured domain kinds
 #################################################################
 
-:Equipment a owl:Class ;
+:EquipmentDomain a owl:Class ;
     rdfs:subClassOf :StructuredDomain ;
     rdfs:label "Equipment domain"@en ;
     rdfs:label "设备域"@zh ;
-    rdfs:comment "enum StructuredDomainKind.equipment"@en .
+    rdfs:comment "enum StructuredDomainKind.equipment → OWL EquipmentDomain（避免与 ISA-95 Equipment 冲突）"@zh .
 
 :GenericDomain a owl:Class ;
     rdfs:subClassOf :StructuredDomain ;
     rdfs:label "Generic domain"@en ;
     rdfs:label "通用业务域"@zh ;
     rdfs:comment "enum StructuredDomainKind.generic"@en .
+
+#################################################################
+# StructuredObjectType — legacy equip_* + ISA-95 / FMEA
+#################################################################
 
 :WorkOrder a owl:Class ;
     rdfs:subClassOf :StructuredObject ;
@@ -141,8 +166,60 @@
     rdfs:label "备件"@zh ;
     rdfs:comment "enum StructuredObjectType.spare_part"@en .
 
-# StructuredObjectType.device shares local name Device with terminology/KO.
-:Device rdfs:subClassOf :StructuredObject .
+# Leaf device row (equip_devices) is also an industrial object.
+:Device rdfs:subClassOf :StructuredObject , :IndustrialObject .
+
+:Site a owl:Class ;
+    rdfs:subClassOf :IndustrialObject ;
+    rdfs:label "Site"@en ;
+    rdfs:label "工厂/厂区"@zh ;
+    rdfs:comment "enum StructuredObjectType.site；ISA-95 Site"@zh .
+
+:Area a owl:Class ;
+    rdfs:subClassOf :IndustrialObject ;
+    rdfs:label "Area"@en ;
+    rdfs:label "车间/区域"@zh ;
+    rdfs:comment "enum StructuredObjectType.area；ISA-95 Area"@zh .
+
+:Line a owl:Class ;
+    rdfs:subClassOf :IndustrialObject ;
+    rdfs:label "Line"@en ;
+    rdfs:label "产线"@zh ;
+    rdfs:comment "enum StructuredObjectType.line；ISA-95 Production Line / Work Center"@zh .
+
+:Equipment a owl:Class ;
+    rdfs:subClassOf :IndustrialObject ;
+    rdfs:label "Equipment"@en ;
+    rdfs:label "设备（层级）"@zh ;
+    rdfs:comment "enum StructuredObjectType.equipment；ISA-95 Equipment（与 equip_devices 的 Device 并存）"@zh .
+
+:Component rdfs:subClassOf :IndustrialObject .
+
+:Material a owl:Class ;
+    rdfs:subClassOf :IndustrialObject ;
+    rdfs:label "Material"@en ;
+    rdfs:label "物料"@zh ;
+    rdfs:comment "enum StructuredObjectType.material"@en .
+
+:Operation a owl:Class ;
+    rdfs:subClassOf :IndustrialObject ;
+    rdfs:label "Operation"@en ;
+    rdfs:label "工序"@zh ;
+    rdfs:comment "enum StructuredObjectType.operation"@en .
+
+:ProcessParameter a owl:Class ;
+    rdfs:subClassOf :IndustrialObject ;
+    rdfs:label "Process parameter"@en ;
+    rdfs:label "工艺参数"@zh ;
+    rdfs:comment "enum StructuredObjectType.process_parameter"@en .
+
+:FailureMode rdfs:subClassOf :IndustrialObject .
+
+:Event a owl:Class ;
+    rdfs:subClassOf :IndustrialObject ;
+    rdfs:label "Event"@en ;
+    rdfs:label "事件/报警"@zh ;
+    rdfs:comment "enum StructuredObjectType.event"@en .
 
 #################################################################
 # KoRelationType → object properties
@@ -189,6 +266,59 @@
     rdfs:domain :KnowledgeObject ;
     rdfs:range :KnowledgeObject ;
     rdfs:comment "enum KoRelationType.applies_to；建议 policy → device|process|it_term（软约束）"@zh .
+
+#################################################################
+# ObjectRelationType → industrial directed relations (O2.1)
+#################################################################
+
+:hasPart a owl:ObjectProperty , owl:TransitiveProperty ;
+    rdfs:label "has part"@en ;
+    rdfs:label "包含部件"@zh ;
+    rdfs:domain :StructuredObject ;
+    rdfs:range :StructuredObject ;
+    rdfs:comment "enum ObjectRelationType.has_part"@en .
+
+:locatedIn a owl:ObjectProperty , owl:TransitiveProperty ;
+    rdfs:label "located in"@en ;
+    rdfs:label "位于"@zh ;
+    rdfs:domain :StructuredObject ;
+    rdfs:range :StructuredObject ;
+    rdfs:comment "enum ObjectRelationType.located_in"@en .
+
+:hasFailureMode a owl:ObjectProperty ;
+    rdfs:label "has failure mode"@en ;
+    rdfs:label "具有故障模式"@zh ;
+    rdfs:domain :StructuredObject ;
+    rdfs:range :StructuredObject ;
+    rdfs:comment "enum ObjectRelationType.has_failure_mode"@en .
+
+:causedBy a owl:ObjectProperty ;
+    rdfs:label "caused by"@en ;
+    rdfs:label "由…导致"@zh ;
+    rdfs:domain :StructuredObject ;
+    rdfs:range :StructuredObject ;
+    rdfs:comment "enum ObjectRelationType.caused_by"@en .
+
+:consumes a owl:ObjectProperty ;
+    rdfs:label "consumes"@en ;
+    rdfs:label "消耗"@zh ;
+    rdfs:domain :StructuredObject ;
+    rdfs:range :StructuredObject ;
+    rdfs:comment "enum ObjectRelationType.consumes"@en .
+
+:workOrderFor a owl:ObjectProperty ;
+    rdfs:label "work order for"@en ;
+    rdfs:label "工单针对"@zh ;
+    rdfs:domain :StructuredObject ;
+    rdfs:range :StructuredObject ;
+    rdfs:comment "enum ObjectRelationType.work_order_for；亦覆盖 equip work_order→device"@zh .
+
+:spareFor a owl:ObjectProperty ;
+    rdfs:label "spare for"@en ;
+    rdfs:label "备件适用于"@zh ;
+    rdfs:domain :StructuredObject ;
+    rdfs:range :StructuredObject ;
+    rdfs:comment "enum ObjectRelationType.spare_for"@en .
 
 #################################################################
 # Structured link properties (structured_entity_links semantics)

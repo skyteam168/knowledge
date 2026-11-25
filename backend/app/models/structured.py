@@ -35,9 +35,48 @@ class StructuredDomainKind(StrEnum):
 
 
 class StructuredObjectType(StrEnum):
+    """Structured mirror object kinds.
+
+    ``device`` / ``work_order`` / ``spare_part`` map to dedicated ``equip_*`` tables.
+    ISA-95 / FMEA kinds (site…event) are declared in the ontology contract now; until
+    O1.3 dedicated tables land they may live in ``structured_records``.
+    """
+
     DEVICE = "device"
     WORK_ORDER = "work_order"
     SPARE_PART = "spare_part"
+    # ISA-95 asset hierarchy
+    SITE = "site"
+    AREA = "area"
+    LINE = "line"
+    EQUIPMENT = "equipment"
+    COMPONENT = "component"
+    # Process / quality / FMEA
+    MATERIAL = "material"
+    OPERATION = "operation"
+    PROCESS_PARAMETER = "process_parameter"
+    FAILURE_MODE = "failure_mode"
+    EVENT = "event"
+
+
+class ObjectEndpointKind(StrEnum):
+    """Endpoint of a typed object_relations edge."""
+
+    TERMINOLOGY = "terminology"
+    KO = "ko"
+    STRUCTURED = "structured"
+
+
+class ObjectRelationType(StrEnum):
+    """Directed industrial / structured object relations (O2.1)."""
+
+    HAS_PART = "has_part"
+    LOCATED_IN = "located_in"
+    HAS_FAILURE_MODE = "has_failure_mode"
+    CAUSED_BY = "caused_by"
+    CONSUMES = "consumes"
+    WORK_ORDER_FOR = "work_order_for"
+    SPARE_FOR = "spare_for"
 
 
 class StructuredSource(IdMixin, TenantMixin, TimestampMixin, Base):
@@ -101,6 +140,13 @@ class StructuredRecord(IdMixin, TenantMixin, TimestampMixin, Base):
     external_id: Mapped[str] = mapped_column(String(64), nullable=False)
     title: Mapped[str] = mapped_column(String(512), nullable=False)
     status: Mapped[str] = mapped_column(String(32), default="active", nullable=False)
+    # ISA-95 hierarchy / FMEA ownership (denormalized from attrs for query).
+    parent_object_type: Mapped[str | None] = mapped_column(String(64))
+    parent_external_id: Mapped[str | None] = mapped_column(String(64))
+    # S2 event timeline denorm (from attrs.occurred_at / ended_at / event_type).
+    occurred_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    event_type: Mapped[str | None] = mapped_column(String(32))
     attrs: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict, nullable=False)
     created_by: Mapped[str | None] = mapped_column(String(32))
 
@@ -170,6 +216,50 @@ class EquipSparePart(IdMixin, TenantMixin, TimestampMixin, Base):
     meta: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict, nullable=False)
 
 
+class RelationCardinality(StrEnum):
+    ONE_TO_ONE = "one_to_one"
+    ONE_TO_MANY = "one_to_many"
+    MANY_TO_ONE = "many_to_one"
+    MANY_TO_MANY = "many_to_many"
+
+
+class ObjectRelation(IdMixin, TenantMixin, TimestampMixin, Base):
+    """Directed typed edge between terminology / KO / structured objects."""
+
+    __tablename__ = "object_relations"
+    __table_args__ = (
+        UniqueConstraint(
+            "org_id",
+            "relation_type",
+            "from_kind",
+            "from_id",
+            "from_object_type",
+            "to_kind",
+            "to_id",
+            "to_object_type",
+            name="uq_object_relations_edge",
+        ),
+        Index("ix_object_relations_from", "org_id", "from_kind", "from_id"),
+        Index("ix_object_relations_to", "org_id", "to_kind", "to_id"),
+        Index("ix_object_relations_type", "org_id", "relation_type"),
+    )
+
+    relation_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    from_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    from_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    from_object_type: Mapped[str | None] = mapped_column(String(64))
+    to_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    to_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    to_object_type: Mapped[str | None] = mapped_column(String(64))
+    cardinality: Mapped[str] = mapped_column(
+        String(16), default=RelationCardinality.ONE_TO_MANY.value, nullable=False
+    )
+    attrs: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict, nullable=False)
+    valid_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    valid_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_by: Mapped[str | None] = mapped_column(String(32))
+
+
 class StructuredEntityLink(IdMixin, TenantMixin, TimestampMixin, Base):
     """Maps a mirrored equipment row to a terminology entity and/or knowledge object."""
 
@@ -188,7 +278,7 @@ class StructuredEntityLink(IdMixin, TenantMixin, TimestampMixin, Base):
         Index("ix_structured_entity_links_ko", "org_id", "ko_id"),
     )
 
-    object_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    object_type: Mapped[str] = mapped_column(String(64), nullable=False)
     object_id: Mapped[str] = mapped_column(String(32), nullable=False)
     terminology_entity_id: Mapped[str | None] = mapped_column(
         String(32),

@@ -86,6 +86,12 @@ export default {
       uncertain: '依据有限',
       refuse: '依据不足，不作答',
     },
+    concepts: {
+      title: '相关概念 · {count}',
+      aliases: '别名',
+      mirrors: '结构化对象',
+      kos: '知识条目',
+    },
     citation: {
       title: '引用',
       titleN: '引用 [{n}]',
@@ -213,6 +219,12 @@ export default {
       confident: 'Well supported',
       uncertain: 'Limited support',
       refuse: 'Insufficient evidence, no answer',
+    },
+    concepts: {
+      title: 'Related concepts · {count}',
+      aliases: 'Aliases',
+      mirrors: 'Structured objects',
+      kos: 'Knowledge objects',
     },
     citation: {
       title: 'Citation',
@@ -343,6 +355,12 @@ export default {
       confident: 'Căn cứ đầy đủ',
       uncertain: 'Căn cứ hạn chế',
       refuse: 'Thiếu căn cứ, không trả lời',
+    },
+    concepts: {
+      title: 'Khái niệm liên quan · {count}',
+      aliases: 'Bí danh',
+      mirrors: 'Đối tượng có cấu trúc',
+      kos: 'Mục tri thức',
     },
     citation: {
       title: 'Trích dẫn',

@@ -66,6 +66,8 @@ export const KO_TYPE_LABEL: Record<KoType, string> = labelMap<KoType>('koType', 
   'defect',
   'policy',
   'it_term',
+  'component',
+  'failure_mode',
 ])
 
 export const KO_RELATION_TYPE_LABEL = labelMap('koRelationType', [

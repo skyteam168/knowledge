@@ -32,8 +32,11 @@ from app.services.ingest.queue import RecordingTaskQueue
 ACL_MODULES = {
     "test_acl_regression",
     "test_acl_service",
+    "test_acl_deny",
     "test_search_acl",
     "test_principal_resolver",
+    "test_structured_acl",
+    "test_on_behalf",
 }
 ACL_TESTS = {
     "test_restricted_scope_without_readable_kb_refuses",

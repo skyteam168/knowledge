@@ -15,9 +15,12 @@ from app.services.structured.connectors.base import (
     DeviceRow,
     EquipmentConnector,
     EquipmentSnapshot,
+    FetchResult,
     SparePartRow,
     StructuredConnectorConfig,
+    SyncCursor,
     WorkOrderRow,
+    advance_watermark,
 )
 
 
@@ -60,6 +63,22 @@ def _parse_opened_at(value: Any) -> datetime | None:
         raise ConnectorError("Invalid opened_at in REST payload", detail={"value": value}) from exc
 
 
+def _row_watermark(row: dict[str, Any], field: str) -> str | None:
+    value = row.get(field)
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime):
+        return value.isoformat()
+    text = str(value).strip()
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    return text
+
+
 class RestEquipmentConnector(EquipmentConnector):
     kind = "rest"
 
@@ -94,13 +113,22 @@ class RestEquipmentConnector(EquipmentConnector):
             headers=headers,
         )
 
-    async def _get_list(self, client: httpx.AsyncClient, path: str | None) -> list[dict[str, Any]]:
+    async def _get_list(
+        self,
+        client: httpx.AsyncClient,
+        path: str | None,
+        *,
+        since: str | None = None,
+    ) -> list[dict[str, Any]]:
         if not path:
             return []
         rest = self.config.rest
         assert rest is not None
         url = urljoin(rest.base_url.rstrip("/") + "/", path.lstrip("/"))
-        response = await client.get(url)
+        params: dict[str, str] = {}
+        if since and self.config.incremental.enabled:
+            params[self.config.incremental.param] = since
+        response = await client.get(url, params=params or None)
         if response.status_code >= 400:
             raise ConnectorError(
                 f"HTTP {response.status_code}",
@@ -112,13 +140,47 @@ class RestEquipmentConnector(EquipmentConnector):
             raise ConnectorError("Invalid JSON response", detail=response.text[:500]) from exc
         return _items(payload)
 
-    async def fetch(self) -> EquipmentSnapshot:
+    def _advance(
+        self, high: str | None, rows: list[dict[str, Any]]
+    ) -> str | None:
+        field = self.config.incremental.field
+        for row in rows:
+            high = advance_watermark(high, _row_watermark(row, field))
+        return high
+
+    async def fetch(
+        self,
+        *,
+        cursor: SyncCursor | None = None,
+        force_full: bool = False,
+    ) -> FetchResult:
         rest = self.config.rest
         assert rest is not None
+        use_cursor = (
+            self.config.incremental.enabled
+            and not force_full
+            and cursor is not None
+            and bool(cursor.watermarks)
+        )
+        watermarks = dict(cursor.watermarks) if use_cursor else {}
+        mode = "incremental" if use_cursor else "full"
+
         async with self._client() as client:
-            device_raw = await self._get_list(client, rest.paths.devices)
-            wo_raw = await self._get_list(client, rest.paths.work_orders)
-            part_raw = await self._get_list(client, rest.paths.spare_parts)
+            device_raw = await self._get_list(
+                client,
+                rest.paths.devices,
+                since=watermarks.get("devices") if use_cursor else None,
+            )
+            wo_raw = await self._get_list(
+                client,
+                rest.paths.work_orders,
+                since=watermarks.get("work_orders") if use_cursor else None,
+            )
+            part_raw = await self._get_list(
+                client,
+                rest.paths.spare_parts,
+                since=watermarks.get("spare_parts") if use_cursor else None,
+            )
 
         devices = [
             DeviceRow(
@@ -157,6 +219,24 @@ class RestEquipmentConnector(EquipmentConnector):
             for r in part_raw
             if _str(r, "external_id", "id", "part_code", "code") and _str(r, "name", "title")
         ]
-        return EquipmentSnapshot(
-            devices=devices, work_orders=work_orders, spare_parts=spare_parts
+
+        next_cursor = None
+        if self.config.incremental.enabled:
+            next_marks: dict[str, str] = {}
+            for kind, raw, prev in (
+                ("devices", device_raw, watermarks.get("devices")),
+                ("work_orders", wo_raw, watermarks.get("work_orders")),
+                ("spare_parts", part_raw, watermarks.get("spare_parts")),
+            ):
+                high = self._advance(prev, raw)
+                if high:
+                    next_marks[kind] = high
+            next_cursor = SyncCursor(watermarks=next_marks)
+
+        return FetchResult(
+            snapshot=EquipmentSnapshot(
+                devices=devices, work_orders=work_orders, spare_parts=spare_parts
+            ),
+            next_cursor=next_cursor,
+            mode=mode,  # type: ignore[arg-type]
         )

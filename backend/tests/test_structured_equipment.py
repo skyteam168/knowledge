@@ -60,6 +60,8 @@ async def test_seed_equipment_idempotent(session: AsyncSession) -> None:
         "kos": 0,
         "ko_relations": 0,
         "ko_links": 0,
+        "industrial_records": 0,
+        "object_relations": 0,
     }
 
 

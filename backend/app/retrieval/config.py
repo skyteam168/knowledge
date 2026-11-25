@@ -87,6 +87,8 @@ class GraphConfig(_Strict):
     max_hops: int = Field(default=2, ge=1, le=5)
     # Empty = all relation types; otherwise only listed KoRelationType values.
     relation_types: list[str] = Field(default_factory=list)
+    # out = follow from→to; in = reverse; both = undirected (legacy default).
+    direction: str = Field(default="both", pattern="^(out|in|both)$")
     timeout_seconds: float = Field(default=3.0, gt=0, le=60)
 
 

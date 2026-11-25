@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
-from app.models import TerminologyEntity
+from app.models import TerminologyEntity, TerminologyRelation
 from app.repositories.structured_repo import StructuredRepository
 from app.repositories.terminology_repo import TerminologyRepository
 from app.retrieval.graph import traverse_ko_relations
@@ -19,6 +20,7 @@ from app.schemas.open_api import (
     OpenGraphSeedOut,
     OpenGraphTraverseIn,
     OpenGraphTraverseOut,
+    OpenRelatedTermOut,
 )
 from app.services.authz import AuthzCache, CurrentUser
 from app.services.context import RequestContext
@@ -68,6 +70,53 @@ class OpenEntityService:
             status=entity.status,
             aliases=[a.alias for a in aliases],
         )
+
+    async def _related_terms(self, entity_id: str) -> list[OpenRelatedTermOut]:
+        edges = list(
+            await self.session.scalars(
+                select(TerminologyRelation).where(
+                    TerminologyRelation.org_id == self.org_id,
+                    or_(
+                        TerminologyRelation.from_id == entity_id,
+                        TerminologyRelation.to_id == entity_id,
+                    ),
+                )
+            )
+        )
+        if not edges:
+            return []
+        peer_ids = {
+            (e.to_id if e.from_id == entity_id else e.from_id) for e in edges
+        }
+        peers = {
+            row.id: row
+            for row in await self.session.scalars(
+                select(TerminologyEntity).where(
+                    TerminologyEntity.org_id == self.org_id,
+                    TerminologyEntity.id.in_(peer_ids),
+                )
+            )
+        }
+        out: list[OpenRelatedTermOut] = []
+        for edge in edges:
+            if edge.from_id == entity_id:
+                peer = peers.get(edge.to_id)
+                direction = "out"
+            else:
+                peer = peers.get(edge.from_id)
+                direction = "in"
+            if peer is None:
+                continue
+            out.append(
+                OpenRelatedTermOut(
+                    id=peer.id,
+                    canonical_name=peer.canonical_name,
+                    entity_type=peer.entity_type,
+                    kind=edge.kind,
+                    direction=direction,
+                )
+            )
+        return out
 
     async def _filter_kos(self, ko_ids: list[str], *, kb_bound: frozenset[str]) -> list[OpenEntityKoOut]:
         if not ko_ids or not kb_bound:
@@ -135,10 +184,14 @@ class OpenEntityService:
                 if entity is not None:
                     terminology = await self._term_out(entity)
             ko_ids = [link.ko_id for link in resolved.links if link.ko_id]
+            related: list[OpenRelatedTermOut] = []
+            if terminology is not None:
+                related = await self._related_terms(terminology.id)
             return OpenEntityReadOut(
                 terminology=terminology,
                 mirror=mirror,
                 knowledge_objects=await self._filter_kos(ko_ids, kb_bound=kb_bound),
+                related_terms=related,
             )
 
         entity = await self._resolve_term(data)
@@ -148,6 +201,7 @@ class OpenEntityService:
             terminology=await self._term_out(entity),
             mirror=None,
             knowledge_objects=await self._filter_kos(ko_ids, kb_bound=kb_bound),
+            related_terms=await self._related_terms(entity.id),
         )
 
     async def graph_traverse(self, data: OpenGraphTraverseIn) -> OpenGraphTraverseOut:
@@ -168,6 +222,7 @@ class OpenEntityService:
             limit=40,
             kb_ids=sorted(kb_bound),
             relation_types=data.relation_types or None,
+            direction=data.direction,
         )
         check = await self.kos.live_objects(self.user, [n.ko_id for n in neighbors])
         out_neighbors: list[OpenGraphNeighborOut] = []
@@ -183,6 +238,7 @@ class OpenEntityService:
                     seed_id=n.seed_ko_id,
                     ko_type=live.ko.ko_type,
                     kb_id=live.kb.id,
+                    path=n.path,
                 )
             )
 
@@ -196,4 +252,5 @@ class OpenEntityService:
             ),
             neighbors=out_neighbors,
             max_hops=data.max_hops,
+            direction=data.direction,
         )

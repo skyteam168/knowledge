@@ -45,6 +45,8 @@ export default {
       policy: '制度条款',
       it_term: 'IT 术语',
       other: '其他',
+      component: '部件',
+      failure_mode: '故障模式',
     },
     statuses: {
       active: '启用',
@@ -96,6 +98,8 @@ export default {
       policy: 'Policy',
       it_term: 'IT term',
       other: 'Other',
+      component: 'Component',
+      failure_mode: 'Failure mode',
     },
     statuses: {
       active: 'Active',
@@ -147,6 +151,8 @@ export default {
       policy: 'Điều khoản chính sách',
       it_term: 'Thuật ngữ CNTT',
       other: 'Khác',
+      component: 'Linh kiện',
+      failure_mode: 'Chế độ hỏng',
     },
     statuses: {
       active: 'Đang bật',

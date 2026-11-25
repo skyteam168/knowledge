@@ -16,6 +16,7 @@ from app.services.structured.connectors.base import (
     EquipmentSnapshot,
     build_connector,
     parse_connector_config,
+    parse_sync_cursor,
 )
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,7 @@ class StructuredSyncExecutor:
         source_id: str,
         *,
         dry_run: bool = False,
+        force_full: bool = False,
         triggered_by: str | None = None,
     ) -> dict[str, Any]:
         source = await self.repo.get_source(org_id, source_id)
@@ -56,16 +58,18 @@ class StructuredSyncExecutor:
         config = parse_connector_config(source.meta)
         if config is None:
             raise ValidationAppError(
-                "Source has no connector in meta (set meta.connector=csv|rest)"
+                "Source has no connector in meta (set meta.connector=csv|rest|mysql)"
             )
 
+        cursor = None if force_full else parse_sync_cursor(source.meta)
         connector = build_connector(config, self.settings, transport=self.transport)
         try:
-            snapshot = await connector.fetch()
+            fetched = await connector.fetch(cursor=cursor, force_full=force_full)
         except Exception as exc:
             await self._mark_failure(source, str(exc), dry_run=dry_run)
             raise
 
+        snapshot = fetched.snapshot
         stats = await self._apply(org_id, source, snapshot, dry_run=dry_run)
         result = {
             "source_id": source.id,
@@ -73,17 +77,30 @@ class StructuredSyncExecutor:
             "connector": config.connector,
             "status": "ok",
             "dry_run": dry_run,
+            "force_full": force_full,
+            "mode": fetched.mode,
             "stats": stats,
             "warnings": list(snapshot.warnings),
             "triggered_by": triggered_by,
             "synced_at": datetime.now(UTC).isoformat(),
+            "sync_cursor": (
+                fetched.next_cursor.model_dump(mode="json")
+                if fetched.next_cursor is not None
+                else None
+            ),
         }
         if not dry_run:
             meta = dict(source.meta or {})
             meta["last_sync_at"] = result["synced_at"]
             meta["last_sync_status"] = "ok"
             meta["last_sync_stats"] = stats
+            meta["last_sync_mode"] = fetched.mode
             meta.pop("last_sync_error", None)
+            # Advance cursor only after successful apply (resume-safe).
+            if fetched.next_cursor is not None:
+                meta["sync_cursor"] = fetched.next_cursor.model_dump(mode="json")
+            elif force_full and config.incremental.enabled:
+                meta.pop("sync_cursor", None)
             source.meta = meta
             await self.session.flush()
         return result
@@ -133,10 +150,12 @@ class StructuredSyncExecutor:
                         )
                     )
             else:
+                new_meta = dict(row.meta)
                 changed = (
                     existing.name != row.name
                     or existing.status != row.status
                     or existing.location != row.location
+                    or dict(existing.meta or {}) != new_meta
                 )
                 if changed:
                     stats["devices"]["updated"] += 1
@@ -144,7 +163,7 @@ class StructuredSyncExecutor:
                         existing.name = row.name
                         existing.status = row.status
                         existing.location = row.location
-                        existing.meta = {**(existing.meta or {}), **row.meta}
+                        existing.meta = new_meta
                 else:
                     stats["devices"]["unchanged"] += 1
 

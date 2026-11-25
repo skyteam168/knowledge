@@ -1,8 +1,9 @@
 """KO relation multi-hop retrieval (RRF third route) via recursive CTE.
 
 Seeds are published KO ids already found by dense / sparse. Neighbours are walked
-bidirectionally on `ko_relations`, ACL-checked the same way as KO hydration, and
-emitted as their published primary entry (seq=0) chunk ids for fusion.
+on `ko_relations` with configurable direction (out / in / both), ACL-checked the
+same way as KO hydration, and emitted as their published primary entry (seq=0)
+chunk ids for fusion.
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ from __future__ import annotations
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Literal
 
 from sqlalchemy import String, and_, cast, func, literal, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,6 +24,8 @@ from app.retrieval.retrievers import RouteHit, RouteResult
 from app.services.authz import CurrentUser
 from app.services.knowledge.ko_access import KoAccess
 
+GraphDirection = Literal["out", "in", "both"]
+
 
 @dataclass(frozen=True)
 class GraphNeighbor:
@@ -29,6 +33,7 @@ class GraphNeighbor:
     hops: int
     entry_id: str
     seed_ko_id: str
+    path: str = ""
 
 
 def _ms(start: float) -> float:
@@ -40,7 +45,11 @@ def _seed_cte(seed_ko_ids: Sequence[str]):
     return union_all(*parts).cte("seeds")
 
 
-def _edge_cte(org_id: str, relation_types: Sequence[str] | None):
+def _edge_cte(
+    org_id: str,
+    relation_types: Sequence[str] | None,
+    direction: GraphDirection,
+):
     cond: list[ColumnElement[bool]] = [KoRelation.org_id == org_id]
     if relation_types:
         cond.append(KoRelation.relation_type.in_(list(relation_types)))
@@ -48,11 +57,17 @@ def _edge_cte(org_id: str, relation_types: Sequence[str] | None):
     forward = select(
         KoRelation.from_ko_id.label("src"),
         KoRelation.to_ko_id.label("dst"),
+        KoRelation.relation_type.label("relation_type"),
     ).where(where)
     reverse = select(
         KoRelation.to_ko_id.label("src"),
         KoRelation.from_ko_id.label("dst"),
+        KoRelation.relation_type.label("relation_type"),
     ).where(where)
+    if direction == "out":
+        return forward.cte("edges")
+    if direction == "in":
+        return reverse.cte("edges")
     return union_all(forward, reverse).cte("edges")
 
 
@@ -65,14 +80,17 @@ async def traverse_ko_relations(
     limit: int = 40,
     kb_ids: Sequence[str] = (),
     relation_types: Sequence[str] | None = None,
+    direction: GraphDirection = "both",
 ) -> list[GraphNeighbor]:
     """Return distinct published KO neighbours within `max_hops` (excluding seeds)."""
     seeds = list(dict.fromkeys(kid for kid in seed_ko_ids if kid))
     if not seeds or max_hops < 1 or limit < 1:
         return []
+    if direction not in ("out", "in", "both"):
+        direction = "both"
 
     seed_cte = _seed_cte(seeds)
-    edge_cte = _edge_cte(org_id, relation_types)
+    edge_cte = _edge_cte(org_id, relation_types, direction)
 
     # path is ",id1,id2," so LIKE '%,id,%' detects cycles on both SQLite and PG.
     walk = select(
@@ -106,6 +124,7 @@ async def traverse_ko_relations(
             walk.c.ko_id,
             walk.c.seed_id,
             walk.c.hops,
+            walk.c.path,
             func.row_number()
             .over(partition_by=walk.c.ko_id, order_by=(walk.c.hops, walk.c.seed_id))
             .label("rn"),
@@ -114,7 +133,9 @@ async def traverse_ko_relations(
         .cte("hop_rank")
     )
     best = (
-        select(hop_rank.c.ko_id, hop_rank.c.seed_id, hop_rank.c.hops)
+        select(
+            hop_rank.c.ko_id, hop_rank.c.seed_id, hop_rank.c.hops, hop_rank.c.path
+        )
         .where(hop_rank.c.rn == 1)
         .cte("best")
     )
@@ -132,6 +153,7 @@ async def traverse_ko_relations(
             best.c.ko_id,
             best.c.hops,
             best.c.seed_id,
+            best.c.path,
             KoEntry.id.label("entry_id"),
         )
         .join(KnowledgeObject, KnowledgeObject.id == best.c.ko_id)
@@ -154,6 +176,7 @@ async def traverse_ko_relations(
             hops=int(r.hops),
             entry_id=str(r.entry_id),
             seed_ko_id=str(r.seed_id),
+            path=str(r.path or ""),
         )
         for r in rows
     ]
@@ -191,6 +214,7 @@ class GraphRetriever:
         if not cfg.enabled or not seed_ko_ids:
             return RouteResult(route=Route.GRAPH, hits=[], took_ms=_ms(start), info={"seeds": 0})
 
+        direction: GraphDirection = cfg.direction if cfg.direction in ("out", "in", "both") else "both"
         neighbors = await traverse_ko_relations(
             self.session,
             flt.acl.org_id,
@@ -199,6 +223,7 @@ class GraphRetriever:
             limit=cfg.top_k,
             kb_ids=flt.acl.kb_ids,
             relation_types=cfg.relation_types or None,
+            direction=direction,
         )
         if not neighbors:
             return RouteResult(
@@ -224,6 +249,7 @@ class GraphRetriever:
                         "is_ko": True,
                         "hops": n.hops,
                         "seed_ko_id": n.seed_ko_id,
+                        "path": n.path,
                     },
                 )
             )
@@ -239,6 +265,7 @@ class GraphRetriever:
                 "raw": len(neighbors),
                 "kept": len(hits),
                 "max_hops": cfg.max_hops,
+                "direction": direction,
                 "dropped_acl": sum(1 for n in neighbors if n.ko_id not in allowed),
             },
         )

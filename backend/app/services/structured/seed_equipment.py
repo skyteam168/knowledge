@@ -21,23 +21,33 @@ from app.models import (
     KoType,
     KoVersion,
     KoVersionStatus,
+    ObjectRelation,
+    ObjectRelationType,
+    StructuredDomain,
+    StructuredDomainKind,
     StructuredEntityLink,
     StructuredObjectType,
+    StructuredRecord,
     StructuredSource,
     StructuredSourceType,
+)
+from app.models.base import new_id
+from app.models.terminology import (
     TerminologyAlias,
     TerminologyEntity,
     TerminologyEntityType,
     TerminologyLang,
     TerminologyStatus,
 )
-from app.models.base import new_id
 from app.repositories.structured_repo import StructuredRepository
 from app.services.terminology.expander import normalize_alias
 
 SEED_SOURCE_NAME = "设备维保样例"
 SEED_KO_LOOM = "【种子】织机维保要点"
 SEED_KO_YARN = "【种子】断纱检修指引"
+SEED_EQ_EXTERNAL = "EQ-LOOM-01"
+SEED_FM_EXTERNAL = "FM-YARN-BREAK"
+SEED_COMPONENT_EXTERNAL = "CMP-FEED-ROLLER"
 
 
 async def _ensure_term(
@@ -431,4 +441,363 @@ async def seed_equipment(session: AsyncSession, org_id: str) -> dict[str, int]:
             ):
                 created["ko_links"] += 1
 
+        # Mitigates: disposition KO → symptom KO (inbound diagnosis walk).
+        if await _ensure_ko_relation(
+            session,
+            org_id,
+            yarn_ko.id,
+            loom_ko.id,
+            relation_type=KoRelationType.MITIGATES.value,
+        ):
+            created["ko_relations"] += 1
+
+    diag = await _seed_diagnosis_chain(
+        session, org_id, source=source, device_rows=device_rows, repo=repo
+    )
+    for key, value in diag.items():
+        created[key] = created.get(key, 0) + value
+
+    return created
+
+
+async def _ensure_record(
+    session: AsyncSession,
+    org_id: str,
+    *,
+    domain_id: str,
+    source_id: str,
+    object_type: str,
+    external_id: str,
+    title: str,
+    attrs: dict,
+) -> tuple[StructuredRecord, bool]:
+    existing = await session.scalar(
+        select(StructuredRecord).where(
+            StructuredRecord.org_id == org_id,
+            StructuredRecord.source_id == source_id,
+            StructuredRecord.object_type == object_type,
+            StructuredRecord.external_id == external_id,
+        )
+    )
+    if existing is not None:
+        return existing, False
+    from app.ontology.attributes import event_timeline_fields
+    from app.ontology.catalog import derive_parent_ref
+
+    parent_type, parent_ext = derive_parent_ref(object_type, attrs)
+    occurred_at = ended_at = event_type = None
+    if object_type == "event":
+        occurred_at, ended_at, event_type = event_timeline_fields(attrs)
+    row = StructuredRecord(
+        org_id=org_id,
+        domain_id=domain_id,
+        source_id=source_id,
+        object_type=object_type,
+        external_id=external_id,
+        title=title,
+        status="active",
+        parent_object_type=parent_type,
+        parent_external_id=parent_ext,
+        occurred_at=occurred_at,
+        ended_at=ended_at,
+        event_type=event_type,
+        attrs=attrs,
+    )
+    session.add(row)
+    await session.flush()
+    return row, True
+
+
+async def _ensure_object_relation(
+    session: AsyncSession,
+    org_id: str,
+    *,
+    relation_type: str,
+    from_kind: str,
+    from_id: str,
+    from_object_type: str,
+    to_kind: str,
+    to_id: str,
+    to_object_type: str,
+) -> bool:
+    existing = await session.scalar(
+        select(ObjectRelation).where(
+            ObjectRelation.org_id == org_id,
+            ObjectRelation.relation_type == relation_type,
+            ObjectRelation.from_kind == from_kind,
+            ObjectRelation.from_id == from_id,
+            ObjectRelation.from_object_type == from_object_type,
+            ObjectRelation.to_kind == to_kind,
+            ObjectRelation.to_id == to_id,
+            ObjectRelation.to_object_type == to_object_type,
+        )
+    )
+    if existing is not None:
+        return False
+    session.add(
+        ObjectRelation(
+            id=new_id(),
+            org_id=org_id,
+            relation_type=relation_type,
+            from_kind=from_kind,
+            from_id=from_id,
+            from_object_type=from_object_type,
+            to_kind=to_kind,
+            to_id=to_id,
+            to_object_type=to_object_type,
+        )
+    )
+    await session.flush()
+    return True
+
+
+async def _seed_diagnosis_chain(
+    session: AsyncSession,
+    org_id: str,
+    *,
+    source: StructuredSource,
+    device_rows: dict[str, EquipDevice],
+    repo: StructuredRepository,
+) -> dict[str, int]:
+    """ISA-95 + FMEA demo chain for EQ-LOOM-01 (O5.1)."""
+    created = {
+        "industrial_records": 0,
+        "object_relations": 0,
+    }
+    domain = await session.scalar(
+        select(StructuredDomain).where(
+            StructuredDomain.org_id == org_id,
+            StructuredDomain.code == "equipment",
+        )
+    )
+    if domain is None:
+        domain = StructuredDomain(
+            org_id=org_id,
+            code="equipment",
+            name="设备维保",
+            kind=StructuredDomainKind.EQUIPMENT.value,
+            description="设备 / 工单 / 备件专用表",
+            enabled=True,
+        )
+        session.add(domain)
+        await session.flush()
+
+    site, new = await _ensure_record(
+        session,
+        org_id,
+        domain_id=domain.id,
+        source_id=source.id,
+        object_type="site",
+        external_id="SITE-DEMO",
+        title="演示工厂",
+        attrs={"code": "DEMO"},
+    )
+    created["industrial_records"] += int(new)
+    area, new = await _ensure_record(
+        session,
+        org_id,
+        domain_id=domain.id,
+        source_id=source.id,
+        object_type="area",
+        external_id="AREA-WEAVE-A",
+        title="织造车间A",
+        attrs={"code": "WA", "site_external_id": "SITE-DEMO"},
+    )
+    created["industrial_records"] += int(new)
+    line, new = await _ensure_record(
+        session,
+        org_id,
+        domain_id=domain.id,
+        source_id=source.id,
+        object_type="line",
+        external_id="LINE-LOOM-1",
+        title="飞织一线",
+        attrs={
+            "code": "L1",
+            "area_external_id": "AREA-WEAVE-A",
+            "site_external_id": "SITE-DEMO",
+        },
+    )
+    created["industrial_records"] += int(new)
+    equip, new = await _ensure_record(
+        session,
+        org_id,
+        domain_id=domain.id,
+        source_id=source.id,
+        object_type="equipment",
+        external_id=SEED_EQ_EXTERNAL,
+        title="1号飞织机（层级）",
+        attrs={
+            "model": "FK-Loom",
+            "line_external_id": "LINE-LOOM-1",
+            "rated_power": {"value": 7.5, "unit": "kW"},
+        },
+    )
+    created["industrial_records"] += int(new)
+    component, new = await _ensure_record(
+        session,
+        org_id,
+        domain_id=domain.id,
+        source_id=source.id,
+        object_type="component",
+        external_id=SEED_COMPONENT_EXTERNAL,
+        title="送纱轮",
+        attrs={
+            "equipment_external_id": SEED_EQ_EXTERNAL,
+            "part_number": "FR-01",
+            "position": "纱架侧",
+        },
+    )
+    created["industrial_records"] += int(new)
+    fm, new = await _ensure_record(
+        session,
+        org_id,
+        domain_id=domain.id,
+        source_id=source.id,
+        object_type="failure_mode",
+        external_id=SEED_FM_EXTERNAL,
+        title="断纱",
+        attrs={
+            "equipment_external_id": SEED_EQ_EXTERNAL,
+            "component_external_id": SEED_COMPONENT_EXTERNAL,
+            "code": SEED_FM_EXTERNAL,
+            "severity": 8,
+        },
+    )
+    created["industrial_records"] += int(new)
+
+    # S2: fixed-window downtime / alarm events for EQ-LOOM-01 (2026-11-17..24 UTC).
+    for ext, title, attrs in (
+        (
+            "EVT-DT-01",
+            "断纱停机",
+            {
+                "equipment_external_id": SEED_EQ_EXTERNAL,
+                "event_type": "downtime",
+                "occurred_at": "2026-11-18T08:15:00+00:00",
+                "ended_at": "2026-11-18T09:40:00+00:00",
+                "severity": "high",
+                "message": "送纱轮卡滞导致断纱停机",
+            },
+        ),
+        (
+            "EVT-DT-02",
+            "换纱停机",
+            {
+                "equipment_external_id": SEED_EQ_EXTERNAL,
+                "event_type": "downtime",
+                "occurred_at": "2026-11-20T14:00:00+00:00",
+                "ended_at": "2026-11-20T14:25:00+00:00",
+                "severity": "medium",
+                "message": "计划换纱",
+            },
+        ),
+        (
+            "EVT-AL-01",
+            "张力报警",
+            {
+                "equipment_external_id": SEED_EQ_EXTERNAL,
+                "event_type": "alarm",
+                "occurred_at": "2026-11-19T11:05:00+00:00",
+                "severity": "low",
+                "message": "纱线张力偏低",
+            },
+        ),
+    ):
+        _, new = await _ensure_record(
+            session,
+            org_id,
+            domain_id=domain.id,
+            source_id=source.id,
+            object_type="event",
+            external_id=ext,
+            title=title,
+            attrs=attrs,
+        )
+        created["industrial_records"] += int(new)
+
+    edges = [
+        (
+            ObjectRelationType.HAS_PART.value,
+            "structured",
+            equip.id,
+            "equipment",
+            "structured",
+            component.id,
+            "component",
+        ),
+        (
+            ObjectRelationType.HAS_FAILURE_MODE.value,
+            "structured",
+            equip.id,
+            "equipment",
+            "structured",
+            fm.id,
+            "failure_mode",
+        ),
+        (
+            ObjectRelationType.CAUSED_BY.value,
+            "structured",
+            fm.id,
+            "failure_mode",
+            "structured",
+            component.id,
+            "component",
+        ),
+        (
+            ObjectRelationType.LOCATED_IN.value,
+            "structured",
+            equip.id,
+            "equipment",
+            "structured",
+            line.id,
+            "line",
+        ),
+    ]
+    device = device_rows.get(SEED_EQ_EXTERNAL)
+    wo = await repo.get_work_order_by_external(org_id, "WO-2026-001", source_id=source.id)
+    spare = await repo.get_spare_part_by_external(
+        org_id, "SP-NEEDLE-08", source_id=source.id
+    )
+    if device is not None and wo is not None:
+        edges.append(
+            (
+                ObjectRelationType.WORK_ORDER_FOR.value,
+                "structured",
+                wo.id,
+                "work_order",
+                "structured",
+                device.id,
+                "device",
+            )
+        )
+    if device is not None and spare is not None:
+        edges.append(
+            (
+                ObjectRelationType.SPARE_FOR.value,
+                "structured",
+                spare.id,
+                "spare_part",
+                "structured",
+                device.id,
+                "device",
+            )
+        )
+
+    for rel, fk, fid, fot, tk, tid, tot in edges:
+        if await _ensure_object_relation(
+            session,
+            org_id,
+            relation_type=rel,
+            from_kind=fk,
+            from_id=fid,
+            from_object_type=fot,
+            to_kind=tk,
+            to_id=tid,
+            to_object_type=tot,
+        ):
+            created["object_relations"] += 1
+
+    # silence unused site/area for lint — they establish hierarchy parents
+    _ = (site, area)
     return created

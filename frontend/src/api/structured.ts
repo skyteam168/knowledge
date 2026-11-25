@@ -1,14 +1,19 @@
-import { del, get, post } from './http'
+import { del, get, post, put } from './http'
 import type {
+  AclEntry,
   EquipDevice,
   EquipSparePart,
   EquipWorkOrder,
+  ObjectRelation,
+  ObjectRelationCreate,
   Page,
   PageParams,
+  StructuredAttrSchema,
   StructuredDomain,
   StructuredDomainCreate,
   StructuredLink,
   StructuredLinkCreate,
+  StructuredObjectAcl,
   StructuredRecord,
   StructuredRecordCreate,
   StructuredResolve,
@@ -24,9 +29,13 @@ export const listStructuredSources = () => get<StructuredSource[]>(`${BASE}/sour
 export const createStructuredSource = (body: StructuredSourceCreate) =>
   post<StructuredSource>(`${BASE}/sources`, body)
 
-export const syncStructuredSource = (sourceId: string, dryRun = false) =>
+export const syncStructuredSource = (
+  sourceId: string,
+  dryRun = false,
+  forceFull = false,
+) =>
   post<StructuredSyncResult>(`${BASE}/sources/${sourceId}/sync`, undefined, {
-    params: { dry_run: dryRun },
+    params: { dry_run: dryRun, force_full: forceFull },
   })
 
 export const listStructuredDomains = () => get<StructuredDomain[]>(`${BASE}/domains`)
@@ -71,3 +80,39 @@ export const resolveStructured = (params: {
   external_id: string
   source_id?: string
 }) => get<StructuredResolve>(`${BASE}/resolve`, { params })
+
+export const listStructuredAttrSchemas = () =>
+  get<StructuredAttrSchema[]>(`${BASE}/attribute-schemas`)
+
+export const getStructuredAttrSchema = (objectType: string) =>
+  get<StructuredAttrSchema>(`${BASE}/attribute-schemas/${encodeURIComponent(objectType)}`)
+
+export const listObjectRelations = (params?: {
+  relation_type?: string
+  from_kind?: string
+  from_id?: string
+  to_kind?: string
+  to_id?: string
+  limit?: number
+}) => get<ObjectRelation[]>(`${BASE}/object-relations`, { params })
+
+export const createObjectRelation = (body: ObjectRelationCreate) =>
+  post<ObjectRelation>(`${BASE}/object-relations`, body)
+
+export const deleteObjectRelation = (relationId: string) =>
+  del<void>(`${BASE}/object-relations/${relationId}`)
+
+export const getStructuredObjectAcl = (objectType: string, objectId: string) =>
+  get<StructuredObjectAcl>(
+    `${BASE}/objects/${encodeURIComponent(objectType)}/${encodeURIComponent(objectId)}/acl`,
+  )
+
+export const setStructuredObjectAcl = (
+  objectType: string,
+  objectId: string,
+  entries: AclEntry[],
+) =>
+  put<StructuredObjectAcl>(
+    `${BASE}/objects/${encodeURIComponent(objectType)}/${encodeURIComponent(objectId)}/acl`,
+    { entries },
+  )

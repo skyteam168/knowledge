@@ -108,6 +108,12 @@ const adminChildren: (RouteRecordRaw & MenuRoute)[] = [
     meta: { title: 'route.adminStructured', icon: 'SetUp', permission: 'admin:retrieval' },
   },
   {
+    path: '/admin/ontology',
+    name: 'admin-ontology',
+    component: () => import('@/views/admin/OntologyStudioView.vue'),
+    meta: { title: 'route.adminOntology', icon: 'Share', permission: 'admin:retrieval' },
+  },
+  {
     path: '/admin/indexing',
     name: 'admin-indexing',
     component: () => import('@/views/admin/IndexingView.vue'),

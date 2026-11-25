@@ -10,6 +10,14 @@ export default {
         label: '概念/图',
         desc: 'POST /open/entity/read 与 /open/graph/traverse，读取术语/外部编号与 KO 关系图',
       },
+      on_behalf: {
+        label: '代用户',
+        desc: '请求头 X-On-Behalf-Of 切换为终端用户身份；须在绑定部门/组/角色范围内',
+      },
+      action: {
+        label: 'Action',
+        desc: 'GET/POST /open/actions* 与 MCP list_actions / invoke_action；高风险须审批',
+      },
     },
     principals: {
       dept: '部门',
@@ -187,6 +195,7 @@ export default {
         chat: '问答（流式 SSE）',
         mcp: 'MCP 客户端配置',
         entity: '概念读 / 图遍历',
+        on_behalf: '代用户（X-On-Behalf-Of）',
       },
       sampleRetrieveQuery: '差旅住宿标准是多少？',
       sampleChatQuestion: '年假怎么申请？',
@@ -206,6 +215,14 @@ export default {
       entity: {
         label: 'Entity / graph',
         desc: 'POST /open/entity/read and /open/graph/traverse for terminology, external IDs, and KO relations',
+      },
+      on_behalf: {
+        label: 'On behalf of',
+        desc: 'Header X-On-Behalf-Of switches to an end-user identity within the client’s bound principals',
+      },
+      action: {
+        label: 'Action',
+        desc: 'GET/POST /open/actions* and MCP list_actions / invoke_action; high-risk needs approval',
       },
     },
     principals: {
@@ -391,6 +408,7 @@ export default {
         chat: 'Chat (streaming SSE)',
         mcp: 'MCP client config',
         entity: 'Entity read / graph traverse',
+        on_behalf: 'On behalf of (X-On-Behalf-Of)',
       },
       sampleRetrieveQuery: 'What is the travel accommodation standard?',
       sampleChatQuestion: 'How do I apply for annual leave?',
@@ -410,6 +428,14 @@ export default {
       entity: {
         label: 'Thực thể / đồ thị',
         desc: 'POST /open/entity/read và /open/graph/traverse cho thuật ngữ, ID ngoài và quan hệ KO',
+      },
+      on_behalf: {
+        label: 'Thay mặt người dùng',
+        desc: 'Header X-On-Behalf-Of chuyển sang danh tính người dùng cuối trong phạm vi principal của client',
+      },
+      action: {
+        label: 'Action',
+        desc: 'GET/POST /open/actions* và MCP list_actions / invoke_action; rủi ro cao cần phê duyệt',
       },
     },
     principals: {
@@ -593,6 +619,7 @@ export default {
         chat: 'Hội thoại (luồng SSE)',
         mcp: 'Cấu hình client MCP',
         entity: 'Đọc thực thể / duyệt đồ thị',
+        on_behalf: 'Thay mặt người dùng (X-On-Behalf-Of)',
       },
       sampleRetrieveQuery: 'Tiêu chuẩn lưu trú công tác là gì?',
       sampleChatQuestion: 'Làm sao đăng ký nghỉ phép năm?',

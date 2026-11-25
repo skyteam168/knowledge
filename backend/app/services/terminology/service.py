@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 from pathlib import Path
 
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,6 +12,8 @@ from app.models import (
     TerminologyEntity,
     TerminologyEntityType,
     TerminologyLang,
+    TerminologyRelation,
+    TerminologyRelationKind,
     TerminologyStatus,
 )
 from app.repositories.terminology_repo import TerminologyRepository
@@ -24,6 +27,8 @@ from app.schemas.terminology import (
     TerminologyEntityOut,
     TerminologyEntityUpdate,
     TerminologyNeighborhoodOut,
+    TerminologyRelationCreate,
+    TerminologyRelationOut,
     TerminologySynonymsSyncOut,
 )
 from app.services.authz.cache import AuthzCache
@@ -44,6 +49,8 @@ RESOURCE_ALIAS = "terminology_alias"
 _ENTITY_TYPES = {t.value for t in TerminologyEntityType}
 _STATUSES = {s.value for s in TerminologyStatus}
 _LANGS = {lang.value for lang in TerminologyLang}
+_RELATION_KINDS = {k.value for k in TerminologyRelationKind}
+RESOURCE_RELATION = "terminology_relation"
 
 
 class TerminologyService(BaseService):
@@ -127,6 +134,90 @@ class TerminologyService(BaseService):
         if lang not in _LANGS:
             raise ValidationAppError("Unknown lang", detail={"allowed": sorted(_LANGS)})
         return lang
+
+    async def add_relation(
+        self, data: TerminologyRelationCreate
+    ) -> TerminologyRelationOut:
+        kind = data.kind.strip().lower()
+        if kind not in _RELATION_KINDS:
+            raise ValidationAppError(
+                "Invalid terminology relation kind",
+                detail={"allowed": sorted(_RELATION_KINDS)},
+            )
+        from_id = data.from_id.strip()
+        to_id = data.to_id.strip()
+        if from_id == to_id:
+            raise ValidationAppError("Self-loop terminology relations are not allowed")
+        for eid, side in ((from_id, "from"), (to_id, "to")):
+            entity = await self.repo.get_entity(self.org_id, eid)
+            if entity is None:
+                raise NotFoundError(f"{side} terminology entity not found")
+        existing = await self.session.scalar(
+            select(TerminologyRelation).where(
+                TerminologyRelation.org_id == self.org_id,
+                TerminologyRelation.from_id == from_id,
+                TerminologyRelation.to_id == to_id,
+                TerminologyRelation.kind == kind,
+            )
+        )
+        if existing is not None:
+            raise ConflictError("Terminology relation already exists")
+        row = TerminologyRelation(
+            org_id=self.org_id,
+            from_id=from_id,
+            to_id=to_id,
+            kind=kind,
+            created_by=self.ctx.user.id,
+        )
+        self.session.add(row)
+        await self.session.flush()
+        await self.audit.record(
+            self.audit_ctx,
+            "terminology.relation.create",
+            RESOURCE_RELATION,
+            row.id,
+            None,
+            {"from_id": from_id, "to_id": to_id, "kind": kind},
+        )
+        return TerminologyRelationOut(
+            id=row.id,
+            from_id=row.from_id,
+            to_id=row.to_id,
+            kind=row.kind,
+            created_by=row.created_by,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
+
+    async def list_relations(
+        self, entity_id: str
+    ) -> list[TerminologyRelationOut]:
+        entity = await self.repo.get_entity(self.org_id, entity_id)
+        if entity is None:
+            raise NotFoundError("Terminology entity not found")
+        rows = await self.session.scalars(
+            select(TerminologyRelation)
+            .where(
+                TerminologyRelation.org_id == self.org_id,
+                or_(
+                    TerminologyRelation.from_id == entity_id,
+                    TerminologyRelation.to_id == entity_id,
+                ),
+            )
+            .order_by(TerminologyRelation.kind, TerminologyRelation.id)
+        )
+        return [
+            TerminologyRelationOut(
+                id=r.id,
+                from_id=r.from_id,
+                to_id=r.to_id,
+                kind=r.kind,
+                created_by=r.created_by,
+                created_at=r.created_at,
+                updated_at=r.updated_at,
+            )
+            for r in rows
+        ]
 
     async def create_entity(self, data: TerminologyEntityCreate) -> TerminologyEntityOut:
         entity = TerminologyEntity(

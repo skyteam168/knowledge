@@ -12,6 +12,8 @@ from app.api.deps import (
 )
 from app.schemas.common import Page
 from app.schemas.terminology import (
+    TerminologyRelationCreate,
+    TerminologyRelationOut,
     TerminologyAliasCreate,
     TerminologyAliasOut,
     TerminologyEntityCreate,
@@ -65,6 +67,27 @@ async def entity_neighborhood(
     entity_id: str, service: ServiceDep
 ) -> TerminologyNeighborhoodOut:
     return await service.neighborhood(entity_id)
+
+
+@router.get(
+    "/entities/{entity_id}/relations",
+    response_model=list[TerminologyRelationOut],
+)
+async def list_entity_relations(
+    entity_id: str, service: ServiceDep
+) -> list[TerminologyRelationOut]:
+    return await service.list_relations(entity_id)
+
+
+@router.post(
+    "/relations",
+    response_model=TerminologyRelationOut,
+    status_code=201,
+)
+async def add_terminology_relation(
+    data: TerminologyRelationCreate, service: ServiceDep
+) -> TerminologyRelationOut:
+    return await service.add_relation(data)
 
 
 @router.post("/entities", response_model=TerminologyEntityOut, status_code=201)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,14 +29,29 @@ from app.schemas.structured import (
     StructuredDomainOut,
     StructuredLinkCreate,
     StructuredLinkOut,
+    StructuredObjectAclOut,
+    StructuredObjectAclUpdate,
     StructuredRecordCreate,
     StructuredRecordOut,
     StructuredResolveOut,
     StructuredSourceCreate,
     StructuredSourceOut,
 )
+from app.ontology.attributes import (
+    event_timeline_fields,
+    schema_catalog_payload,
+    schema_for,
+    validate_attrs,
+)
+from app.ontology.catalog import (
+    EQUIP_TABLE_OBJECT_TYPES,
+    INDUSTRIAL_RECORD_OBJECT_TYPES,
+    derive_parent_ref,
+)
 from app.services.authz.cache import AuthzCache
 from app.services.context import BaseService, RequestContext
+from app.services.knowledge.directory import PrincipalDirectory
+from app.services.structured.access import RESOURCE_STRUCTURED, StructuredAccess
 
 RESOURCE_SOURCE = "structured_source"
 RESOURCE_DOMAIN = "structured_domain"
@@ -43,7 +59,8 @@ RESOURCE_RECORD = "structured_record"
 RESOURCE_LINK = "structured_entity_link"
 
 _SOURCE_TYPES = {t.value for t in StructuredSourceType}
-_EQUIP_OBJECT_TYPES = {t.value for t in StructuredObjectType}
+# Only kinds with dedicated equip_* tables are reserved; ISA-95 kinds use structured_records until O1.3.
+_EQUIP_OBJECT_TYPES = set(EQUIP_TABLE_OBJECT_TYPES)
 
 _DEFAULT_DOMAINS: tuple[tuple[str, str, str, str | None], ...] = (
     ("equipment", "设备维保", StructuredDomainKind.EQUIPMENT.value, "设备 / 工单 / 备件专用表"),
@@ -61,6 +78,7 @@ class StructuredService(BaseService):
         self, session: AsyncSession, ctx: RequestContext, authz_cache: AuthzCache
     ) -> None:
         super().__init__(session, ctx, authz_cache)
+        self.object_acl = StructuredAccess(session)
         self.repo = StructuredRepository(session)
 
     # ---- sources ------------------------------------------------------------------
@@ -109,7 +127,7 @@ class StructuredService(BaseService):
         return self._source_out(row)
 
     async def sync_source(
-        self, source_id: str, *, dry_run: bool = False
+        self, source_id: str, *, dry_run: bool = False, force_full: bool = False
     ) -> dict[str, Any]:
         from app.services.structured.sync import StructuredSyncExecutor
 
@@ -117,6 +135,7 @@ class StructuredService(BaseService):
             self.org_id,
             source_id,
             dry_run=dry_run,
+            force_full=force_full,
             triggered_by=self.ctx.user.id,
         )
         await self.audit.record(
@@ -129,6 +148,8 @@ class StructuredService(BaseService):
                 "status": result.get("status"),
                 "connector": result.get("connector"),
                 "dry_run": dry_run,
+                "force_full": force_full,
+                "mode": result.get("mode"),
                 "stats": result.get("stats"),
             },
         )
@@ -216,6 +237,11 @@ class StructuredService(BaseService):
             external_id=row.external_id,
             title=row.title,
             status=row.status,
+            parent_object_type=row.parent_object_type,
+            parent_external_id=row.parent_external_id,
+            occurred_at=row.occurred_at,
+            ended_at=row.ended_at,
+            event_type=row.event_type,
             attrs=dict(row.attrs or {}),
             created_by=row.created_by,
             created_at=row.created_at,
@@ -254,10 +280,6 @@ class StructuredService(BaseService):
         domain = await self.repo.get_domain(self.org_id, data.domain_id)
         if domain is None:
             raise NotFoundError("Domain not found")
-        if domain.kind != StructuredDomainKind.GENERIC.value:
-            raise ValidationAppError("Cannot add generic records to equipment domain")
-        if await self.repo.get_source(self.org_id, data.source_id) is None:
-            raise NotFoundError("Source not found")
         object_type = data.object_type.strip().lower()
         if not _OBJECT_TYPE_RE.match(object_type):
             raise ValidationAppError(
@@ -269,12 +291,36 @@ class StructuredService(BaseService):
                 "Reserved object_type for equipment tables",
                 detail={"reserved": sorted(_EQUIP_OBJECT_TYPES)},
             )
+        industrial = object_type in INDUSTRIAL_RECORD_OBJECT_TYPES
+        if domain.kind == StructuredDomainKind.EQUIPMENT.value and not industrial:
+            raise ValidationAppError(
+                "Only industrial object types may be added to the equipment domain",
+                detail={"allowed": sorted(INDUSTRIAL_RECORD_OBJECT_TYPES)},
+            )
+        if (
+            domain.kind != StructuredDomainKind.GENERIC.value
+            and domain.kind != StructuredDomainKind.EQUIPMENT.value
+        ):
+            raise ValidationAppError("Unsupported domain kind for records")
+        if await self.repo.get_source(self.org_id, data.source_id) is None:
+            raise NotFoundError("Source not found")
+        attrs = dict(data.attrs or {})
+        self._require_valid_attrs(object_type, attrs)
+        parent_type = (data.parent_object_type or "").strip().lower() or None
+        parent_ext = (data.parent_external_id or "").strip() or None
+        if parent_type is None and parent_ext is None:
+            parent_type, parent_ext = derive_parent_ref(object_type, attrs)
+        elif (parent_type is None) ^ (parent_ext is None):
+            raise ValidationAppError(
+                "parent_object_type and parent_external_id must be set together"
+            )
         external_id = data.external_id.strip()
         existing = await self.repo.get_record_by_external(
             self.org_id, object_type, external_id, source_id=data.source_id
         )
         if existing is not None:
             raise ConflictError("Record already exists for this source/type/external_id")
+        occurred_at, ended_at, event_type = self._timeline_denorm(object_type, attrs)
         row = StructuredRecord(
             org_id=self.org_id,
             domain_id=data.domain_id,
@@ -283,7 +329,12 @@ class StructuredService(BaseService):
             external_id=external_id,
             title=data.title.strip(),
             status=data.status.strip() or "active",
-            attrs=dict(data.attrs or {}),
+            parent_object_type=parent_type,
+            parent_external_id=parent_ext,
+            occurred_at=occurred_at,
+            ended_at=ended_at,
+            event_type=event_type,
+            attrs=attrs,
             created_by=self.ctx.user.id,
         )
         self.repo.add_record(row)
@@ -524,3 +575,139 @@ class StructuredService(BaseService):
             status=status,
             links=links,
         )
+
+    async def _require_object_row(self, object_type: str, object_id: str) -> None:
+        object_type = object_type.strip().lower()
+        if object_type in _EQUIP_OBJECT_TYPES:
+            if object_type == "device":
+                row = await self.repo.get_device(self.org_id, object_id)
+            elif object_type == "work_order":
+                row = await self.repo.get_work_order(self.org_id, object_id)
+            else:
+                row = await self.repo.get_spare_part(self.org_id, object_id)
+            if row is None:
+                raise NotFoundError("Structured object not found")
+            return
+        rec = await self.repo.get_record(self.org_id, object_id)
+        if rec is None or rec.object_type != object_type:
+            raise NotFoundError("Structured object not found")
+
+    async def get_object_acl(
+        self, object_type: str, object_id: str
+    ) -> StructuredObjectAclOut:
+        await self._require_object_row(object_type, object_id)
+        rows = await self.object_acl.entries(self.org_id, object_id)
+        directory = PrincipalDirectory(self.session, self.org_id)
+        return StructuredObjectAclOut(
+            object_type=object_type.strip().lower(),
+            object_id=object_id,
+            entries=await directory.describe(
+                [
+                    (r.principal_type, r.principal_id, r.permission, r.effect or "allow")
+                    for r in rows
+                ]
+            ),
+        )
+
+    async def set_object_acl(
+        self, object_type: str, object_id: str, data: StructuredObjectAclUpdate
+    ) -> StructuredObjectAclOut:
+        await self._require_object_row(object_type, object_id)
+        directory = PrincipalDirectory(self.session, self.org_id)
+        validated = await directory.validate(list(data.entries))
+        before = [
+            {
+                "principal_type": r.principal_type,
+                "principal_id": r.principal_id,
+                "permission": r.permission,
+                "effect": r.effect,
+            }
+            for r in await self.object_acl.entries(self.org_id, object_id)
+        ]
+        await self.object_acl.replace_entries(
+            self.org_id,
+            object_id,
+            [
+                (e.principal_type, e.principal_id, e.permission, e.effect)
+                for e in validated
+            ],
+            self.ctx.user.id,
+        )
+        out = await self.get_object_acl(object_type, object_id)
+        await self.audit.record(
+            self.audit_ctx,
+            "structured_object.acl",
+            RESOURCE_STRUCTURED,
+            object_id,
+            {"entries": before},
+            {"object_type": object_type, "entries": [e.model_dump() for e in out.entries]},
+        )
+        return out
+
+    async def list_children(
+        self,
+        *,
+        parent_object_type: str,
+        parent_external_id: str,
+        object_type: str | None = None,
+        source_id: str | None = None,
+        limit: int = 200,
+    ) -> list[StructuredRecordOut]:
+        parent_object_type = parent_object_type.strip().lower()
+        parent_external_id = parent_external_id.strip()
+        if not parent_object_type or not parent_external_id:
+            raise ValidationAppError("parent_object_type and parent_external_id are required")
+        rows = await self.repo.list_records_by_parent(
+            self.org_id,
+            parent_object_type=parent_object_type,
+            parent_external_id=parent_external_id,
+            object_type=object_type.strip().lower() if object_type else None,
+            source_id=source_id,
+            limit=limit,
+        )
+        return [self._record_out(r) for r in rows]
+
+    def list_attribute_schemas(self) -> list[dict[str, Any]]:
+        return schema_catalog_payload()
+
+    def get_attribute_schema(self, object_type: str) -> dict[str, Any]:
+        object_type = object_type.strip().lower()
+        schema = schema_for(object_type)
+        if schema is None:
+            raise NotFoundError(
+                "No attribute schema for this object_type",
+                detail={"object_type": object_type},
+            )
+        for row in schema_catalog_payload():
+            if row["object_type"] == object_type:
+                return row
+        raise NotFoundError("No attribute schema for this object_type")
+
+    @staticmethod
+    def _require_valid_attrs(object_type: str, attrs: dict[str, Any]) -> None:
+        issues = validate_attrs(object_type, attrs, strict_unknown=True)
+        if not issues:
+            return
+        raise ValidationAppError(
+            "Structured attrs failed schema validation",
+            detail={
+                "object_type": object_type,
+                "issues": [
+                    {"code": i.code, "path": i.path, "message": i.message} for i in issues
+                ],
+            },
+        )
+
+    @staticmethod
+    def _timeline_denorm(
+        object_type: str, attrs: dict[str, Any]
+    ) -> tuple[datetime | None, datetime | None, str | None]:
+        if object_type != "event":
+            return None, None, None
+        try:
+            return event_timeline_fields(attrs)
+        except ValueError as exc:
+            raise ValidationAppError(
+                "Invalid event timeline timestamp",
+                detail={"message": str(exc)},
+            ) from exc

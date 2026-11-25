@@ -69,14 +69,59 @@ class RestConfig(BaseModel):
     paths: RestPaths = Field(default_factory=RestPaths)
 
 
+class MysqlConfig(BaseModel):
+    """MySQL / MariaDB table pull. Password via env — never commit secrets into meta."""
+
+    host: str = Field(min_length=1, max_length=255)
+    port: int = Field(default=3306, ge=1, le=65535)
+    database: str = Field(min_length=1, max_length=128)
+    user: str = Field(min_length=1, max_length=128)
+    password_env: str = Field(default="MES_MYSQL_PASSWORD", min_length=1, max_length=128)
+    """Environment variable holding the DB password."""
+    password: str | None = Field(default=None, max_length=256)
+    """Optional inline password for tests only; prefer password_env in production."""
+    table: str = Field(default="device_info", min_length=1, max_length=128)
+    charset: str = Field(default="utf8mb4", min_length=1, max_length=32)
+    connect_timeout_seconds: int = Field(default=10, ge=1, le=120)
+    row_limit: int = Field(default=20_000, ge=1, le=100_000)
+
+
+class IncrementalConfig(BaseModel):
+    """S1: cursor / watermark incremental pull (not full re-poll every time)."""
+
+    enabled: bool = False
+    """When true, fetch only rows newer than stored watermarks."""
+
+    field: str = Field(default="updated_at", min_length=1, max_length=64)
+    """Row / CSV column used as the change watermark."""
+
+    param: str = Field(default="updated_since", min_length=1, max_length=64)
+    """REST query parameter that receives the previous watermark."""
+
+
+class SyncCursor(BaseModel):
+    """Per-object-kind ISO watermarks persisted on ``StructuredSource.meta.sync_cursor``."""
+
+    watermarks: dict[str, str] = Field(default_factory=dict)
+    mode: Literal["updated_at"] = "updated_at"
+
+
+class FetchResult(BaseModel):
+    snapshot: EquipmentSnapshot
+    next_cursor: SyncCursor | None = None
+    mode: Literal["full", "incremental"] = "full"
+
+
 class StructuredConnectorConfig(BaseModel):
     """Parsed from ``StructuredSource.meta`` (connector keys only)."""
 
-    connector: Literal["csv", "rest"]
+    connector: Literal["csv", "rest", "mysql"]
     sync_interval_minutes: int = Field(default=0, ge=0, le=10080)
     csv: CsvPaths | None = None
     rest: RestConfig | None = None
+    mysql: MysqlConfig | None = None
     column_map: dict[str, dict[str, str]] = Field(default_factory=dict)
+    incremental: IncrementalConfig = Field(default_factory=IncrementalConfig)
 
     @model_validator(mode="after")
     def _require_connector_block(self) -> StructuredConnectorConfig:
@@ -88,6 +133,9 @@ class StructuredConnectorConfig(BaseModel):
         elif self.connector == "rest":
             if self.rest is None or not self.rest.base_url.strip():
                 raise ValueError("rest connector requires rest.base_url")
+        elif self.connector == "mysql":
+            if self.mysql is None:
+                raise ValueError("mysql connector requires mysql.{host,database,user,table}")
         return self
 
 
@@ -105,6 +153,33 @@ def parse_connector_config(meta: dict[str, Any] | None) -> StructuredConnectorCo
         ) from exc
 
 
+def parse_sync_cursor(meta: dict[str, Any] | None) -> SyncCursor | None:
+    raw = (meta or {}).get("sync_cursor")
+    if not isinstance(raw, dict):
+        return None
+    try:
+        return SyncCursor.model_validate(raw)
+    except Exception:
+        return None
+
+
+def advance_watermark(current: str | None, candidate: str | None) -> str | None:
+    """Return the later ISO timestamp; invalid candidates are ignored."""
+    if not candidate:
+        return current
+    try:
+        cand_dt = datetime.fromisoformat(candidate.replace("Z", "+00:00"))
+    except ValueError:
+        return current
+    if current is None:
+        return candidate
+    try:
+        cur_dt = datetime.fromisoformat(current.replace("Z", "+00:00"))
+    except ValueError:
+        return candidate
+    return candidate if cand_dt >= cur_dt else current
+
+
 class EquipmentConnector(ABC):
     """Pulls an equipment snapshot; never writes upstream."""
 
@@ -115,7 +190,12 @@ class EquipmentConnector(ABC):
         self.settings = settings
 
     @abstractmethod
-    async def fetch(self) -> EquipmentSnapshot: ...
+    async def fetch(
+        self,
+        *,
+        cursor: SyncCursor | None = None,
+        force_full: bool = False,
+    ) -> FetchResult: ...
 
 
 def build_connector(
@@ -132,4 +212,8 @@ def build_connector(
         from app.services.structured.connectors.rest import RestEquipmentConnector
 
         return RestEquipmentConnector(config, settings, transport=transport)
+    if config.connector == "mysql":
+        from app.services.structured.connectors.mysql import MysqlEquipmentConnector
+
+        return MysqlEquipmentConnector(config, settings)
     raise ValidationAppError(f"Unknown connector: {config.connector}")

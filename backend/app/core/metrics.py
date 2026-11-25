@@ -42,6 +42,11 @@ CACHE_LOOKUPS = Counter("ekb_cache_lookups_total", "Cache lookups", ["cache", "r
 RATE_LIMITED = Counter(
     "ekb_rate_limited_total", "Requests rejected by the rate limiter", ["scope", "bucket"]
 )
+ACTION_CALLS = Counter(
+    "ekb_ontology_actions_total",
+    "Ontology Action executions",
+    ["action_type", "outcome"],
+)
 TASKS = Counter(
     "ekb_worker_messages_total", "Worker messages processed", ["queue", "actor", "outcome"]
 )

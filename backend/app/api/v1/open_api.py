@@ -18,15 +18,29 @@ from app.llm.usage import FEATURE_OPEN_API, bind_usage_scope
 from app.models import ApiCallLog, ApiScope
 from app.retrieval.pipeline import RetrievalPipeline
 from app.schemas.open_api import (
+    OpenActionApproveIn,
+    OpenActionApproveOut,
+    OpenActionInvokeIn,
+    OpenActionInvokeOut,
+    OpenActionListOut,
     OpenChatIn,
     OpenChatOut,
     OpenEntityReadIn,
     OpenEntityReadOut,
+    OpenGetObjectIn,
+    OpenGetObjectOut,
     OpenGraphTraverseIn,
     OpenGraphTraverseOut,
     OpenKbOut,
+    OpenOntologyDescribeOut,
+    OpenAggregateObjectsIn,
+    OpenAggregateObjectsOut,
+    OpenQueryObjectsIn,
+    OpenQueryObjectsOut,
     OpenRetrieveIn,
     OpenRetrieveOut,
+    OpenTraverseIn,
+    OpenTraverseOut,
     OpenWhoAmIOut,
 )
 from app.services.audit_service import AuditContext
@@ -38,6 +52,7 @@ from app.services.open_api.auth import (
     build_caller,
     caller_user,
     enforce,
+    resolve_on_behalf_user,
     touch,
 )
 from app.services.open_api.mcp import PARSE_ERROR, McpServer
@@ -146,6 +161,7 @@ async def get_api_caller(
     sink: CallLogSinkDep,
     authorization: Annotated[str | None, Header()] = None,
     x_api_key: Annotated[str | None, Header()] = None,
+    x_on_behalf_of: Annotated[str | None, Header(alias="X-On-Behalf-Of")] = None,
 ) -> ApiCaller:
     started = time.perf_counter()
     ip = client_ip(request, settings)
@@ -153,7 +169,18 @@ async def get_api_caller(
         key, client = await authenticate(session, settings, _secret(authorization, x_api_key))
         try:
             await enforce(client, ip, resources.cache, settings)
-            user = await caller_user(session, client)
+            on_behalf_of: str | None = None
+            if x_on_behalf_of and x_on_behalf_of.strip():
+                user = await resolve_on_behalf_user(
+                    session,
+                    client,
+                    ref=x_on_behalf_of,
+                    cache=resources.cache,
+                    authz_ttl_seconds=settings.authz_cache_ttl_seconds,
+                )
+                on_behalf_of = user.id
+            else:
+                user = await caller_user(session, client)
         except AppError as exc:
             sink.append(
                 call_entry(
@@ -171,7 +198,9 @@ async def get_api_caller(
             raise
         if touch(key, client, ip):
             await session.commit()
-        caller = build_caller(key.id, client, user, settings)
+        caller = build_caller(
+            key.id, client, user, settings, on_behalf_of=on_behalf_of
+        )
     bind_usage_scope(org_id=caller.org_id, user_id=caller.user.id, feature=FEATURE_OPEN_API)
     request.state.current_user = caller.user
     request.state.api_ip = ip
@@ -279,6 +308,9 @@ async def whoami(
         kbs=kbs,
         rate_limit_per_minute=caller.rate_limit_per_minute,
         daily_quota=caller.daily_quota,
+        on_behalf_of=caller.on_behalf_of,
+        acting_user_id=caller.user.id,
+        acting_username=caller.user.username,
     )
 
 
@@ -442,6 +474,224 @@ async def graph_traverse(
         result_count=len(out.neighbors),
         document_ids=[out.seed.id, *[n.ko_id for n in out.neighbors]],
     )
+    return out
+
+
+@router.get("/ontology/describe", response_model=OpenOntologyDescribeOut)
+async def describe_ontology(
+    request: Request,
+    caller: CallerDep,
+    sink: CallLogSinkDep,
+    session: DbSessionDep,
+    cache: AuthzCacheDep,
+    resources: ResourcesDep,
+    settings: SettingsDep,
+    scope: str = "summary",
+    version: str = "published",
+) -> OpenOntologyDescribeOut:
+    call = _Call(request, caller, sink, settings, "ontology/describe")
+    try:
+        caller.require_scope(ApiScope.ENTITY)
+        out = await _service(
+            session, request, caller, cache, resources, settings
+        ).describe_ontology(scope=scope, version=version)
+    except Exception as exc:
+        await call.fail(exc, query="ontology")
+        raise
+    await call.log(200, query=f"ontology:{scope}", result_count=len(out.classes))
+    return out
+
+
+@router.get("/ontology/published", response_model=OpenOntologyDescribeOut)
+async def ontology_published(
+    request: Request,
+    caller: CallerDep,
+    sink: CallLogSinkDep,
+    session: DbSessionDep,
+    cache: AuthzCacheDep,
+    resources: ResourcesDep,
+    settings: SettingsDep,
+) -> OpenOntologyDescribeOut:
+    """Convenience: published semantics with attributes scope."""
+    call = _Call(request, caller, sink, settings, "ontology/published")
+    try:
+        caller.require_scope(ApiScope.ENTITY)
+        out = await _service(
+            session, request, caller, cache, resources, settings
+        ).describe_ontology(scope="all", version="published")
+    except Exception as exc:
+        await call.fail(exc, query="ontology/published")
+        raise
+    await call.log(200, query="ontology/published", result_count=len(out.classes))
+    return out
+
+
+@router.post("/objects/get", response_model=OpenGetObjectOut)
+async def get_object(
+    data: OpenGetObjectIn,
+    request: Request,
+    caller: CallerDep,
+    sink: CallLogSinkDep,
+    session: DbSessionDep,
+    cache: AuthzCacheDep,
+    resources: ResourcesDep,
+    settings: SettingsDep,
+) -> OpenGetObjectOut:
+    call = _Call(request, caller, sink, settings, "objects/get")
+    query = f"{data.object_type}:{data.object_id or data.external_id}"
+    try:
+        caller.require_scope(ApiScope.ENTITY)
+        out = await _service(
+            session, request, caller, cache, resources, settings
+        ).get_object(data)
+    except Exception as exc:
+        await call.fail(exc, query=query)
+        raise
+    await call.log(200, query=query, result_count=1 + len(out.neighbors))
+    return out
+
+
+@router.post("/objects/query", response_model=OpenQueryObjectsOut)
+async def query_objects(
+    data: OpenQueryObjectsIn,
+    request: Request,
+    caller: CallerDep,
+    sink: CallLogSinkDep,
+    session: DbSessionDep,
+    cache: AuthzCacheDep,
+    resources: ResourcesDep,
+    settings: SettingsDep,
+) -> OpenQueryObjectsOut:
+    call = _Call(request, caller, sink, settings, "objects/query")
+    try:
+        caller.require_scope(ApiScope.ENTITY)
+        out = await _service(
+            session, request, caller, cache, resources, settings
+        ).query_objects(data)
+    except Exception as exc:
+        await call.fail(exc, query=data.object_type)
+        raise
+    await call.log(200, query=data.object_type, result_count=len(out.items))
+    return out
+
+
+@router.post("/objects/aggregate", response_model=OpenAggregateObjectsOut)
+async def aggregate_objects(
+    data: OpenAggregateObjectsIn,
+    request: Request,
+    caller: CallerDep,
+    sink: CallLogSinkDep,
+    session: DbSessionDep,
+    cache: AuthzCacheDep,
+    resources: ResourcesDep,
+    settings: SettingsDep,
+) -> OpenAggregateObjectsOut:
+    call = _Call(request, caller, sink, settings, "objects/aggregate")
+    try:
+        caller.require_scope(ApiScope.ENTITY)
+        out = await _service(
+            session, request, caller, cache, resources, settings
+        ).aggregate_objects(data)
+    except Exception as exc:
+        await call.fail(exc, query=data.object_type)
+        raise
+    await call.log(200, query=data.object_type, result_count=out.value)
+    return out
+
+
+@router.post("/graph/walk", response_model=OpenTraverseOut)
+async def traverse(
+    data: OpenTraverseIn,
+    request: Request,
+    caller: CallerDep,
+    sink: CallLogSinkDep,
+    session: DbSessionDep,
+    cache: AuthzCacheDep,
+    resources: ResourcesDep,
+    settings: SettingsDep,
+) -> OpenTraverseOut:
+    call = _Call(request, caller, sink, settings, "graph/walk")
+    query = data.ko_id or data.object_id or ""
+    try:
+        caller.require_scope(ApiScope.ENTITY)
+        out = await _service(
+            session, request, caller, cache, resources, settings
+        ).traverse(data)
+    except Exception as exc:
+        await call.fail(exc, query=query, kb_ids=data.kb_ids)
+        raise
+    await call.log(200, query=query, kb_ids=data.kb_ids, result_count=len(out.neighbors))
+    return out
+
+
+@router.get("/actions", response_model=OpenActionListOut)
+async def list_actions(
+    request: Request,
+    caller: CallerDep,
+    sink: CallLogSinkDep,
+    session: DbSessionDep,
+    cache: AuthzCacheDep,
+    resources: ResourcesDep,
+    settings: SettingsDep,
+) -> OpenActionListOut:
+    call = _Call(request, caller, sink, settings, "actions/list")
+    try:
+        caller.require_scope(ApiScope.ACTION)
+        out = await _service(
+            session, request, caller, cache, resources, settings
+        ).list_actions()
+    except Exception as exc:
+        await call.fail(exc, query="actions")
+        raise
+    await call.log(200, query="actions", result_count=len(out.items))
+    return out
+
+
+@router.post("/actions/approve", response_model=OpenActionApproveOut)
+async def approve_action(
+    data: OpenActionApproveIn,
+    request: Request,
+    caller: CallerDep,
+    sink: CallLogSinkDep,
+    session: DbSessionDep,
+    cache: AuthzCacheDep,
+    resources: ResourcesDep,
+    settings: SettingsDep,
+) -> OpenActionApproveOut:
+    call = _Call(request, caller, sink, settings, "actions/approve")
+    try:
+        caller.require_scope(ApiScope.ACTION)
+        out = await _service(
+            session, request, caller, cache, resources, settings
+        ).approve_action(data)
+    except Exception as exc:
+        await call.fail(exc, query=data.action_type)
+        raise
+    await call.log(200, query=data.action_type, result_count=1)
+    return out
+
+
+@router.post("/actions/invoke", response_model=OpenActionInvokeOut)
+async def invoke_action(
+    data: OpenActionInvokeIn,
+    request: Request,
+    caller: CallerDep,
+    sink: CallLogSinkDep,
+    session: DbSessionDep,
+    cache: AuthzCacheDep,
+    resources: ResourcesDep,
+    settings: SettingsDep,
+) -> OpenActionInvokeOut:
+    call = _Call(request, caller, sink, settings, "actions/invoke")
+    try:
+        caller.require_scope(ApiScope.ACTION)
+        out = await _service(
+            session, request, caller, cache, resources, settings
+        ).invoke_action(data)
+    except Exception as exc:
+        await call.fail(exc, query=data.action_type)
+        raise
+    await call.log(200, query=data.action_type, result_count=1 if out.execution_id else 0)
     return out
 
 

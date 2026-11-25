@@ -1,4 +1,13 @@
 from app.models.acl import ResourceAcl
+from app.models.action import (
+    ActionApproval,
+    ActionExecution,
+    ActionExecutionStatus,
+    ActionRisk,
+    ActionType,
+    OntologyRule,
+    RuleVerdict,
+)
 from app.models.admin_agent import AgentRun, AgentRunStatus
 from app.models.analytics import ALL_KBS, AnalyticsDaily, AnalyticsDocCitation, AnalyticsTopQuestion
 from app.models.audit import AuditLog
@@ -43,6 +52,12 @@ from app.models.directory import (
     SyncMode,
     SyncStatus,
 )
+from app.models.entity_identity import (
+    CanonicalEntity,
+    CanonicalEntityStatus,
+    EntityIdentifier,
+)
+from app.models.entity_state_history import EntityStateHistory
 from app.models.evaluation import (
     EvalCase,
     EvalCaseSource,
@@ -94,10 +109,22 @@ from app.models.open_api import (
     ApiScope,
 )
 from app.models.retrieval import RetrievalProfile, RetrievalTrace
+from app.models.semantic import (
+    SemanticAttribute,
+    SemanticEntity,
+    SemanticItemStatus,
+    SemanticMapping,
+    SemanticModelStatus,
+    SemanticModelVersion,
+)
 from app.models.structured import (
     EquipDevice,
     EquipSparePart,
     EquipWorkOrder,
+    ObjectEndpointKind,
+    ObjectRelation,
+    ObjectRelationType,
+    RelationCardinality,
     StructuredDomain,
     StructuredDomainKind,
     StructuredEntityLink,
@@ -111,6 +138,8 @@ from app.models.terminology import (
     TerminologyEntity,
     TerminologyEntityType,
     TerminologyLang,
+    TerminologyRelation,
+    TerminologyRelationKind,
     TerminologyStatus,
 )
 from app.models.usage import NO_USER, AnalyticsLlmUsage, LlmUsage
@@ -121,8 +150,15 @@ __all__ = [
     "LOCAL_SOURCE",
     "NO_USER",
     "SERVICE_USER_PREFIX",
+    "ActionApproval",
+    "ActionExecution",
+    "ActionExecutionStatus",
+    "ActionRisk",
+    "ActionType",
     "AgentRun",
     "AgentRunStatus",
+    "OntologyRule",
+    "RuleVerdict",
     "AnalyticsDaily",
     "AnalyticsDocCitation",
     "AnalyticsLlmUsage",
@@ -135,7 +171,11 @@ __all__ = [
     "ApiScope",
     "AuditLog",
     "Base",
+    "CanonicalEntity",
+    "CanonicalEntityStatus",
     "ChatScene",
+    "EntityIdentifier",
+    "EntityStateHistory",
     "Chunk",
     "ChunkType",
     "Conversation",
@@ -156,6 +196,16 @@ __all__ = [
     "EvalDataset",
     "EvalResult",
     "EquipDevice",
+    "ObjectEndpointKind",
+    "ObjectRelation",
+    "ObjectRelationType",
+    "RelationCardinality",
+    "SemanticAttribute",
+    "SemanticEntity",
+    "SemanticItemStatus",
+    "SemanticMapping",
+    "SemanticModelStatus",
+    "SemanticModelVersion",
     "EquipSparePart",
     "EquipWorkOrder",
     "EvalRun",
@@ -222,6 +272,8 @@ __all__ = [
     "TerminologyEntity",
     "TerminologyEntityType",
     "TerminologyLang",
+    "TerminologyRelation",
+    "TerminologyRelationKind",
     "TerminologyStatus",
     "User",
     "UserDepartment",

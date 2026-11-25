@@ -8,10 +8,15 @@ from app.schemas.structured import (
     EquipDeviceOut,
     EquipSparePartOut,
     EquipWorkOrderOut,
+    ObjectRelationCreate,
+    ObjectRelationOut,
+    StructuredAttrSchemaOut,
     StructuredDomainCreate,
     StructuredDomainOut,
     StructuredLinkCreate,
     StructuredLinkOut,
+    StructuredObjectAclOut,
+    StructuredObjectAclUpdate,
     StructuredRecordCreate,
     StructuredRecordOut,
     StructuredResolveOut,
@@ -19,6 +24,7 @@ from app.schemas.structured import (
     StructuredSourceOut,
     StructuredSyncResult,
 )
+from app.services.structured.object_relations import ObjectRelationService
 from app.services.structured.service import StructuredService
 
 router = APIRouter(
@@ -35,6 +41,15 @@ def get_structured_service(
 
 
 ServiceDep = Annotated[StructuredService, Depends(get_structured_service)]
+
+
+def get_object_relation_service(
+    session: DbSessionDep, ctx: RequestContextDep, cache: AuthzCacheDep
+) -> ObjectRelationService:
+    return ObjectRelationService(session, ctx, cache)
+
+
+RelationServiceDep = Annotated[ObjectRelationService, Depends(get_object_relation_service)]
 
 
 @router.get("/sources", response_model=list[StructuredSourceOut])
@@ -54,8 +69,11 @@ async def sync_source(
     source_id: str,
     service: ServiceDep,
     dry_run: Annotated[bool, Query()] = False,
+    force_full: Annotated[bool, Query()] = False,
 ) -> StructuredSyncResult:
-    result = await service.sync_source(source_id, dry_run=dry_run)
+    result = await service.sync_source(
+        source_id, dry_run=dry_run, force_full=force_full
+    )
     return StructuredSyncResult.model_validate(result)
 
 
@@ -96,6 +114,24 @@ async def create_record(
     data: StructuredRecordCreate, service: ServiceDep
 ) -> StructuredRecordOut:
     return await service.create_record(data)
+
+
+@router.get("/records/children", response_model=list[StructuredRecordOut])
+async def list_record_children(
+    service: ServiceDep,
+    parent_object_type: Annotated[str, Query()],
+    parent_external_id: Annotated[str, Query()],
+    object_type: str | None = None,
+    source_id: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 200,
+) -> list[StructuredRecordOut]:
+    return await service.list_children(
+        parent_object_type=parent_object_type,
+        parent_external_id=parent_external_id,
+        object_type=object_type,
+        source_id=source_id,
+        limit=limit,
+    )
 
 
 @router.get("/devices", response_model=Page[EquipDeviceOut])
@@ -158,3 +194,73 @@ async def resolve(
     source_id: str | None = None,
 ) -> StructuredResolveOut:
     return await service.resolve(object_type, external_id, source_id=source_id)
+
+
+@router.get("/attribute-schemas", response_model=list[StructuredAttrSchemaOut])
+async def list_attribute_schemas(service: ServiceDep) -> list[StructuredAttrSchemaOut]:
+    return [StructuredAttrSchemaOut.model_validate(row) for row in service.list_attribute_schemas()]
+
+
+@router.get(
+    "/attribute-schemas/{object_type}",
+    response_model=StructuredAttrSchemaOut,
+)
+async def get_attribute_schema(
+    object_type: str, service: ServiceDep
+) -> StructuredAttrSchemaOut:
+    return StructuredAttrSchemaOut.model_validate(service.get_attribute_schema(object_type))
+
+
+@router.get("/object-relations", response_model=list[ObjectRelationOut])
+async def list_object_relations(
+    service: RelationServiceDep,
+    relation_type: str | None = None,
+    from_kind: str | None = None,
+    from_id: str | None = None,
+    to_kind: str | None = None,
+    to_id: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 200,
+) -> list[ObjectRelationOut]:
+    return await service.list_relations(
+        relation_type=relation_type,
+        from_kind=from_kind,
+        from_id=from_id,
+        to_kind=to_kind,
+        to_id=to_id,
+        limit=limit,
+    )
+
+
+@router.post("/object-relations", response_model=ObjectRelationOut, status_code=201)
+async def create_object_relation(
+    data: ObjectRelationCreate, service: RelationServiceDep
+) -> ObjectRelationOut:
+    return await service.create(data)
+
+
+@router.delete("/object-relations/{relation_id}", status_code=204, response_class=Response)
+async def delete_object_relation(relation_id: str, service: RelationServiceDep) -> None:
+    await service.delete(relation_id)
+
+
+@router.get(
+    "/objects/{object_type}/{object_id}/acl",
+    response_model=StructuredObjectAclOut,
+)
+async def get_object_acl(
+    object_type: str, object_id: str, service: ServiceDep
+) -> StructuredObjectAclOut:
+    return await service.get_object_acl(object_type, object_id)
+
+
+@router.put(
+    "/objects/{object_type}/{object_id}/acl",
+    response_model=StructuredObjectAclOut,
+)
+async def set_object_acl(
+    object_type: str,
+    object_id: str,
+    data: StructuredObjectAclUpdate,
+    service: ServiceDep,
+) -> StructuredObjectAclOut:
+    return await service.set_object_acl(object_type, object_id, data)

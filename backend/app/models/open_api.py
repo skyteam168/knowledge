@@ -32,6 +32,8 @@ class ApiScope(StrEnum):
     CHAT = "chat"
     MCP = "mcp"
     ENTITY = "entity"
+    ON_BEHALF = "on_behalf"
+    ACTION = "action"
 
 
 class ApiClient(IdMixin, TenantMixin, TimestampMixin, Base):

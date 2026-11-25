@@ -330,3 +330,86 @@ class OpenApiService(BaseService):
 
     async def graph_traverse(self, data: OpenGraphTraverseIn) -> OpenGraphTraverseOut:
         return await self._entities().graph_traverse(data)
+
+    def _ontology_tools(self) -> "OpenOntologyTools":
+        from app.services.open_api.ontology_tools import OpenOntologyTools
+
+        return OpenOntologyTools(self.session, self.ctx, self.authz_cache, self.caller)
+
+    async def describe_ontology(self, *, scope: str = "summary", version: str = "published"):
+        return await self._ontology_tools().describe_ontology(scope=scope, version=version)
+
+    async def get_object(self, data):
+        return await self._ontology_tools().get_object(data)
+
+    async def query_objects(self, data):
+        return await self._ontology_tools().query_objects(data)
+
+    async def aggregate_objects(self, data):
+        return await self._ontology_tools().aggregate_objects(data)
+
+    async def traverse(self, data):
+        return await self._ontology_tools().traverse(data)
+
+    def _action_runtime(self):
+        from app.services.action.runtime import ActionRuntime
+
+        return ActionRuntime(self.session, self.ctx)
+
+    async def list_actions(self):
+        from app.models import ApiScope
+        from app.schemas.open_api import OpenActionListOut, OpenActionTypeOut
+
+        self.caller.require_scope(ApiScope.ACTION)
+        rows = await self._action_runtime().list_actions()
+        return OpenActionListOut(
+            items=[
+                OpenActionTypeOut(
+                    name=r.name,
+                    description=r.description,
+                    input_schema=dict(r.input_schema or {}),
+                    preconditions=dict(r.preconditions or {}),
+                    risk=r.risk,
+                    systems=[str(s) for s in (r.systems or [])],
+                )
+                for r in rows
+            ]
+        )
+
+    async def approve_action(self, data):
+        from app.models import ApiScope
+        from app.schemas.open_api import OpenActionApproveOut
+
+        self.caller.require_scope(ApiScope.ACTION)
+        row = await self._action_runtime().create_approval(
+            data.action_type,
+            dict(data.input or {}),
+            acknowledge_risk=bool(data.acknowledge_risk),
+        )
+        return OpenActionApproveOut(
+            approval_id=row.id,
+            expires_at=row.expires_at,
+            action_type=row.action_type,
+        )
+
+    async def invoke_action(self, data):
+        from app.models import ApiScope
+        from app.schemas.open_api import OpenActionInvokeOut
+
+        self.caller.require_scope(ApiScope.ACTION)
+        out = await self._action_runtime().execute(
+            data.action_type,
+            dict(data.input or {}),
+            idempotency_key=data.idempotency_key,
+            approval_id=data.approval_id,
+            dry_run=bool(data.dry_run),
+        )
+        return OpenActionInvokeOut(
+            status=out.status,
+            action_type=out.action_type,
+            execution_id=out.execution_id,
+            result=out.result,
+            error=out.error,
+            approval_id=out.approval_id,
+            rule_verdict=out.rule_verdict,
+        )

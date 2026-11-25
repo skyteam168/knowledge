@@ -3,25 +3,35 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import {
+  createObjectRelation,
   createStructuredDomain,
   createStructuredLink,
   createStructuredRecord,
   createStructuredSource,
+  deleteObjectRelation,
   deleteStructuredLink,
+  getStructuredAttrSchema,
+  getStructuredObjectAcl,
   listEquipDevices,
   listEquipSpareParts,
   listEquipWorkOrders,
+  listObjectRelations,
+  listStructuredAttrSchemas,
   listStructuredDomains,
   listStructuredLinks,
   listStructuredRecords,
   listStructuredSources,
   resolveStructured,
+  setStructuredObjectAcl,
   syncStructuredSource,
 } from '@/api/structured'
 import type {
+  AclEntryOut,
   EquipDevice,
   EquipSparePart,
   EquipWorkOrder,
+  ObjectRelation,
+  StructuredAttrSchema,
   StructuredDomain,
   StructuredLink,
   StructuredRecord,
@@ -29,6 +39,7 @@ import type {
   StructuredSource,
 } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
+import AclEditor from '@/components/knowledge/AclEditor.vue'
 
 const { t } = useI18n()
 
@@ -55,6 +66,24 @@ const records = ref<StructuredRecord[]>([])
 const selectedObject = ref<{ type: string; id: string; label: string } | null>(null)
 const links = ref<StructuredLink[]>([])
 const linksLoading = ref(false)
+const relations = ref<ObjectRelation[]>([])
+const relationsLoading = ref(false)
+const relationSaving = ref(false)
+const relationTypes = [
+  'has_part',
+  'located_in',
+  'has_failure_mode',
+  'caused_by',
+  'consumes',
+  'work_order_for',
+  'spare_for',
+] as const
+const relationForm = reactive({
+  relation_type: 'has_failure_mode',
+  direction: 'out' as 'out' | 'in',
+  peer_object_type: 'failure_mode',
+  peer_object_id: '',
+})
 
 async function loadDomains(): Promise<void> {
   domains.value = await listStructuredDomains()
@@ -133,6 +162,7 @@ function search(): void {
 watch(activeDomainId, () => {
   selectedObject.value = null
   links.value = []
+  relations.value = []
   tab.value = 'devices'
   search()
 })
@@ -141,8 +171,29 @@ watch(tab, () => {
   if (!isEquipment.value) return
   selectedObject.value = null
   links.value = []
+  relations.value = []
   search()
 })
+
+async function loadRelationsForSelected(): Promise<void> {
+  if (!selectedObject.value) {
+    relations.value = []
+    return
+  }
+  const id = selectedObject.value.id
+  relationsLoading.value = true
+  try {
+    const [outbound, inbound] = await Promise.all([
+      listObjectRelations({ from_kind: 'structured', from_id: id, limit: 200 }),
+      listObjectRelations({ to_kind: 'structured', to_id: id, limit: 200 }),
+    ])
+    const byId = new Map<string, ObjectRelation>()
+    for (const edge of [...outbound, ...inbound]) byId.set(edge.id, edge)
+    relations.value = [...byId.values()]
+  } finally {
+    relationsLoading.value = false
+  }
+}
 
 async function selectRow(type: string, id: string, label: string): Promise<void> {
   selectedObject.value = { type, id, label }
@@ -152,6 +203,51 @@ async function selectRow(type: string, id: string, label: string): Promise<void>
   } finally {
     linksLoading.value = false
   }
+  await loadRelationsForSelected()
+}
+
+async function addRelation(): Promise<void> {
+  if (!selectedObject.value) return
+  const peerId = relationForm.peer_object_id.trim()
+  const peerType = relationForm.peer_object_type.trim()
+  if (!peerId || !peerType) return
+  relationSaving.value = true
+  try {
+    const current = {
+      kind: 'structured',
+      id: selectedObject.value.id,
+      object_type: selectedObject.value.type,
+    }
+    const peer = { kind: 'structured', id: peerId, object_type: peerType }
+    const from = relationForm.direction === 'out' ? current : peer
+    const to = relationForm.direction === 'out' ? peer : current
+    const created = await createObjectRelation({
+      relation_type: relationForm.relation_type,
+      from_kind: from.kind,
+      from_id: from.id,
+      from_object_type: from.object_type,
+      to_kind: to.kind,
+      to_id: to.id,
+      to_object_type: to.object_type,
+    })
+    relationForm.peer_object_id = ''
+    await loadRelationsForSelected()
+    if (created.warnings?.length) {
+      ElMessage.warning(created.warnings.join('; '))
+    } else {
+      ElMessage.success(t('structured.relationCreated'))
+    }
+  } catch {
+    ElMessage.error(t('structured.relationRejected'))
+  } finally {
+    relationSaving.value = false
+  }
+}
+
+async function removeRelation(edge: ObjectRelation): Promise<void> {
+  await ElMessageBox.confirm(t('structured.deleteRelationConfirm'), t('common.delete'))
+  await deleteObjectRelation(edge.id)
+  await loadRelationsForSelected()
 }
 
 const sourceDialog = ref(false)
@@ -218,8 +314,11 @@ const recordForm = reactive({
   external_id: '',
   title: '',
   status: 'active',
+  attrs_json: '{}',
 })
 const recordSaving = ref(false)
+const attrSchemas = ref<StructuredAttrSchema[]>([])
+const activeAttrSchema = ref<StructuredAttrSchema | null>(null)
 const recordRules = computed<FormRules>(() => ({
   source_id: [{ required: true, message: t('structured.sourceRequired'), trigger: 'change' }],
   object_type: [{ required: true, message: t('structured.objectTypeRequired'), trigger: 'blur' }],
@@ -227,22 +326,66 @@ const recordRules = computed<FormRules>(() => ({
   title: [{ required: true, message: t('structured.nameRequired'), trigger: 'blur' }],
 }))
 
+const industrialObjectTypes = computed(() =>
+  attrSchemas.value
+    .map((s) => s.object_type)
+    .filter((tp) => !['device', 'work_order', 'spare_part'].includes(tp)),
+)
+
+async function loadAttrSchemas(): Promise<void> {
+  try {
+    attrSchemas.value = await listStructuredAttrSchemas()
+  } catch {
+    attrSchemas.value = []
+  }
+}
+
+async function onRecordObjectTypeChange(value: string): Promise<void> {
+  const tp = value.trim().toLowerCase()
+  if (!tp) {
+    activeAttrSchema.value = null
+    return
+  }
+  const cached = attrSchemas.value.find((s) => s.object_type === tp)
+  if (cached) {
+    activeAttrSchema.value = cached
+    return
+  }
+  try {
+    activeAttrSchema.value = await getStructuredAttrSchema(tp)
+  } catch {
+    activeAttrSchema.value = null
+  }
+}
+
 function openRecordDialog(): void {
   if (!sources.value.length) {
     ElMessage.warning(t('structured.needSource'))
     return
   }
   recordForm.source_id = sources.value[0]!.id
-  recordForm.object_type = ''
+  recordForm.object_type = industrialObjectTypes.value[0] ?? ''
   recordForm.external_id = ''
   recordForm.title = ''
   recordForm.status = 'active'
+  recordForm.attrs_json = '{}'
+  void onRecordObjectTypeChange(recordForm.object_type)
   recordDialog.value = true
 }
 
 async function submitRecord(): Promise<void> {
   if (!activeDomain.value) return
   if (!(await recordFormRef.value?.validate().catch(() => false))) return
+  let attrs: Record<string, unknown> = {}
+  try {
+    attrs = JSON.parse(recordForm.attrs_json || '{}') as Record<string, unknown>
+    if (attrs === null || typeof attrs !== 'object' || Array.isArray(attrs)) {
+      throw new Error('attrs must be object')
+    }
+  } catch {
+    ElMessage.error(t('structured.attrsJsonInvalid'))
+    return
+  }
   recordSaving.value = true
   try {
     await createStructuredRecord({
@@ -252,6 +395,7 @@ async function submitRecord(): Promise<void> {
       external_id: recordForm.external_id.trim(),
       title: recordForm.title.trim(),
       status: recordForm.status.trim() || 'active',
+      attrs,
     })
     ElMessage.success(t('common.saved'))
     recordDialog.value = false
@@ -311,8 +455,48 @@ async function doResolve(): Promise<void> {
   }
 }
 
+const aclDialog = ref(false)
+const aclLoading = ref(false)
+const aclSaving = ref(false)
+const aclEntries = ref<AclEntryOut[]>([])
+
+async function openAclDialog(): Promise<void> {
+  if (!selectedObject.value) return
+  aclDialog.value = true
+  aclLoading.value = true
+  try {
+    const acl = await getStructuredObjectAcl(selectedObject.value.type, selectedObject.value.id)
+    aclEntries.value = acl.entries.map((e) => ({ ...e, effect: e.effect ?? 'allow' }))
+  } catch {
+    aclDialog.value = false
+  } finally {
+    aclLoading.value = false
+  }
+}
+
+async function saveAcl(): Promise<void> {
+  if (!selectedObject.value) return
+  aclSaving.value = true
+  try {
+    await setStructuredObjectAcl(
+      selectedObject.value.type,
+      selectedObject.value.id,
+      aclEntries.value.map(({ principal_type, principal_id, permission, effect }) => ({
+        principal_type,
+        principal_id,
+        permission: effect === 'deny' ? 'read' : permission,
+        effect: effect ?? 'allow',
+      })),
+    )
+    ElMessage.success(t('structured.aclUpdated'))
+    aclDialog.value = false
+  } finally {
+    aclSaving.value = false
+  }
+}
+
 onMounted(async () => {
-  await Promise.all([loadDomains(), loadSources()])
+  await Promise.all([loadDomains(), loadSources(), loadAttrSchemas()])
   await loadRows()
 })
 </script>
@@ -471,7 +655,10 @@ onMounted(async () => {
 
         <el-card v-if="selectedObject" shadow="never" class="block">
           <template #header>
-            {{ t('structured.links') }} · {{ selectedObject.label }}
+            <div class="card-head">
+              <span>{{ t('structured.links') }} · {{ selectedObject.label }}</span>
+              <el-button @click="openAclDialog">{{ t('structured.acl') }}</el-button>
+            </div>
           </template>
           <el-table v-loading="linksLoading" :data="links" size="small">
             <el-table-column :label="t('structured.term')" min-width="160">
@@ -503,6 +690,76 @@ onMounted(async () => {
             <el-input v-model="linkForm.ko_id" :placeholder="t('structured.koId')" style="width: 220px" />
             <el-button type="primary" :loading="linkSaving" @click="addLink">
               {{ t('structured.addLink') }}
+            </el-button>
+          </div>
+        </el-card>
+
+        <el-card v-if="selectedObject" shadow="never" class="block">
+          <template #header>
+            {{ t('structured.relations') }} · {{ selectedObject.label }}
+          </template>
+          <el-table v-loading="relationsLoading" :data="relations" size="small">
+            <template #empty>
+              <EmptyState :description="t('structured.emptyRelations')" />
+            </template>
+            <el-table-column :label="t('structured.relationType')" width="160">
+              <template #default="{ row }">
+                {{ row.relation_local_name || row.relation_type }}
+              </template>
+            </el-table-column>
+            <el-table-column :label="t('structured.relationFrom')" min-width="180">
+              <template #default="{ row }">
+                {{ row.from_object_type || row.from_kind }} · {{ row.from_id }}
+              </template>
+            </el-table-column>
+            <el-table-column :label="t('structured.relationTo')" min-width="180">
+              <template #default="{ row }">
+                {{ row.to_object_type || row.to_kind }} · {{ row.to_id }}
+              </template>
+            </el-table-column>
+            <el-table-column width="90">
+              <template #default="{ row }">
+                <el-button link type="danger" @click.stop="removeRelation(row as ObjectRelation)">
+                  {{ t('common.delete') }}
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+          <div class="link-form">
+            <el-select v-model="relationForm.relation_type" style="width: 200px">
+              <el-option
+                v-for="rt in relationTypes"
+                :key="rt"
+                :label="t(`structured.relationTypes.${rt}`, rt)"
+                :value="rt"
+              />
+            </el-select>
+            <el-select v-model="relationForm.direction" style="width: 160px">
+              <el-option :label="t('structured.relationOut')" value="out" />
+              <el-option :label="t('structured.relationIn')" value="in" />
+            </el-select>
+            <el-select
+              v-model="relationForm.peer_object_type"
+              filterable
+              allow-create
+              default-first-option
+              style="width: 160px"
+              :placeholder="t('structured.peerObjectType')"
+            >
+              <el-option
+                v-for="tp in industrialObjectTypes"
+                :key="tp"
+                :label="t(`structured.objectTypes.${tp}`, tp)"
+                :value="tp"
+              />
+            </el-select>
+            <el-input
+              v-model="relationForm.peer_object_id"
+              :placeholder="t('structured.peerObjectId')"
+              style="width: 220px"
+            />
+            <el-button type="primary" :loading="relationSaving" @click="addRelation">
+              {{ t('structured.addRelation') }}
             </el-button>
           </div>
         </el-card>
@@ -577,7 +834,7 @@ onMounted(async () => {
       </template>
     </el-dialog>
 
-    <el-dialog v-model="recordDialog" :title="t('structured.createRecord')" width="480px">
+    <el-dialog v-model="recordDialog" :title="t('structured.createRecord')" width="560px">
       <el-form ref="recordFormRef" :model="recordForm" :rules="recordRules" label-position="top">
         <el-form-item :label="t('structured.sources')" prop="source_id">
           <el-select v-model="recordForm.source_id" style="width: 100%">
@@ -585,8 +842,39 @@ onMounted(async () => {
           </el-select>
         </el-form-item>
         <el-form-item :label="t('structured.objectType')" prop="object_type">
-          <el-input v-model="recordForm.object_type" placeholder="recipe / sku / inspection" />
+          <el-select
+            v-model="recordForm.object_type"
+            filterable
+            allow-create
+            default-first-option
+            style="width: 100%"
+            :placeholder="t('structured.objectTypePlaceholder')"
+            @change="onRecordObjectTypeChange"
+          >
+            <el-option
+              v-for="tp in industrialObjectTypes"
+              :key="tp"
+              :label="t(`structured.objectTypes.${tp}`, tp)"
+              :value="tp"
+            />
+          </el-select>
         </el-form-item>
+        <el-alert
+          v-if="activeAttrSchema"
+          type="info"
+          :closable="false"
+          show-icon
+          class="schema-hint"
+          :title="activeAttrSchema.description"
+          :description="
+            activeAttrSchema.attributes
+              .map(
+                (a) =>
+                  `${a.name}${a.required ? '*' : ''} (${a.kind}${a.unit ? '/' + a.unit : ''})`,
+              )
+              .join(' · ')
+          "
+        />
         <el-form-item :label="t('structured.externalId')" prop="external_id">
           <el-input v-model="recordForm.external_id" />
         </el-form-item>
@@ -596,16 +884,50 @@ onMounted(async () => {
         <el-form-item :label="t('structured.status')">
           <el-input v-model="recordForm.status" />
         </el-form-item>
+        <el-form-item :label="t('structured.attrsJson')">
+          <el-input
+            v-model="recordForm.attrs_json"
+            type="textarea"
+            :rows="5"
+            :placeholder="t('structured.attrsJsonHint')"
+          />
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="recordDialog = false">{{ t('common.cancel') }}</el-button>
         <el-button type="primary" :loading="recordSaving" @click="submitRecord">{{ t('common.save') }}</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog
+      v-model="aclDialog"
+      :title="t('structured.aclTitle', { label: selectedObject?.label ?? '' })"
+      width="760px"
+    >
+      <div v-loading="aclLoading">
+        <el-alert
+          type="info"
+          :closable="false"
+          show-icon
+          :title="t('structured.aclTip')"
+          class="schema-hint"
+        />
+        <AclEditor v-model="aclEntries" />
+      </div>
+      <template #footer>
+        <el-button @click="aclDialog = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" :loading="aclSaving" @click="saveAcl">
+          {{ t('common.save') }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <style scoped>
+.schema-hint {
+  margin-bottom: 12px;
+}
 .page {
   display: flex;
   flex-direction: column;

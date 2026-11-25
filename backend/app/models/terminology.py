@@ -22,6 +22,9 @@ class TerminologyEntityType(StrEnum):
     POLICY = "policy"
     IT_TERM = "it_term"
     OTHER = "other"
+    # Industrial tagging (aligned with StructuredObjectType / KoType for pilot)
+    COMPONENT = "component"
+    FAILURE_MODE = "failure_mode"
 
 
 class TerminologyStatus(StrEnum):
@@ -74,3 +77,39 @@ class TerminologyAlias(IdMixin, TenantMixin, Base):
     alias_normalized: Mapped[str] = mapped_column(String(256), nullable=False)
     lang: Mapped[str] = mapped_column(String(8), default=TerminologyLang.ANY.value, nullable=False)
     created_at: Mapped[datetime] = created_at_column()
+
+
+class TerminologyRelationKind(StrEnum):
+    INHERITS = "inherits"
+    CONTAINS = "contains"
+    RELATED = "related"
+
+
+class TerminologyRelation(IdMixin, TenantMixin, TimestampMixin, Base):
+    """DataHub-style term hierarchy / association edges."""
+
+    __tablename__ = "terminology_relations"
+    __table_args__ = (
+        UniqueConstraint(
+            "org_id",
+            "from_id",
+            "to_id",
+            "kind",
+            name="uq_terminology_relations_edge",
+        ),
+        Index("ix_terminology_relations_from", "org_id", "from_id"),
+        Index("ix_terminology_relations_to", "org_id", "to_id"),
+    )
+
+    from_id: Mapped[str] = mapped_column(
+        String(32),
+        ForeignKey("terminology_entities.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    to_id: Mapped[str] = mapped_column(
+        String(32),
+        ForeignKey("terminology_entities.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_by: Mapped[str | None] = mapped_column(String(32))
