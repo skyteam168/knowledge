@@ -398,8 +398,13 @@ class OntologyStudioService(BaseService):
         )
         return out
 
-    async def suggest_labels(self, version_id: str) -> SemanticSuggestOut:
-        """OS3: generate Chinese labels/descriptions for draft items (heuristic; LLM later)."""
+    async def suggest_labels(
+        self, version_id: str, *, dry_run: bool = False
+    ) -> SemanticSuggestOut:
+        """OS3: generate Chinese labels/descriptions for draft items (heuristic; LLM later).
+
+        When ``dry_run`` is True, return proposed changes without writing.
+        """
         version = await self._require_draft(version_id)
         entities = list(
             await self.session.scalars(
@@ -423,71 +428,86 @@ class OntologyStudioService(BaseService):
         for ent in entities:
             if ent.status == SemanticItemStatus.REJECTED.value:
                 continue
+            before_label = ent.label
+            before_desc = ent.description or ""
+            before_ot = ent.object_type
             label, desc = _suggest_entity_copy(ent.local_name, ent.label, ent.description)
-            changed = False
-            if label != ent.label:
+            guessed = before_ot or _guess_object_type(ent.local_name)
+            changed = (
+                label != before_label
+                or (bool(desc) and desc != before_desc)
+                or (guessed != before_ot)
+            )
+            if not changed:
+                continue
+            entities_updated += 1
+            suggestions.append(
+                {
+                    "kind": "entity",
+                    "id": ent.id,
+                    "local_name": ent.local_name,
+                    "before_label": before_label,
+                    "label": label,
+                    "before_description": before_desc,
+                    "description": desc or before_desc,
+                    "before_object_type": before_ot,
+                    "object_type": guessed,
+                }
+            )
+            if not dry_run:
                 ent.label = label
-                changed = True
-            if desc and desc != (ent.description or ""):
-                ent.description = desc
-                changed = True
-            if not ent.object_type:
-                guessed = _guess_object_type(ent.local_name)
-                if guessed:
+                if desc:
+                    ent.description = desc
+                if guessed and not ent.object_type:
                     ent.object_type = guessed
-                    changed = True
-            if changed:
-                entities_updated += 1
-                suggestions.append(
-                    {
-                        "kind": "entity",
-                        "id": ent.id,
-                        "local_name": ent.local_name,
-                        "label": ent.label,
-                        "description": ent.description,
-                        "object_type": ent.object_type,
-                    }
-                )
         for attr in attrs:
             if attr.status == SemanticItemStatus.REJECTED.value:
                 continue
+            before_label = attr.label
+            before_desc = attr.description or ""
+            before_kind = attr.attr_kind
             label, desc, kind = _suggest_attr_copy(
                 attr.name, attr.label, attr.description, attr.attr_kind
             )
-            changed = False
-            if label != attr.label:
+            changed = (
+                label != before_label
+                or (bool(desc) and desc != before_desc)
+                or kind != before_kind
+            )
+            if not changed:
+                continue
+            attributes_updated += 1
+            suggestions.append(
+                {
+                    "kind": "attribute",
+                    "id": attr.id,
+                    "name": attr.name,
+                    "before_label": before_label,
+                    "label": label,
+                    "before_description": before_desc,
+                    "description": desc or before_desc,
+                    "before_attr_kind": before_kind,
+                    "attr_kind": kind,
+                }
+            )
+            if not dry_run:
                 attr.label = label
-                changed = True
-            if desc and desc != (attr.description or ""):
-                attr.description = desc
-                changed = True
-            if kind != attr.attr_kind:
+                if desc:
+                    attr.description = desc
                 attr.attr_kind = kind
-                changed = True
-            if changed:
-                attributes_updated += 1
-                suggestions.append(
-                    {
-                        "kind": "attribute",
-                        "id": attr.id,
-                        "name": attr.name,
-                        "label": attr.label,
-                        "description": attr.description,
-                        "attr_kind": attr.attr_kind,
-                    }
-                )
-        await self.session.flush()
-        await self.audit.record(
-            self.audit_ctx,
-            "semantic_model.suggest",
-            RESOURCE,
-            version.id,
-            None,
-            {
-                "entities_updated": entities_updated,
-                "attributes_updated": attributes_updated,
-            },
-        )
+        if not dry_run:
+            await self.session.flush()
+            await self.audit.record(
+                self.audit_ctx,
+                "semantic_model.suggest",
+                RESOURCE,
+                version.id,
+                None,
+                {
+                    "entities_updated": entities_updated,
+                    "attributes_updated": attributes_updated,
+                },
+            )
         return SemanticSuggestOut(
             version_id=version.id,
             entities_updated=entities_updated,

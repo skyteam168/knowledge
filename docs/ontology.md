@@ -148,13 +148,13 @@ pytest tests/test_ontology_tools.py -q
 
 工作流（对齐 Steward 审核台，非 RDF）：
 
-1. 连接 ERP/MES 或导入 schema（OS2）  
+1. **连接数据库 / 导入 schema（OS2）**：管理端「Ontology Studio → 连接数据库」，引擎支持 **MySQL / PostgreSQL / SQL Server / MongoDB**（可复用「结构化数据」里同类型数据源；Mongo 字段由样本文档推断）。也可粘贴 tables/columns JSON 导入。  
 2. AI 生成实体/属性中文名与类型建议（OS3）  
 3. Steward Approve / Reject；「Represented by column」确认原始编码↔业务含义  
 4. 发布 `semantic_model_versions`（OS1）；一组织一 active published  
 5. Agent/MCP 自动读最新 published；平台核心类仍来自仓库 TBox，与组织扩展合并视图  
 
-前端（OS4）：管理端实体列表 + 属性表 + 批量审核 + 发布。任务拆分见 [TASK.md](../TASK.md) 阶段二。  
+前端（OS4）：实体列表 + 属性表 + 批量审核 + 连接库向导 + 发布。操作步骤见应用内使用说明「管理后台 → Ontology Studio」。连接器参数见 [`ops/structured-connectors.md`](ops/structured-connectors.md)。  
 实例增量同步（S1）须在该源映射发布之后。
 
 ## 明确不做

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import re
 from datetime import datetime
 from typing import Any
@@ -25,6 +26,27 @@ from app.schemas.structured import (
     EquipDeviceOut,
     EquipSparePartOut,
     EquipWorkOrderOut,
+    MongoConnectIn,
+    MongoListCollectionsIn,
+    MongoListCollectionsOut,
+    MongoProbeIn,
+    MongoProbeOut,
+    MssqlConnectIn,
+    MssqlListTablesIn,
+    MssqlListTablesOut,
+    MssqlProbeIn,
+    MssqlProbeOut,
+    MysqlConnectIn,
+    MysqlListTablesIn,
+    MysqlListTablesOut,
+    MysqlProbeIn,
+    MysqlProbeOut,
+    MysqlTableInfo,
+    PostgresConnectIn,
+    PostgresListTablesIn,
+    PostgresListTablesOut,
+    PostgresProbeIn,
+    PostgresProbeOut,
     StructuredDomainCreate,
     StructuredDomainOut,
     StructuredLinkCreate,
@@ -125,6 +147,341 @@ class StructuredService(BaseService):
             self._source_out(row).model_dump(mode="json"),
         )
         return self._source_out(row)
+
+    async def _resolve_mysql_connect(
+        self, data: MysqlConnectIn
+    ) -> tuple[str, int, str, str, str, str]:
+        """Return host, port, user, password, database, charset for probe/list."""
+        from app.services.structured.connectors.base import parse_connector_config
+        from app.services.structured.connectors.mysql import resolve_mysql_password
+
+        if data.source_id:
+            src = await self.repo.get_source(self.org_id, data.source_id)
+            if src is None:
+                raise NotFoundError("Structured source not found")
+            cfg = parse_connector_config(dict(src.meta or {}))
+            if cfg is None or cfg.connector != "mysql" or cfg.mysql is None:
+                raise ValidationAppError(
+                    "Source is not a MySQL connector",
+                    detail={"source_id": data.source_id},
+                )
+            mysql = cfg.mysql
+            password = resolve_mysql_password(
+                password=data.password or mysql.password,
+                password_env=data.password_env or mysql.password_env,
+            )
+            return (
+                mysql.host,
+                mysql.port,
+                mysql.user,
+                password,
+                mysql.database,
+                mysql.charset or "utf8mb4",
+            )
+        password = resolve_mysql_password(
+            password=data.password, password_env=data.password_env
+        )
+        return (
+            data.host.strip(),
+            data.port,
+            data.user.strip(),
+            password,
+            data.database.strip(),
+            data.charset or "utf8mb4",
+        )
+
+    async def list_mysql_tables(self, data: MysqlListTablesIn) -> MysqlListTablesOut:
+        from app.services.structured.connectors.mysql import list_mysql_tables
+
+        host, port, user, password, database, charset = await self._resolve_mysql_connect(
+            data
+        )
+        tables = await asyncio.to_thread(
+            list_mysql_tables,
+            host=host,
+            port=port,
+            user=user,
+            password=password,
+            database=database,
+            charset=charset,
+        )
+        return MysqlListTablesOut(
+            database=database,
+            tables=[MysqlTableInfo.model_validate(t) for t in tables],
+        )
+
+    async def probe_mysql_table(self, data: MysqlProbeIn) -> MysqlProbeOut:
+        from app.services.structured.connectors.mysql import probe_mysql_table
+
+        host, port, user, password, database, charset = await self._resolve_mysql_connect(
+            data
+        )
+        out = await asyncio.to_thread(
+            probe_mysql_table,
+            host=host,
+            port=port,
+            user=user,
+            password=password,
+            database=database,
+            table=data.table.strip(),
+            charset=charset,
+            sample_limit=data.sample_limit,
+        )
+        return MysqlProbeOut.model_validate(out)
+
+    async def _resolve_postgres_connect(
+        self, data: PostgresConnectIn
+    ) -> tuple[str, int, str, str, str, str]:
+        """Return host, port, user, password, database, schema for probe/list."""
+        from app.services.structured.connectors.base import parse_connector_config
+        from app.services.structured.connectors.postgres import resolve_postgres_password
+
+        if data.source_id:
+            src = await self.repo.get_source(self.org_id, data.source_id)
+            if src is None:
+                raise NotFoundError("Structured source not found")
+            cfg = parse_connector_config(dict(src.meta or {}))
+            if cfg is None or cfg.connector != "postgres" or cfg.postgres is None:
+                raise ValidationAppError(
+                    "Source is not a PostgreSQL connector",
+                    detail={"source_id": data.source_id},
+                )
+            pg = cfg.postgres
+            password = resolve_postgres_password(
+                password=data.password or pg.password,
+                password_env=data.password_env or pg.password_env,
+            )
+            return (
+                pg.host,
+                pg.port,
+                pg.user,
+                password,
+                pg.database,
+                (data.schema or pg.schema or "public"),
+            )
+        password = resolve_postgres_password(
+            password=data.password, password_env=data.password_env
+        )
+        return (
+            data.host.strip(),
+            data.port,
+            data.user.strip(),
+            password,
+            data.database.strip(),
+            (data.schema or "public").strip() or "public",
+        )
+
+    async def list_postgres_tables(
+        self, data: PostgresListTablesIn
+    ) -> PostgresListTablesOut:
+        from app.services.structured.connectors.postgres import list_postgres_tables
+
+        host, port, user, password, database, schema = (
+            await self._resolve_postgres_connect(data)
+        )
+        tables = await list_postgres_tables(
+            host=host,
+            port=port,
+            user=user,
+            password=password,
+            database=database,
+            schema=schema,
+        )
+        return PostgresListTablesOut(
+            database=database,
+            schema=schema,
+            tables=[MysqlTableInfo.model_validate(t) for t in tables],
+        )
+
+    async def probe_postgres_table(self, data: PostgresProbeIn) -> PostgresProbeOut:
+        from app.services.structured.connectors.postgres import probe_postgres_table
+
+        host, port, user, password, database, schema = (
+            await self._resolve_postgres_connect(data)
+        )
+        out = await probe_postgres_table(
+            host=host,
+            port=port,
+            user=user,
+            password=password,
+            database=database,
+            table=data.table.strip(),
+            schema=schema,
+            sample_limit=data.sample_limit,
+        )
+        return PostgresProbeOut.model_validate(out)
+
+    async def _resolve_mongo_connect(
+        self, data: MongoConnectIn
+    ) -> tuple[str, int, str, str, str, str]:
+        """Return host, port, user, password, database, auth_source."""
+        from app.services.structured.connectors.base import parse_connector_config
+        from app.services.structured.connectors.mongo import resolve_mongo_password
+
+        if data.source_id:
+            src = await self.repo.get_source(self.org_id, data.source_id)
+            if src is None:
+                raise NotFoundError("Structured source not found")
+            cfg = parse_connector_config(dict(src.meta or {}))
+            if cfg is None or cfg.connector != "mongo" or cfg.mongo is None:
+                raise ValidationAppError(
+                    "Source is not a MongoDB connector",
+                    detail={"source_id": data.source_id},
+                )
+            mongo = cfg.mongo
+            user = (data.user or mongo.user or "").strip()
+            password = ""
+            if user:
+                password = resolve_mongo_password(
+                    password=data.password or mongo.password,
+                    password_env=data.password_env or mongo.password_env,
+                    require=True,
+                )
+            return (
+                mongo.host,
+                mongo.port,
+                user,
+                password,
+                mongo.database,
+                (data.auth_source or mongo.auth_source or "admin"),
+            )
+        user = (data.user or "").strip()
+        password = ""
+        if user:
+            password = resolve_mongo_password(
+                password=data.password, password_env=data.password_env, require=True
+            )
+        return (
+            data.host.strip(),
+            data.port,
+            user,
+            password,
+            data.database.strip(),
+            (data.auth_source or "admin").strip() or "admin",
+        )
+
+    async def list_mongo_collections(
+        self, data: MongoListCollectionsIn
+    ) -> MongoListCollectionsOut:
+        from app.services.structured.connectors.mongo import list_mongo_collections
+
+        host, port, user, password, database, auth_source = (
+            await self._resolve_mongo_connect(data)
+        )
+        tables = await asyncio.to_thread(
+            list_mongo_collections,
+            host=host,
+            port=port,
+            user=user,
+            password=password,
+            database=database,
+            auth_source=auth_source,
+        )
+        return MongoListCollectionsOut(
+            database=database,
+            tables=[MysqlTableInfo.model_validate(t) for t in tables],
+        )
+
+    async def probe_mongo_collection(self, data: MongoProbeIn) -> MongoProbeOut:
+        from app.services.structured.connectors.mongo import probe_mongo_collection
+
+        host, port, user, password, database, auth_source = (
+            await self._resolve_mongo_connect(data)
+        )
+        out = await asyncio.to_thread(
+            probe_mongo_collection,
+            host=host,
+            port=port,
+            user=user,
+            password=password,
+            database=database,
+            collection=data.table.strip(),
+            auth_source=auth_source,
+            sample_limit=data.sample_limit,
+        )
+        return MongoProbeOut.model_validate(out)
+
+    async def _resolve_mssql_connect(
+        self, data: MssqlConnectIn
+    ) -> tuple[str, int, str, str, str, str]:
+        """Return host, port, user, password, database, schema."""
+        from app.services.structured.connectors.base import parse_connector_config
+        from app.services.structured.connectors.mssql import resolve_mssql_password
+
+        if data.source_id:
+            src = await self.repo.get_source(self.org_id, data.source_id)
+            if src is None:
+                raise NotFoundError("Structured source not found")
+            cfg = parse_connector_config(dict(src.meta or {}))
+            if cfg is None or cfg.connector != "mssql" or cfg.mssql is None:
+                raise ValidationAppError(
+                    "Source is not a SQL Server connector",
+                    detail={"source_id": data.source_id},
+                )
+            ms = cfg.mssql
+            password = resolve_mssql_password(
+                password=data.password or ms.password,
+                password_env=data.password_env or ms.password_env,
+            )
+            return (
+                ms.host,
+                ms.port,
+                ms.user,
+                password,
+                ms.database,
+                (data.schema or ms.schema or "dbo"),
+            )
+        password = resolve_mssql_password(
+            password=data.password, password_env=data.password_env
+        )
+        return (
+            data.host.strip(),
+            data.port,
+            data.user.strip(),
+            password,
+            data.database.strip(),
+            (data.schema or "dbo").strip() or "dbo",
+        )
+
+    async def list_mssql_tables(self, data: MssqlListTablesIn) -> MssqlListTablesOut:
+        from app.services.structured.connectors.mssql import list_mssql_tables
+
+        host, port, user, password, database, schema = await self._resolve_mssql_connect(
+            data
+        )
+        tables = await asyncio.to_thread(
+            list_mssql_tables,
+            host=host,
+            port=port,
+            user=user,
+            password=password,
+            database=database,
+            schema=schema,
+        )
+        return MssqlListTablesOut(
+            database=database,
+            schema=schema,
+            tables=[MysqlTableInfo.model_validate(t) for t in tables],
+        )
+
+    async def probe_mssql_table(self, data: MssqlProbeIn) -> MssqlProbeOut:
+        from app.services.structured.connectors.mssql import probe_mssql_table
+
+        host, port, user, password, database, schema = await self._resolve_mssql_connect(
+            data
+        )
+        out = await asyncio.to_thread(
+            probe_mssql_table,
+            host=host,
+            port=port,
+            user=user,
+            password=password,
+            database=database,
+            table=data.table.strip(),
+            schema=schema,
+            sample_limit=data.sample_limit,
+        )
+        return MssqlProbeOut.model_validate(out)
 
     async def sync_source(
         self, source_id: str, *, dry_run: bool = False, force_full: bool = False

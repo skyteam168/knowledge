@@ -13,6 +13,176 @@ class StructuredSourceCreate(BaseModel):
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
+class MysqlConnectIn(BaseModel):
+    """Ephemeral MySQL connection for admin schema introspection (password not stored)."""
+
+    host: str = Field(min_length=1, max_length=255)
+    port: int = Field(default=3306, ge=1, le=65535)
+    database: str = Field(min_length=1, max_length=128)
+    user: str = Field(min_length=1, max_length=128)
+    password_env: str = Field(default="MES_MYSQL_PASSWORD", min_length=1, max_length=128)
+    password: str | None = Field(
+        default=None,
+        max_length=256,
+        description="One-shot password for this request only; prefer password_env",
+    )
+    charset: str = Field(default="utf8mb4", min_length=1, max_length=32)
+    source_id: str | None = Field(
+        default=None,
+        max_length=32,
+        description="Optional structured source with meta.connector=mysql to reuse",
+    )
+
+
+class MysqlListTablesIn(MysqlConnectIn):
+    pass
+
+
+class MysqlTableInfo(BaseModel):
+    name: str
+    table_type: str = ""
+    approx_rows: int = 0
+    comment: str | None = None
+
+
+class MysqlListTablesOut(BaseModel):
+    database: str
+    tables: list[MysqlTableInfo]
+
+
+class MysqlProbeIn(MysqlConnectIn):
+    table: str = Field(min_length=1, max_length=128)
+    sample_limit: int = Field(default=3, ge=1, le=20)
+
+
+class MysqlColumnInfo(BaseModel):
+    name: str
+    type: str
+    nullable: str | None = None
+    key: str | None = None
+
+
+class MysqlProbeOut(BaseModel):
+    database: str
+    table: str
+    columns: list[MysqlColumnInfo]
+    row_count: int = 0
+    samples: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class PostgresConnectIn(BaseModel):
+    """Ephemeral PostgreSQL connection for admin schema introspection."""
+
+    host: str = Field(min_length=1, max_length=255)
+    port: int = Field(default=5432, ge=1, le=65535)
+    database: str = Field(min_length=1, max_length=128)
+    user: str = Field(min_length=1, max_length=128)
+    password_env: str = Field(default="MES_PG_PASSWORD", min_length=1, max_length=128)
+    password: str | None = Field(default=None, max_length=256)
+    schema: str = Field(default="public", min_length=1, max_length=64)
+    source_id: str | None = Field(default=None, max_length=32)
+
+
+class PostgresListTablesIn(PostgresConnectIn):
+    pass
+
+
+class PostgresProbeIn(PostgresConnectIn):
+    table: str = Field(min_length=1, max_length=128)
+    sample_limit: int = Field(default=3, ge=1, le=20)
+
+
+class PostgresListTablesOut(BaseModel):
+    database: str
+    schema: str = "public"
+    tables: list[MysqlTableInfo]
+
+
+class PostgresProbeOut(BaseModel):
+    database: str
+    schema: str = "public"
+    table: str
+    columns: list[MysqlColumnInfo]
+    row_count: int = 0
+    samples: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class MongoConnectIn(BaseModel):
+    """Ephemeral MongoDB connection for admin collection introspection."""
+
+    host: str = Field(min_length=1, max_length=255)
+    port: int = Field(default=27017, ge=1, le=65535)
+    database: str = Field(min_length=1, max_length=128)
+    user: str = Field(default="", max_length=128)
+    password_env: str = Field(default="MES_MONGO_PASSWORD", min_length=1, max_length=128)
+    password: str | None = Field(default=None, max_length=256)
+    auth_source: str = Field(default="admin", min_length=1, max_length=128)
+    source_id: str | None = Field(default=None, max_length=32)
+
+
+class MongoListCollectionsIn(MongoConnectIn):
+    pass
+
+
+class MongoProbeIn(MongoConnectIn):
+    table: str = Field(
+        min_length=1,
+        max_length=128,
+        description="Collection name (same field as SQL table for Studio reuse)",
+    )
+    sample_limit: int = Field(default=3, ge=1, le=20)
+
+
+class MongoListCollectionsOut(BaseModel):
+    database: str
+    tables: list[MysqlTableInfo]
+
+
+class MongoProbeOut(BaseModel):
+    database: str
+    table: str
+    columns: list[MysqlColumnInfo]
+    row_count: int = 0
+    samples: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class MssqlConnectIn(BaseModel):
+    """Ephemeral SQL Server connection for admin schema introspection."""
+
+    host: str = Field(min_length=1, max_length=255)
+    port: int = Field(default=1433, ge=1, le=65535)
+    database: str = Field(min_length=1, max_length=128)
+    user: str = Field(min_length=1, max_length=128)
+    password_env: str = Field(default="MES_MSSQL_PASSWORD", min_length=1, max_length=128)
+    password: str | None = Field(default=None, max_length=256)
+    schema: str = Field(default="dbo", min_length=1, max_length=64)
+    source_id: str | None = Field(default=None, max_length=32)
+
+
+class MssqlListTablesIn(MssqlConnectIn):
+    pass
+
+
+class MssqlProbeIn(MssqlConnectIn):
+    table: str = Field(min_length=1, max_length=128)
+    sample_limit: int = Field(default=3, ge=1, le=20)
+
+
+class MssqlListTablesOut(BaseModel):
+    database: str
+    schema: str = "dbo"
+    tables: list[MysqlTableInfo]
+
+
+class MssqlProbeOut(BaseModel):
+    database: str
+    schema: str = "dbo"
+    table: str
+    columns: list[MysqlColumnInfo]
+    row_count: int = 0
+    samples: list[dict[str, Any]] = Field(default_factory=list)
+
+
 class StructuredSourceOut(BaseModel):
     id: str
     name: str

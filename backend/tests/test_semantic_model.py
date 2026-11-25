@@ -241,6 +241,11 @@ async def test_suggest_and_batch_approve(
             ],
         )
     )
+    preview = await studio.suggest_labels(imported.version.id, dry_run=True)
+    assert preview.entities_updated >= 1
+    assert preview.suggestions
+    detail_before = await studio.get_version(imported.version.id)
+    assert detail_before.entities[0].label == detail_before.entities[0].local_name
     suggested = await studio.suggest_labels(imported.version.id)
     assert suggested.entities_updated >= 1
     assert suggested.attributes_updated >= 1

@@ -19,6 +19,7 @@ import {
   listStructuredAttrSchemas,
   listStructuredDomains,
   listStructuredLinks,
+  listStructuredRecordChildren,
   listStructuredRecords,
   listStructuredSources,
   resolveStructured,
@@ -64,6 +65,9 @@ const spareParts = ref<EquipSparePart[]>([])
 const records = ref<StructuredRecord[]>([])
 
 const selectedObject = ref<{ type: string; id: string; label: string } | null>(null)
+const selectedRecord = ref<StructuredRecord | null>(null)
+const children = ref<StructuredRecord[]>([])
+const childrenLoading = ref(false)
 const links = ref<StructuredLink[]>([])
 const linksLoading = ref(false)
 const relations = ref<ObjectRelation[]>([])
@@ -98,14 +102,23 @@ async function loadSources(): Promise<void> {
 
 const syncing = ref(false)
 
-async function syncSelectedSource(): Promise<void> {
+async function syncSelectedSource(forceFull = false): Promise<void> {
   if (!sourceFilter.value) {
     ElMessage.warning(t('structured.syncNeedSource'))
     return
   }
+  if (forceFull) {
+    try {
+      await ElMessageBox.confirm(t('structured.syncForceFullConfirm'), t('structured.syncForceFull'), {
+        type: 'warning',
+      })
+    } catch {
+      return
+    }
+  }
   syncing.value = true
   try {
-    const result = await syncStructuredSource(sourceFilter.value)
+    const result = await syncStructuredSource(sourceFilter.value, false, forceFull)
     const created =
       (result.stats?.devices as { created?: number } | undefined)?.created ?? 0
     ElMessage.success(`${t('structured.syncOk')} (+${created})`)
@@ -161,6 +174,8 @@ function search(): void {
 
 watch(activeDomainId, () => {
   selectedObject.value = null
+  selectedRecord.value = null
+  children.value = []
   links.value = []
   relations.value = []
   tab.value = 'devices'
@@ -170,6 +185,8 @@ watch(activeDomainId, () => {
 watch(tab, () => {
   if (!isEquipment.value) return
   selectedObject.value = null
+  selectedRecord.value = null
+  children.value = []
   links.value = []
   relations.value = []
   search()
@@ -195,8 +212,26 @@ async function loadRelationsForSelected(): Promise<void> {
   }
 }
 
+async function loadChildrenForRecord(row: StructuredRecord): Promise<void> {
+  childrenLoading.value = true
+  try {
+    children.value = await listStructuredRecordChildren({
+      parent_object_type: row.object_type,
+      parent_external_id: row.external_id,
+      source_id: row.source_id,
+      limit: 200,
+    })
+  } catch {
+    children.value = []
+  } finally {
+    childrenLoading.value = false
+  }
+}
+
 async function selectRow(type: string, id: string, label: string): Promise<void> {
   selectedObject.value = { type, id, label }
+  selectedRecord.value = null
+  children.value = []
   linksLoading.value = true
   try {
     links.value = await listStructuredLinks(type, id)
@@ -204,6 +239,18 @@ async function selectRow(type: string, id: string, label: string): Promise<void>
     linksLoading.value = false
   }
   await loadRelationsForSelected()
+}
+
+async function selectRecordRow(row: StructuredRecord): Promise<void> {
+  selectedRecord.value = row
+  selectedObject.value = { type: row.object_type, id: row.id, label: row.title }
+  linksLoading.value = true
+  try {
+    links.value = await listStructuredLinks(row.object_type, row.id)
+  } finally {
+    linksLoading.value = false
+  }
+  await Promise.all([loadRelationsForSelected(), loadChildrenForRecord(row)])
 }
 
 async function addRelation(): Promise<void> {
@@ -252,24 +299,175 @@ async function removeRelation(edge: ObjectRelation): Promise<void> {
 
 const sourceDialog = ref(false)
 const sourceFormRef = ref<FormInstance>()
-const sourceForm = reactive({ name: '', type: 'manual', enabled: true })
+const sourceForm = reactive({
+  name: '',
+  type: 'mes',
+  enabled: true,
+  connector: 'none' as 'none' | 'mysql' | 'postgres' | 'mssql' | 'mongo' | 'csv' | 'rest',
+  mysql_host: '127.0.0.1',
+  mysql_port: 3306,
+  mysql_database: '',
+  mysql_user: '',
+  mysql_password_env: 'MES_MYSQL_PASSWORD',
+  mysql_table: 'device_info',
+  pg_host: '127.0.0.1',
+  pg_port: 5432,
+  pg_database: '',
+  pg_user: '',
+  pg_password_env: 'MES_PG_PASSWORD',
+  pg_schema: 'public',
+  pg_table: 'device_info',
+  mssql_host: '127.0.0.1',
+  mssql_port: 1433,
+  mssql_database: '',
+  mssql_user: '',
+  mssql_password_env: 'MES_MSSQL_PASSWORD',
+  mssql_schema: 'dbo',
+  mssql_table: 'device_info',
+  mongo_host: '127.0.0.1',
+  mongo_port: 27017,
+  mongo_database: '',
+  mongo_user: '',
+  mongo_password_env: 'MES_MONGO_PASSWORD',
+  mongo_auth_source: 'admin',
+  mongo_collection: 'devices',
+  csv_devices: '',
+  rest_base_url: '',
+})
 const sourceSaving = ref(false)
 const sourceRules = computed<FormRules>(() => ({
   name: [{ required: true, message: t('structured.nameRequired'), trigger: 'blur' }],
 }))
 
+function buildSourceMeta(): Record<string, unknown> {
+  if (sourceForm.connector === 'mysql') {
+    return {
+      connector: 'mysql',
+      mysql: {
+        host: sourceForm.mysql_host.trim(),
+        port: sourceForm.mysql_port,
+        database: sourceForm.mysql_database.trim(),
+        user: sourceForm.mysql_user.trim(),
+        password_env: sourceForm.mysql_password_env.trim() || 'MES_MYSQL_PASSWORD',
+        table: sourceForm.mysql_table.trim() || 'device_info',
+      },
+    }
+  }
+  if (sourceForm.connector === 'postgres') {
+    return {
+      connector: 'postgres',
+      postgres: {
+        host: sourceForm.pg_host.trim(),
+        port: sourceForm.pg_port,
+        database: sourceForm.pg_database.trim(),
+        user: sourceForm.pg_user.trim(),
+        password_env: sourceForm.pg_password_env.trim() || 'MES_PG_PASSWORD',
+        schema: sourceForm.pg_schema.trim() || 'public',
+        table: sourceForm.pg_table.trim() || 'device_info',
+      },
+    }
+  }
+  if (sourceForm.connector === 'mssql') {
+    return {
+      connector: 'mssql',
+      mssql: {
+        host: sourceForm.mssql_host.trim(),
+        port: sourceForm.mssql_port,
+        database: sourceForm.mssql_database.trim(),
+        user: sourceForm.mssql_user.trim(),
+        password_env: sourceForm.mssql_password_env.trim() || 'MES_MSSQL_PASSWORD',
+        schema: sourceForm.mssql_schema.trim() || 'dbo',
+        table: sourceForm.mssql_table.trim() || 'device_info',
+      },
+    }
+  }
+  if (sourceForm.connector === 'mongo') {
+    return {
+      connector: 'mongo',
+      mongo: {
+        host: sourceForm.mongo_host.trim(),
+        port: sourceForm.mongo_port,
+        database: sourceForm.mongo_database.trim(),
+        user: sourceForm.mongo_user.trim(),
+        password_env: sourceForm.mongo_password_env.trim() || 'MES_MONGO_PASSWORD',
+        auth_source: sourceForm.mongo_auth_source.trim() || 'admin',
+        collection: sourceForm.mongo_collection.trim() || 'devices',
+      },
+    }
+  }
+  if (sourceForm.connector === 'csv') {
+    return {
+      connector: 'csv',
+      csv: {
+        devices: sourceForm.csv_devices.trim() || null,
+      },
+    }
+  }
+  if (sourceForm.connector === 'rest') {
+    return {
+      connector: 'rest',
+      rest: {
+        base_url: sourceForm.rest_base_url.trim(),
+      },
+    }
+  }
+  return {}
+}
+
 async function submitSource(): Promise<void> {
   if (!(await sourceFormRef.value?.validate().catch(() => false))) return
+  if (sourceForm.connector === 'mysql') {
+    if (
+      !sourceForm.mysql_host.trim() ||
+      !sourceForm.mysql_database.trim() ||
+      !sourceForm.mysql_user.trim()
+    ) {
+      ElMessage.warning(t('structured.mysqlRequired'))
+      return
+    }
+  }
+  if (sourceForm.connector === 'postgres') {
+    if (
+      !sourceForm.pg_host.trim() ||
+      !sourceForm.pg_database.trim() ||
+      !sourceForm.pg_user.trim()
+    ) {
+      ElMessage.warning(t('structured.pgRequired'))
+      return
+    }
+  }
+  if (sourceForm.connector === 'mssql') {
+    if (
+      !sourceForm.mssql_host.trim() ||
+      !sourceForm.mssql_database.trim() ||
+      !sourceForm.mssql_user.trim()
+    ) {
+      ElMessage.warning(t('structured.mssqlRequired'))
+      return
+    }
+  }
+  if (sourceForm.connector === 'mongo') {
+    if (!sourceForm.mongo_host.trim() || !sourceForm.mongo_database.trim()) {
+      ElMessage.warning(t('structured.mongoRequired'))
+      return
+    }
+  }
+  if (sourceForm.connector === 'rest' && !sourceForm.rest_base_url.trim()) {
+    ElMessage.warning(t('structured.restRequired'))
+    return
+  }
   sourceSaving.value = true
   try {
     await createStructuredSource({
       name: sourceForm.name.trim(),
       type: sourceForm.type,
       enabled: sourceForm.enabled,
+      meta: buildSourceMeta(),
     })
     ElMessage.success(t('common.saved'))
     sourceDialog.value = false
     sourceForm.name = ''
+    sourceForm.connector = 'none'
     await loadSources()
   } finally {
     sourceSaving.value = false
@@ -314,6 +512,8 @@ const recordForm = reactive({
   external_id: '',
   title: '',
   status: 'active',
+  parent_object_type: '',
+  parent_external_id: '',
   attrs_json: '{}',
 })
 const recordSaving = ref(false)
@@ -368,6 +568,8 @@ function openRecordDialog(): void {
   recordForm.external_id = ''
   recordForm.title = ''
   recordForm.status = 'active'
+  recordForm.parent_object_type = ''
+  recordForm.parent_external_id = ''
   recordForm.attrs_json = '{}'
   void onRecordObjectTypeChange(recordForm.object_type)
   recordDialog.value = true
@@ -386,6 +588,12 @@ async function submitRecord(): Promise<void> {
     ElMessage.error(t('structured.attrsJsonInvalid'))
     return
   }
+  const parentType = recordForm.parent_object_type.trim() || null
+  const parentExt = recordForm.parent_external_id.trim() || null
+  if ((parentType && !parentExt) || (!parentType && parentExt)) {
+    ElMessage.warning(t('structured.parentPairRequired'))
+    return
+  }
   recordSaving.value = true
   try {
     await createStructuredRecord({
@@ -395,6 +603,8 @@ async function submitRecord(): Promise<void> {
       external_id: recordForm.external_id.trim(),
       title: recordForm.title.trim(),
       status: recordForm.status.trim() || 'active',
+      parent_object_type: parentType,
+      parent_external_id: parentExt,
       attrs,
     })
     ElMessage.success(t('common.saved'))
@@ -568,13 +778,22 @@ onMounted(async () => {
               @keyup.enter="search"
             />
             <el-button @click="search">{{ t('structured.search') }}</el-button>
-            <el-button
+            <el-dropdown
+              split-button
               :disabled="!sourceFilter"
               :loading="syncing"
-              @click="syncSelectedSource"
+              @click="syncSelectedSource(false)"
+              @command="(cmd: string) => syncSelectedSource(cmd === 'force')"
             >
               {{ t('structured.syncSource') }}
-            </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="force">
+                    {{ t('structured.syncForceFull') }}
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </div>
 
           <template v-if="isEquipment">
@@ -630,7 +849,7 @@ onMounted(async () => {
               :data="records"
               size="small"
               highlight-current-row
-              @row-click="(row: StructuredRecord) => selectRow(row.object_type, row.id, row.title)"
+              @row-click="(row: StructuredRecord) => selectRecordRow(row)"
             >
               <template #empty>
                 <EmptyState :description="t('structured.emptyRows')" />
@@ -638,6 +857,14 @@ onMounted(async () => {
               <el-table-column prop="object_type" :label="t('structured.objectType')" width="120" />
               <el-table-column prop="external_id" :label="t('structured.externalId')" width="140" />
               <el-table-column prop="title" :label="t('structured.titleCol')" min-width="180" />
+              <el-table-column :label="t('structured.parent')" min-width="160">
+                <template #default="{ row }">
+                  <span v-if="row.parent_object_type && row.parent_external_id">
+                    {{ row.parent_object_type }} · {{ row.parent_external_id }}
+                  </span>
+                  <span v-else>—</span>
+                </template>
+              </el-table-column>
               <el-table-column prop="status" :label="t('structured.status')" width="100" />
             </el-table>
           </template>
@@ -651,6 +878,26 @@ onMounted(async () => {
               @current-change="loadRows"
             />
           </div>
+        </el-card>
+
+        <el-card v-if="selectedRecord" shadow="never" class="block">
+          <template #header>
+            {{ t('structured.children') }} · {{ selectedRecord.title }}
+          </template>
+          <el-table
+            v-loading="childrenLoading"
+            :data="children"
+            size="small"
+            @row-click="(row: StructuredRecord) => selectRecordRow(row)"
+          >
+            <template #empty>
+              <EmptyState :description="t('structured.emptyChildren')" />
+            </template>
+            <el-table-column prop="object_type" :label="t('structured.objectType')" width="120" />
+            <el-table-column prop="external_id" :label="t('structured.externalId')" width="140" />
+            <el-table-column prop="title" :label="t('structured.titleCol')" min-width="160" />
+            <el-table-column prop="status" :label="t('structured.status')" width="100" />
+          </el-table>
         </el-card>
 
         <el-card v-if="selectedObject" shadow="never" class="block">
@@ -794,7 +1041,7 @@ onMounted(async () => {
       </div>
     </div>
 
-    <el-dialog v-model="sourceDialog" :title="t('structured.createSource')" width="420px">
+    <el-dialog v-model="sourceDialog" :title="t('structured.createSource')" width="560px">
       <el-form ref="sourceFormRef" :model="sourceForm" :rules="sourceRules" label-position="top">
         <el-form-item :label="t('structured.sourceName')" prop="name">
           <el-input v-model="sourceForm.name" />
@@ -809,6 +1056,120 @@ onMounted(async () => {
             />
           </el-select>
         </el-form-item>
+        <el-form-item :label="t('structured.connector')">
+          <el-select v-model="sourceForm.connector" style="width: 100%">
+            <el-option value="none" :label="t('structured.connectorNone')" />
+            <el-option value="mysql" label="MySQL" />
+            <el-option value="postgres" label="PostgreSQL" />
+            <el-option value="mssql" label="SQL Server" />
+            <el-option value="mongo" label="MongoDB" />
+            <el-option value="csv" label="CSV" />
+            <el-option value="rest" label="REST" />
+          </el-select>
+        </el-form-item>
+        <template v-if="sourceForm.connector === 'mysql'">
+          <p class="hint">{{ t('structured.mysqlHint') }}</p>
+          <el-form-item :label="t('structured.mysqlHost')">
+            <el-input v-model="sourceForm.mysql_host" />
+          </el-form-item>
+          <el-form-item :label="t('structured.mysqlPort')">
+            <el-input-number v-model="sourceForm.mysql_port" :min="1" :max="65535" />
+          </el-form-item>
+          <el-form-item :label="t('structured.mysqlDatabase')">
+            <el-input v-model="sourceForm.mysql_database" />
+          </el-form-item>
+          <el-form-item :label="t('structured.mysqlUser')">
+            <el-input v-model="sourceForm.mysql_user" />
+          </el-form-item>
+          <el-form-item :label="t('structured.mysqlPasswordEnv')">
+            <el-input v-model="sourceForm.mysql_password_env" placeholder="MES_MYSQL_PASSWORD" />
+          </el-form-item>
+          <el-form-item :label="t('structured.mysqlTable')">
+            <el-input v-model="sourceForm.mysql_table" placeholder="device_info" />
+          </el-form-item>
+        </template>
+        <template v-else-if="sourceForm.connector === 'postgres'">
+          <p class="hint">{{ t('structured.pgHint') }}</p>
+          <el-form-item :label="t('structured.mysqlHost')">
+            <el-input v-model="sourceForm.pg_host" />
+          </el-form-item>
+          <el-form-item :label="t('structured.mysqlPort')">
+            <el-input-number v-model="sourceForm.pg_port" :min="1" :max="65535" />
+          </el-form-item>
+          <el-form-item :label="t('structured.mysqlDatabase')">
+            <el-input v-model="sourceForm.pg_database" />
+          </el-form-item>
+          <el-form-item :label="t('structured.pgSchema')">
+            <el-input v-model="sourceForm.pg_schema" placeholder="public" />
+          </el-form-item>
+          <el-form-item :label="t('structured.mysqlUser')">
+            <el-input v-model="sourceForm.pg_user" />
+          </el-form-item>
+          <el-form-item :label="t('structured.mysqlPasswordEnv')">
+            <el-input v-model="sourceForm.pg_password_env" placeholder="MES_PG_PASSWORD" />
+          </el-form-item>
+          <el-form-item :label="t('structured.mysqlTable')">
+            <el-input v-model="sourceForm.pg_table" placeholder="device_info" />
+          </el-form-item>
+        </template>
+        <template v-else-if="sourceForm.connector === 'mssql'">
+          <p class="hint">{{ t('structured.mssqlHint') }}</p>
+          <el-form-item :label="t('structured.mysqlHost')">
+            <el-input v-model="sourceForm.mssql_host" />
+          </el-form-item>
+          <el-form-item :label="t('structured.mysqlPort')">
+            <el-input-number v-model="sourceForm.mssql_port" :min="1" :max="65535" />
+          </el-form-item>
+          <el-form-item :label="t('structured.mysqlDatabase')">
+            <el-input v-model="sourceForm.mssql_database" />
+          </el-form-item>
+          <el-form-item :label="t('structured.pgSchema')">
+            <el-input v-model="sourceForm.mssql_schema" placeholder="dbo" />
+          </el-form-item>
+          <el-form-item :label="t('structured.mysqlUser')">
+            <el-input v-model="sourceForm.mssql_user" />
+          </el-form-item>
+          <el-form-item :label="t('structured.mysqlPasswordEnv')">
+            <el-input v-model="sourceForm.mssql_password_env" placeholder="MES_MSSQL_PASSWORD" />
+          </el-form-item>
+          <el-form-item :label="t('structured.mysqlTable')">
+            <el-input v-model="sourceForm.mssql_table" placeholder="device_info" />
+          </el-form-item>
+        </template>
+        <template v-else-if="sourceForm.connector === 'mongo'">
+          <p class="hint">{{ t('structured.mongoHint') }}</p>
+          <el-form-item :label="t('structured.mysqlHost')">
+            <el-input v-model="sourceForm.mongo_host" />
+          </el-form-item>
+          <el-form-item :label="t('structured.mysqlPort')">
+            <el-input-number v-model="sourceForm.mongo_port" :min="1" :max="65535" />
+          </el-form-item>
+          <el-form-item :label="t('structured.mysqlDatabase')">
+            <el-input v-model="sourceForm.mongo_database" />
+          </el-form-item>
+          <el-form-item :label="t('structured.mongoAuthSource')">
+            <el-input v-model="sourceForm.mongo_auth_source" placeholder="admin" />
+          </el-form-item>
+          <el-form-item :label="t('structured.mysqlUser')">
+            <el-input v-model="sourceForm.mongo_user" :placeholder="t('structured.mongoUserOptional')" />
+          </el-form-item>
+          <el-form-item :label="t('structured.mysqlPasswordEnv')">
+            <el-input v-model="sourceForm.mongo_password_env" placeholder="MES_MONGO_PASSWORD" />
+          </el-form-item>
+          <el-form-item :label="t('structured.mongoCollection')">
+            <el-input v-model="sourceForm.mongo_collection" placeholder="devices" />
+          </el-form-item>
+        </template>
+        <template v-else-if="sourceForm.connector === 'csv'">
+          <el-form-item :label="t('structured.csvDevices')">
+            <el-input v-model="sourceForm.csv_devices" placeholder="/data/devices.csv" />
+          </el-form-item>
+        </template>
+        <template v-else-if="sourceForm.connector === 'rest'">
+          <el-form-item :label="t('structured.restBaseUrl')">
+            <el-input v-model="sourceForm.rest_base_url" placeholder="https://mes.example/api" />
+          </el-form-item>
+        </template>
       </el-form>
       <template #footer>
         <el-button @click="sourceDialog = false">{{ t('common.cancel') }}</el-button>
@@ -858,6 +1219,15 @@ onMounted(async () => {
               :value="tp"
             />
           </el-select>
+        </el-form-item>
+        <el-form-item :label="t('structured.parentObjectType')">
+          <el-input
+            v-model="recordForm.parent_object_type"
+            :placeholder="t('structured.parentObjectTypeHint')"
+          />
+        </el-form-item>
+        <el-form-item :label="t('structured.parentExternalId')">
+          <el-input v-model="recordForm.parent_external_id" />
         </el-form-item>
         <el-alert
           v-if="activeAttrSchema"

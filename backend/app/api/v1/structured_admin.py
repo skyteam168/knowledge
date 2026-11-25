@@ -8,6 +8,22 @@ from app.schemas.structured import (
     EquipDeviceOut,
     EquipSparePartOut,
     EquipWorkOrderOut,
+    MongoListCollectionsIn,
+    MongoListCollectionsOut,
+    MongoProbeIn,
+    MongoProbeOut,
+    MssqlListTablesIn,
+    MssqlListTablesOut,
+    MssqlProbeIn,
+    MssqlProbeOut,
+    MysqlListTablesIn,
+    MysqlListTablesOut,
+    MysqlProbeIn,
+    MysqlProbeOut,
+    PostgresListTablesIn,
+    PostgresListTablesOut,
+    PostgresProbeIn,
+    PostgresProbeOut,
     ObjectRelationCreate,
     ObjectRelationOut,
     StructuredAttrSchemaOut,
@@ -75,6 +91,66 @@ async def sync_source(
         source_id, dry_run=dry_run, force_full=force_full
     )
     return StructuredSyncResult.model_validate(result)
+
+
+@router.post("/mysql/list-tables", response_model=MysqlListTablesOut)
+async def mysql_list_tables(
+    data: MysqlListTablesIn, service: ServiceDep
+) -> MysqlListTablesOut:
+    """Admin UI: connect to MySQL and list tables (password via env or one-shot)."""
+    return await service.list_mysql_tables(data)
+
+
+@router.post("/mysql/probe", response_model=MysqlProbeOut)
+async def mysql_probe_table(data: MysqlProbeIn, service: ServiceDep) -> MysqlProbeOut:
+    """Admin UI: read table columns + sample rows for ontology schema import."""
+    return await service.probe_mysql_table(data)
+
+
+@router.post("/postgres/list-tables", response_model=PostgresListTablesOut)
+async def postgres_list_tables(
+    data: PostgresListTablesIn, service: ServiceDep
+) -> PostgresListTablesOut:
+    """Admin UI: connect to PostgreSQL and list tables/views in a schema."""
+    return await service.list_postgres_tables(data)
+
+
+@router.post("/postgres/probe", response_model=PostgresProbeOut)
+async def postgres_probe_table(
+    data: PostgresProbeIn, service: ServiceDep
+) -> PostgresProbeOut:
+    """Admin UI: read PostgreSQL table columns + sample rows."""
+    return await service.probe_postgres_table(data)
+
+
+@router.post("/mongo/list-collections", response_model=MongoListCollectionsOut)
+async def mongo_list_collections(
+    data: MongoListCollectionsIn, service: ServiceDep
+) -> MongoListCollectionsOut:
+    """Admin UI: connect to MongoDB and list collections."""
+    return await service.list_mongo_collections(data)
+
+
+@router.post("/mongo/probe", response_model=MongoProbeOut)
+async def mongo_probe_collection(
+    data: MongoProbeIn, service: ServiceDep
+) -> MongoProbeOut:
+    """Admin UI: infer collection fields from sample documents."""
+    return await service.probe_mongo_collection(data)
+
+
+@router.post("/mssql/list-tables", response_model=MssqlListTablesOut)
+async def mssql_list_tables(
+    data: MssqlListTablesIn, service: ServiceDep
+) -> MssqlListTablesOut:
+    """Admin UI: connect to SQL Server and list tables/views in a schema."""
+    return await service.list_mssql_tables(data)
+
+
+@router.post("/mssql/probe", response_model=MssqlProbeOut)
+async def mssql_probe_table(data: MssqlProbeIn, service: ServiceDep) -> MssqlProbeOut:
+    """Admin UI: read SQL Server table columns + sample rows."""
+    return await service.probe_mssql_table(data)
 
 
 @router.get("/domains", response_model=list[StructuredDomainOut])

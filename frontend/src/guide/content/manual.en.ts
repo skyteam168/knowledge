@@ -638,7 +638,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
     id: 'admin',
     title: 'Administration',
     icon: 'Setting',
-    summary: 'Organization, accounts, permissions, audit, terminology, and structured data.',
+    summary: 'Organization, accounts, permissions, audit, terminology, structured data, and Ontology Studio.',
     permission: ADMIN_PERMISSIONS,
     topics: [
       {
@@ -757,7 +757,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
           {
             title: 'Domains and sources',
             detail:
-              'Admin → Structured data. Pick a domain on the left (equipment often has device/WO/spare tabs; others use generic records). Create sources or domains from the top bar.',
+              'Admin → Structured data. Pick a domain on the left (equipment often has device/WO/spare tabs; others use generic records). New source can choose a connector: MySQL, PostgreSQL, SQL Server, MongoDB, CSV, REST, or none (manual). Prefer a password env var name (e.g. MES_MYSQL_PASSWORD); never store secrets in the DB.',
           },
           {
             title: 'Manual rows and search',
@@ -772,12 +772,33 @@ export const MANUAL_SECTIONS: ManualSection[] = [
           {
             title: 'Sync a source',
             detail:
-              'If the source has a csv/rest connector in meta (often set by ops—no full connector editor in UI), select it and Sync; the scheduler may also pull on an interval. See docs/ops/structured-connectors.md.',
+              'Select a connector-enabled source in the filter → Sync source to pull into the local mirror; or set sync_interval_minutes in meta for scheduled pulls. Details: docs/ops/structured-connectors.md.',
           },
           {
             title: 'Id resolve (debug)',
             detail:
               'Bottom Resolve form: object_type, external_id, … → Resolve and inspect JSON. For mapping QA, not for employees.',
+          },
+        ],
+      },
+      {
+        title: 'Ontology Studio (org semantics)',
+        permission: 'admin:retrieval',
+        steps: [
+          {
+            title: 'Purpose',
+            detail:
+              'Map MES/business tables or collections to entity + attribute drafts, approve, then publish. Agents / Open API read the published version only. Open Admin → Ontology Studio.',
+          },
+          {
+            title: 'Connect DB and import schema',
+            detail:
+              'Click Connect database: choose MySQL / PostgreSQL / SQL Server / MongoDB → enter host/port/database (and Schema/auth source) manually or reuse an existing structured source → List tables → select tables/collections → preview → Import to draft. MongoDB has no fixed schema; fields are inferred from sample documents. Prefer MES_*_PASSWORD env vars.',
+          },
+          {
+            title: 'Suggest, approve, publish',
+            detail:
+              'On a draft, Generate suggestions for Chinese labels/types, then Approve (or Approve all drafts). Publish after at least one entity is approved. Agents then see only this org’s active published model. To restore a prior version, select an archived / non-active published version and click Roll back to this version.',
           },
         ],
       },

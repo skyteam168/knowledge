@@ -58,7 +58,8 @@ class StructuredSyncExecutor:
         config = parse_connector_config(source.meta)
         if config is None:
             raise ValidationAppError(
-                "Source has no connector in meta (set meta.connector=csv|rest|mysql)"
+                "Source has no connector in meta "
+                "(set meta.connector=csv|rest|mysql|postgres|mongo|mssql)"
             )
 
         cursor = None if force_full else parse_sync_cursor(source.meta)

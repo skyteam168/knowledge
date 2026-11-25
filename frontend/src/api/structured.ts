@@ -4,6 +4,18 @@ import type {
   EquipDevice,
   EquipSparePart,
   EquipWorkOrder,
+  MongoConnectIn,
+  MongoListCollectionsOut,
+  MongoProbeOut,
+  MssqlConnectIn,
+  MssqlListTablesOut,
+  MssqlProbeOut,
+  MysqlConnectIn,
+  MysqlListTablesOut,
+  MysqlProbeOut,
+  PostgresConnectIn,
+  PostgresListTablesOut,
+  PostgresProbeOut,
   ObjectRelation,
   ObjectRelationCreate,
   Page,
@@ -38,6 +50,34 @@ export const syncStructuredSource = (
     params: { dry_run: dryRun, force_full: forceFull },
   })
 
+export const listMysqlTables = (body: MysqlConnectIn) =>
+  post<MysqlListTablesOut>(`${BASE}/mysql/list-tables`, body)
+
+export const probeMysqlTable = (
+  body: MysqlConnectIn & { table: string; sample_limit?: number },
+) => post<MysqlProbeOut>(`${BASE}/mysql/probe`, body)
+
+export const listPostgresTables = (body: PostgresConnectIn) =>
+  post<PostgresListTablesOut>(`${BASE}/postgres/list-tables`, body)
+
+export const probePostgresTable = (
+  body: PostgresConnectIn & { table: string; sample_limit?: number },
+) => post<PostgresProbeOut>(`${BASE}/postgres/probe`, body)
+
+export const listMongoCollections = (body: MongoConnectIn) =>
+  post<MongoListCollectionsOut>(`${BASE}/mongo/list-collections`, body)
+
+export const probeMongoCollection = (
+  body: MongoConnectIn & { table: string; sample_limit?: number },
+) => post<MongoProbeOut>(`${BASE}/mongo/probe`, body)
+
+export const listMssqlTables = (body: MssqlConnectIn) =>
+  post<MssqlListTablesOut>(`${BASE}/mssql/list-tables`, body)
+
+export const probeMssqlTable = (
+  body: MssqlConnectIn & { table: string; sample_limit?: number },
+) => post<MssqlProbeOut>(`${BASE}/mssql/probe`, body)
+
 export const listStructuredDomains = () => get<StructuredDomain[]>(`${BASE}/domains`)
 
 export const createStructuredDomain = (body: StructuredDomainCreate) =>
@@ -54,6 +94,14 @@ export const listStructuredRecords = (
 
 export const createStructuredRecord = (body: StructuredRecordCreate) =>
   post<StructuredRecord>(`${BASE}/records`, body)
+
+export const listStructuredRecordChildren = (params: {
+  parent_object_type: string
+  parent_external_id: string
+  object_type?: string
+  source_id?: string
+  limit?: number
+}) => get<StructuredRecord[]>(`${BASE}/records/children`, { params })
 
 export const listEquipDevices = (
   params: PageParams & { q?: string; source_id?: string },

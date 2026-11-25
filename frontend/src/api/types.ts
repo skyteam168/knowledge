@@ -2324,6 +2324,11 @@ export interface StructuredRecord {
   external_id: string
   title: string
   status: string
+  parent_object_type?: string | null
+  parent_external_id?: string | null
+  occurred_at?: string | null
+  ended_at?: string | null
+  event_type?: string | null
   attrs: Record<string, unknown>
   created_by: string | null
   created_at: string
@@ -2338,6 +2343,8 @@ export interface StructuredRecordCreate {
   title: string
   status?: string
   attrs?: Record<string, unknown>
+  parent_object_type?: string | null
+  parent_external_id?: string | null
 }
 
 export interface StructuredAttrDef {
@@ -2597,6 +2604,120 @@ export interface SemanticSuggestOut {
   entities_updated: number
   attributes_updated: number
   suggestions: Record<string, unknown>[]
+}
+
+export interface MysqlConnectIn {
+  host: string
+  port?: number
+  database: string
+  user: string
+  password_env?: string
+  password?: string | null
+  charset?: string
+  source_id?: string | null
+}
+
+export interface MysqlTableInfo {
+  name: string
+  table_type: string
+  approx_rows: number
+  comment?: string | null
+}
+
+export interface MysqlListTablesOut {
+  database: string
+  tables: MysqlTableInfo[]
+}
+
+export interface MysqlColumnInfo {
+  name: string
+  type: string
+  nullable?: string | null
+  key?: string | null
+}
+
+export interface MysqlProbeOut {
+  database: string
+  table: string
+  columns: MysqlColumnInfo[]
+  row_count: number
+  samples: Record<string, unknown>[]
+}
+
+export interface PostgresConnectIn {
+  host: string
+  port?: number
+  database: string
+  user: string
+  password_env?: string
+  password?: string | null
+  schema?: string
+  source_id?: string | null
+}
+
+export interface PostgresListTablesOut {
+  database: string
+  schema: string
+  tables: MysqlTableInfo[]
+}
+
+export interface PostgresProbeOut {
+  database: string
+  schema: string
+  table: string
+  columns: MysqlColumnInfo[]
+  row_count: number
+  samples: Record<string, unknown>[]
+}
+
+export interface MongoConnectIn {
+  host: string
+  port?: number
+  database: string
+  user?: string
+  password_env?: string
+  password?: string | null
+  auth_source?: string
+  source_id?: string | null
+}
+
+export interface MongoListCollectionsOut {
+  database: string
+  tables: MysqlTableInfo[]
+}
+
+export interface MongoProbeOut {
+  database: string
+  table: string
+  columns: MysqlColumnInfo[]
+  row_count: number
+  samples: Record<string, unknown>[]
+}
+
+export interface MssqlConnectIn {
+  host: string
+  port?: number
+  database: string
+  user: string
+  password_env?: string
+  password?: string | null
+  schema?: string
+  source_id?: string | null
+}
+
+export interface MssqlListTablesOut {
+  database: string
+  schema: string
+  tables: MysqlTableInfo[]
+}
+
+export interface MssqlProbeOut {
+  database: string
+  schema: string
+  table: string
+  columns: MysqlColumnInfo[]
+  row_count: number
+  samples: Record<string, unknown>[]
 }
 
 export interface SemanticBatchStatusIn {

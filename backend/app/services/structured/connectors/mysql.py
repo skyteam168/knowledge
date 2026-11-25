@@ -336,6 +336,71 @@ def _after_cursor(value: str | None, since: str | None) -> bool:
     return row_dt > since_dt
 
 
+def resolve_mysql_password(
+    *,
+    password: str | None = None,
+    password_env: str = "MES_MYSQL_PASSWORD",
+) -> str:
+    """Resolve password from inline value or environment variable (never logged)."""
+    if password:
+        return password
+    env_name = (password_env or "").strip() or "MES_MYSQL_PASSWORD"
+    value = os.environ.get(env_name) or ""
+    if not value:
+        raise ValidationAppError(
+            "MySQL password missing",
+            detail={"password_env": env_name},
+        )
+    return value
+
+
+def list_mysql_tables(
+    *,
+    host: str,
+    port: int,
+    user: str,
+    password: str,
+    database: str,
+    charset: str = "utf8mb4",
+    connect_fn: MysqlConnectFn | None = None,
+) -> list[dict[str, Any]]:
+    """List base tables in a database (read-only)."""
+    connect = connect_fn or pymysql.connect
+    conn = connect(
+        host=host,
+        port=port,
+        user=user,
+        password=password,
+        database=database,
+        charset=charset,
+        connect_timeout=10,
+        cursorclass=DictCursor,
+    )
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT TABLE_NAME AS name, TABLE_TYPE AS table_type, "
+                "TABLE_ROWS AS approx_rows, TABLE_COMMENT AS comment "
+                "FROM information_schema.TABLES "
+                "WHERE TABLE_SCHEMA=%s "
+                "ORDER BY TABLE_NAME",
+                (database,),
+            )
+            rows = list(cur.fetchall())
+        return [
+            {
+                "name": str(r.get("name") or ""),
+                "table_type": str(r.get("table_type") or ""),
+                "approx_rows": int(r.get("approx_rows") or 0),
+                "comment": str(r.get("comment") or "") or None,
+            }
+            for r in rows
+            if r.get("name")
+        ]
+    finally:
+        conn.close()
+
+
 def probe_mysql_table(
     *,
     host: str,
@@ -348,7 +413,7 @@ def probe_mysql_table(
     connect_fn: MysqlConnectFn | None = None,
     sample_limit: int = 3,
 ) -> dict[str, Any]:
-    """Read-only schema + sample rows for Steward mapping (CLI)."""
+    """Read-only schema + sample rows for Steward mapping (CLI / admin UI)."""
     connect = connect_fn or pymysql.connect
     conn = connect(
         host=host,

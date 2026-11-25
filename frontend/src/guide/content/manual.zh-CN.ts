@@ -633,7 +633,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
     id: 'admin',
     title: '管理后台',
     icon: 'Setting',
-    summary: '组织、账号、权限、审计、术语与结构化数据。',
+    summary: '组织、账号、权限、审计、术语、结构化数据与 Ontology Studio。',
     permission: ADMIN_PERMISSIONS,
     topics: [
       {
@@ -752,7 +752,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
           {
             title: '域与数据源',
             detail:
-              '打开「管理 → 结构化数据」。左侧选业务域：设备域通常有设备/工单/备件页签；其它域为通用记录表。顶栏可「新建数据源」「新建业务域」。',
+              '打开「管理 → 结构化数据」。左侧选业务域：设备域通常有设备/工单/备件页签；其它域为通用记录表。顶栏「新建数据源」可选连接器：MySQL、PostgreSQL、SQL Server、MongoDB、CSV、REST，或无连接器（手工）。密码请填环境变量名（如 MES_MYSQL_PASSWORD），勿写入库。',
           },
           {
             title: '手工录入与搜索',
@@ -767,12 +767,33 @@ export const MANUAL_SECTIONS: ManualSection[] = [
           {
             title: '同步数据源',
             detail:
-              '若该数据源已在库内配置 connector（csv 或 rest，连接器参数一般由运维写入 meta，网页不提供完整编辑器），选中后点「同步数据源」拉取；也可依赖调度按间隔自动同步。详见 docs/ops/structured-connectors.md。',
+              '筛选中选中带连接器的数据源 →「同步数据源」拉取到本地镜像；也可在 meta 配置 sync_interval_minutes 由调度周期同步。参数说明见 docs/ops/structured-connectors.md。',
           },
           {
             title: '编号解析（联调）',
             detail:
               '页底「编号解析」：填 object_type、external_id 等 →「解析」，查看 JSON 是否解析到术语/KO。用于验收映射，不是员工功能。',
+          },
+        ],
+      },
+      {
+        title: 'Ontology Studio（组织语义）',
+        permission: 'admin:retrieval',
+        steps: [
+          {
+            title: '目的',
+            detail:
+              '把 MES/业务库的表或集合映射为「业务实体 + 属性」草稿，审核后发布；Agent / 开放平台只读已发布版本。打开「管理 → Ontology Studio」。',
+          },
+          {
+            title: '连接数据库导入 Schema',
+            detail:
+              '点「连接数据库」：选引擎 MySQL / PostgreSQL / SQL Server / MongoDB → 手动填写主机端口库名（及 Schema/认证库）或复用已有结构化数据源 →「读取表列表」勾选表/集合 → 读结构预览 →「导入到草稿」。MongoDB 无固定表结构，字段由样本文档推断。密码优先用环境变量（MES_*_PASSWORD）。',
+          },
+          {
+            title: '建议、批准与发布',
+            detail:
+              '草稿中可「生成建议」改中文显示名/类型，再「批准」或「批准全部草稿」；至少批准一个实体后「发布」。发布后该组织生效语义模型切换，Agent 只见本版本。若需恢复历史版，在左侧选中已归档/非生效已发布版本，点「回滚为此版本」。',
           },
         ],
       },

@@ -17,7 +17,7 @@ from app.services.structured.connectors.base import (
     build_connector,
     parse_connector_config,
 )
-from app.services.structured.connectors.mysql import probe_mysql_table
+from app.services.structured.connectors.mysql import list_mysql_tables, probe_mysql_table
 from app.services.structured.sync import StructuredSyncExecutor
 
 
@@ -34,6 +34,16 @@ class _FakeCursor:
 
     def execute(self, sql: str, params: Any = None) -> None:
         sql_l = " ".join(sql.lower().split())
+        if "information_schema.tables" in sql_l:
+            self._last = [
+                {
+                    "name": "device_info",
+                    "table_type": "BASE TABLE",
+                    "approx_rows": len(self._rows),
+                    "comment": "设备",
+                }
+            ]
+            return
         if "information_schema.columns" in sql_l:
             self._last = [
                 {
@@ -329,3 +339,16 @@ def test_probe_mysql_table_schema() -> None:
     assert out["row_count"] == 1
     assert any(c["name"] == "device_code" for c in out["columns"])
     assert out["samples"][0]["device_code"] == "X1"
+
+
+def test_list_mysql_tables() -> None:
+    tables = list_mysql_tables(
+        host="h",
+        port=3306,
+        user="u",
+        password="p",
+        database="mes",
+        connect_fn=lambda **kwargs: _FakeConn([{"device_code": "X1"}]),
+    )
+    assert tables[0]["name"] == "device_info"
+    assert tables[0]["table_type"] == "BASE TABLE"

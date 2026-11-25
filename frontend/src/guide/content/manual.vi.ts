@@ -634,7 +634,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
     id: 'admin',
     title: 'Quản trị',
     icon: 'Setting',
-    summary: 'Tổ chức, tài khoản, quyền hạn, kiểm toán, thuật ngữ và dữ liệu có cấu trúc.',
+    summary: 'Tổ chức, tài khoản, quyền hạn, kiểm toán, thuật ngữ, dữ liệu có cấu trúc và Ontology Studio.',
     permission: ADMIN_PERMISSIONS,
     topics: [
       {
@@ -753,7 +753,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
           {
             title: 'Miền và nguồn',
             detail:
-              'Quản trị → Dữ liệu có cấu trúc. Chọn một miền ở bên trái (thiết bị thường có các tab thiết bị/WO/phụ tùng; các miền khác dùng bản ghi chung). Tạo nguồn hoặc miền từ thanh trên cùng.',
+              'Quản trị → Dữ liệu có cấu trúc. Chọn miền bên trái. «Nguồn mới» có thể chọn connector: MySQL, PostgreSQL, SQL Server, MongoDB, CSV, REST, hoặc không (thủ công). Mật khẩu dùng tên biến môi trường (ví dụ MES_MYSQL_PASSWORD), không lưu secret vào DB.',
           },
           {
             title: 'Bản ghi thủ công và tìm kiếm',
@@ -768,12 +768,33 @@ export const MANUAL_SECTIONS: ManualSection[] = [
           {
             title: 'Đồng bộ một nguồn',
             detail:
-              'Nếu nguồn có `csv/rest connector` trong meta (thường do đội vận hành thiết lập, giao diện không có trình chỉnh sửa connector đầy đủ), hãy chọn nguồn đó và Sync; scheduler cũng có thể kéo dữ liệu theo chu kỳ. Xem thêm `docs/ops/structured-connectors.md`.',
+              'Chọn nguồn có connector trong bộ lọc → Đồng bộ nguồn để kéo vào bản sao cục bộ; hoặc cấu hình sync_interval_minutes trong meta để scheduler kéo định kỳ. Chi tiết: docs/ops/structured-connectors.md.',
           },
           {
             title: 'Resolve id (gỡ lỗi)',
             detail:
               'Biểu mẫu Resolve ở cuối trang: `object_type`, `external_id`, ... → Resolve rồi kiểm tra JSON. Tính năng này phục vụ QA ánh xạ, không dành cho nhân viên.',
+          },
+        ],
+      },
+      {
+        title: 'Ontology Studio (ngữ nghĩa tổ chức)',
+        permission: 'admin:retrieval',
+        steps: [
+          {
+            title: 'Mục đích',
+            detail:
+              'Ánh xạ bảng/collection MES thành bản nháp thực thể + thuộc tính, duyệt rồi xuất bản. Agent / Open API chỉ đọc bản đã publish. Mở Quản trị → Ontology Studio.',
+          },
+          {
+            title: 'Kết nối CSDL và nhập schema',
+            detail:
+              'Bấm «Kết nối CSDL»: chọn MySQL / PostgreSQL / SQL Server / MongoDB → điền host/port/database (và Schema/auth source) hoặc dùng nguồn cấu trúc có sẵn → liệt kê bảng → chọn bảng/collection → xem trước → nhập vào bản nháp. MongoDB không có schema cố định; trường được suy ra từ tài liệu mẫu. Ưu tiên biến MES_*_PASSWORD.',
+          },
+          {
+            title: 'Gợi ý, duyệt, xuất bản',
+            detail:
+              'Trên bản nháp có thể Generate suggestions cho nhãn/kiểu, rồi Approve (hoặc duyệt tất cả). Xuất bản sau khi ít nhất một thực thể được duyệt. Agent chỉ thấy mô hình published đang hiệu lực. Để khôi phục bản cũ, chọn phiên bản đã lưu trữ / published không active rồi bấm Khôi phục phiên bản này.',
           },
         ],
       },

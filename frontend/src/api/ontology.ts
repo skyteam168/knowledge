@@ -34,11 +34,16 @@ export const getPublishedSemanticVersion = () =>
 export const publishSemanticVersion = (versionId: string) =>
   post<SemanticVersion>(`${BASE}/versions/${versionId}/publish`)
 
+export const rollbackSemanticVersion = (versionId: string) =>
+  post<SemanticVersion>(`${BASE}/versions/${versionId}/rollback`)
+
 export const importOntologySchema = (body: SchemaImportIn) =>
   post<SchemaImportOut>(`${BASE}/schema-import`, body)
 
-export const suggestSemanticLabels = (versionId: string) =>
-  post<SemanticSuggestOut>(`${BASE}/versions/${versionId}/suggest`)
+export const suggestSemanticLabels = (versionId: string, dryRun = false) =>
+  post<SemanticSuggestOut>(`${BASE}/versions/${versionId}/suggest`, undefined, {
+    params: { dry_run: dryRun },
+  })
 
 export const batchSetSemanticStatus = (versionId: string, body: SemanticBatchStatusIn) =>
   post<SemanticBatchStatusOut>(`${BASE}/versions/${versionId}/batch-status`, body)

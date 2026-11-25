@@ -13,16 +13,32 @@ import {
   importOntologySchema,
   listSemanticVersions,
   publishSemanticVersion,
+  rollbackSemanticVersion,
   suggestSemanticLabels,
 } from '@/api/ontology'
+import {
+  listMongoCollections,
+  listMssqlTables,
+  listMysqlTables,
+  listPostgresTables,
+  listStructuredSources,
+  probeMongoCollection,
+  probeMssqlTable,
+  probeMysqlTable,
+  probePostgresTable,
+} from '@/api/structured'
 import type {
+  MysqlColumnInfo,
+  MysqlTableInfo,
   SchemaImportIn,
+  SchemaTableIn,
   SemanticAttribute,
   SemanticEntity,
   SemanticItemStatus,
   SemanticMapping,
   SemanticVersion,
   SemanticVersionDetail,
+  StructuredSource,
 } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import { formatDateTime } from '@/utils/format'
@@ -40,6 +56,12 @@ const selectedEntityIds = ref<string[]>([])
 const selectedAttrIds = ref<string[]>([])
 
 const isDraft = computed(() => detail.value?.status === 'draft')
+const canRollback = computed(() => {
+  const d = detail.value
+  if (!d) return false
+  if (d.status === 'archived') return true
+  return d.status === 'published' && !d.is_active
+})
 const selectedEntity = computed(
   () => detail.value?.entities.find((e) => e.id === selectedEntityId.value) ?? null,
 )
@@ -406,11 +428,64 @@ async function runBatch(status: SemanticItemStatus): Promise<void> {
   }
 }
 
-async function runSuggest(): Promise<void> {
+interface SuggestRow {
+  kind: string
+  id: string
+  code: string
+  before_label: string
+  label: string
+  before_extra: string
+  extra: string
+  selected: boolean
+}
+
+const suggestDialog = ref(false)
+const suggestRows = ref<SuggestRow[]>([])
+const suggestApplying = ref(false)
+
+async function openSuggestPreview(): Promise<void> {
   if (!detail.value || !isDraft.value) return
   actionBusy.value = true
   try {
-    const out = await suggestSemanticLabels(detail.value.id)
+    const out = await suggestSemanticLabels(detail.value.id, true)
+    suggestRows.value = (out.suggestions || []).map((s) => {
+      const kind = String(s.kind || '')
+      const code = kind === 'entity' ? String(s.local_name || '') : String(s.name || '')
+      const beforeExtra =
+        kind === 'entity'
+          ? String(s.before_object_type || '')
+          : String(s.before_attr_kind || '')
+      const extra =
+        kind === 'entity' ? String(s.object_type || '') : String(s.attr_kind || '')
+      return {
+        kind,
+        id: String(s.id || ''),
+        code,
+        before_label: String(s.before_label || ''),
+        label: String(s.label || ''),
+        before_extra: beforeExtra,
+        extra,
+        selected: true,
+      }
+    })
+    if (!suggestRows.value.length) {
+      ElMessage.info(t('ontology.suggestEmpty'))
+      return
+    }
+    suggestDialog.value = true
+  } catch {
+    ElMessage.error(t('ontology.suggestFail'))
+  } finally {
+    actionBusy.value = false
+  }
+}
+
+async function applySuggest(): Promise<void> {
+  if (!detail.value || !isDraft.value) return
+  suggestApplying.value = true
+  try {
+    const out = await suggestSemanticLabels(detail.value.id, false)
+    suggestDialog.value = false
     ElMessage.success(
       t('ontology.suggestOk', {
         entities: out.entities_updated,
@@ -421,7 +496,268 @@ async function runSuggest(): Promise<void> {
   } catch {
     ElMessage.error(t('ontology.suggestFail'))
   } finally {
+    suggestApplying.value = false
+  }
+}
+
+async function approveAllDraft(): Promise<void> {
+  if (!detail.value || !isDraft.value) return
+  const entityIds = detail.value.entities
+    .filter((e) => e.status === 'draft')
+    .map((e) => e.id)
+  const attrIds = detail.value.attributes
+    .filter((a) => a.status === 'draft')
+    .map((a) => a.id)
+  const mappingIds = (detail.value.mappings ?? [])
+    .filter((m) => m.status === 'draft')
+    .map((m) => m.id)
+  if (!entityIds.length && !attrIds.length && !mappingIds.length) {
+    ElMessage.warning(t('ontology.approveAllEmpty'))
+    return
+  }
+  actionBusy.value = true
+  try {
+    const out = await batchSetSemanticStatus(detail.value.id, {
+      entity_ids: entityIds,
+      attribute_ids: attrIds,
+      mapping_ids: mappingIds,
+      status: 'approved',
+    })
+    ElMessage.success(
+      t('ontology.batchOk', {
+        e: out.entities_updated,
+        a: out.attributes_updated,
+        m: out.mappings_updated,
+      }),
+    )
+    await loadDetail()
+  } finally {
     actionBusy.value = false
+  }
+}
+
+/* ---- connect MySQL → import schema ---- */
+const dbDialog = ref(false)
+const dbStep = ref(0)
+const dbBusy = ref(false)
+type DbEngine = 'mysql' | 'postgres' | 'mongo' | 'mssql'
+const dbEngine = ref<DbEngine>('mysql')
+const dbMode = ref<'manual' | 'source'>('manual')
+const engineSources = ref<StructuredSource[]>([])
+const dbForm = reactive({
+  source_id: '',
+  host: '127.0.0.1',
+  port: 3306,
+  database: '',
+  user: '',
+  password_env: 'MES_MYSQL_PASSWORD',
+  password: '',
+  charset: 'utf8mb4',
+  schema: 'public',
+  auth_source: 'admin',
+})
+const dbTables = ref<MysqlTableInfo[]>([])
+const selectedTableNames = ref<string[]>([])
+const probedTables = ref<
+  { name: string; columns: MysqlColumnInfo[]; row_count: number; comment?: string | null }[]
+>([])
+const dbAutoApprove = ref(false)
+
+function defaultPasswordEnv(engine: DbEngine): string {
+  if (engine === 'postgres') return 'MES_PG_PASSWORD'
+  if (engine === 'mongo') return 'MES_MONGO_PASSWORD'
+  if (engine === 'mssql') return 'MES_MSSQL_PASSWORD'
+  return 'MES_MYSQL_PASSWORD'
+}
+
+function defaultPort(engine: DbEngine): number {
+  if (engine === 'postgres') return 5432
+  if (engine === 'mongo') return 27017
+  if (engine === 'mssql') return 1433
+  return 3306
+}
+
+function defaultSchema(engine: DbEngine): string {
+  if (engine === 'mssql') return 'dbo'
+  return 'public'
+}
+
+function onEngineChange(engine: DbEngine): void {
+  dbEngine.value = engine
+  dbForm.port = defaultPort(engine)
+  dbForm.password_env = defaultPasswordEnv(engine)
+  dbForm.schema = defaultSchema(engine)
+  dbForm.source_id = ''
+  refreshEngineSources()
+}
+
+function dbConnectBody() {
+  const passwordEnv = dbForm.password_env || defaultPasswordEnv(dbEngine.value)
+  if (dbMode.value === 'source' && dbForm.source_id) {
+    return {
+      source_id: dbForm.source_id,
+      host: dbForm.host || 'unused',
+      database: dbForm.database || 'unused',
+      user: dbForm.user || (dbEngine.value === 'mongo' ? '' : 'unused'),
+      password_env: passwordEnv,
+      password: dbForm.password || null,
+      charset: dbForm.charset,
+      schema: dbForm.schema || defaultSchema(dbEngine.value),
+      auth_source: dbForm.auth_source || 'admin',
+      port: dbForm.port,
+    }
+  }
+  return {
+    host: dbForm.host.trim(),
+    port: dbForm.port,
+    database: dbForm.database.trim(),
+    user: dbForm.user.trim(),
+    password_env: dbForm.password_env.trim() || defaultPasswordEnv(dbEngine.value),
+    password: dbForm.password || null,
+    charset: dbForm.charset,
+    schema: dbForm.schema.trim() || defaultSchema(dbEngine.value),
+    auth_source: dbForm.auth_source.trim() || 'admin',
+  }
+}
+
+async function refreshEngineSources(): Promise<void> {
+  try {
+    const sources = await listStructuredSources()
+    engineSources.value = sources.filter((s) => s.meta?.connector === dbEngine.value)
+  } catch {
+    engineSources.value = []
+  }
+}
+
+async function openConnectDb(): Promise<void> {
+  dbStep.value = 0
+  dbTables.value = []
+  selectedTableNames.value = []
+  probedTables.value = []
+  await refreshEngineSources()
+  dbDialog.value = true
+}
+
+async function dbListTables(): Promise<void> {
+  if (dbMode.value === 'manual') {
+    const needUser = dbEngine.value !== 'mongo'
+    if (
+      !dbForm.host.trim() ||
+      !dbForm.database.trim() ||
+      (needUser && !dbForm.user.trim())
+    ) {
+      ElMessage.warning(t('ontology.dbConnectRequired'))
+      return
+    }
+  } else if (!dbForm.source_id) {
+    ElMessage.warning(t('ontology.dbSourceRequired'))
+    return
+  }
+  dbBusy.value = true
+  try {
+    const body = dbConnectBody()
+    const out =
+      dbEngine.value === 'postgres'
+        ? await listPostgresTables(body)
+        : dbEngine.value === 'mongo'
+          ? await listMongoCollections(body)
+          : dbEngine.value === 'mssql'
+            ? await listMssqlTables(body)
+            : await listMysqlTables(body)
+    dbTables.value =
+      dbEngine.value === 'mongo'
+        ? out.tables
+        : out.tables.filter((t) => t.table_type !== 'VIEW')
+    selectedTableNames.value = []
+    dbStep.value = 1
+    if (!dbTables.value.length) {
+      ElMessage.warning(
+        dbEngine.value === 'mongo' ? t('ontology.dbNoCollections') : t('ontology.dbNoTables'),
+      )
+    }
+  } catch {
+    ElMessage.error(t('ontology.dbConnectFail'))
+  } finally {
+    dbBusy.value = false
+  }
+}
+
+async function dbProbeSelected(): Promise<void> {
+  if (!selectedTableNames.value.length) {
+    ElMessage.warning(
+      dbEngine.value === 'mongo' ? t('ontology.dbSelectCollections') : t('ontology.dbSelectTables'),
+    )
+    return
+  }
+  dbBusy.value = true
+  try {
+    const body = dbConnectBody()
+    const results = []
+    for (const name of selectedTableNames.value) {
+      const probed =
+        dbEngine.value === 'postgres'
+          ? await probePostgresTable({ ...body, table: name, sample_limit: 2 })
+          : dbEngine.value === 'mongo'
+            ? await probeMongoCollection({ ...body, table: name, sample_limit: 2 })
+            : dbEngine.value === 'mssql'
+              ? await probeMssqlTable({ ...body, table: name, sample_limit: 2 })
+              : await probeMysqlTable({ ...body, table: name, sample_limit: 2 })
+      const meta = dbTables.value.find((t) => t.name === name)
+      results.push({
+        name: probed.table,
+        columns: probed.columns,
+        row_count: probed.row_count,
+        comment: meta?.comment ?? null,
+      })
+    }
+    probedTables.value = results
+    dbStep.value = 2
+  } catch {
+    ElMessage.error(t('ontology.dbProbeFail'))
+  } finally {
+    dbBusy.value = false
+  }
+}
+
+async function dbImportSchema(): Promise<void> {
+  if (!probedTables.value.length) return
+  const tables: SchemaTableIn[] = probedTables.value.map((t) => ({
+    name: t.name,
+    comment: t.comment || null,
+    columns: t.columns.map((c) => ({
+      name: c.name,
+      data_type: c.type,
+      comment: null,
+    })),
+  }))
+  dbBusy.value = true
+  try {
+    const body: SchemaImportIn = {
+      tables,
+      source_id: dbMode.value === 'source' ? dbForm.source_id || null : null,
+      auto_approve: dbAutoApprove.value,
+    }
+    if (detail.value?.status === 'draft') {
+      body.version_id = detail.value.id
+    } else {
+      body.version_name = `import-${new Date().toISOString().slice(0, 10)}`
+    }
+    const out = await importOntologySchema(body)
+    dbDialog.value = false
+    ElMessage.success(
+      t('ontology.importOk', {
+        entities: out.stats.entities_created,
+        attrs: out.stats.attributes_created,
+        maps: out.stats.mappings_created,
+      }),
+    )
+    await loadVersions()
+    activeVersionId.value = out.version.id
+    await loadDetail()
+  } catch {
+    ElMessage.error(t('ontology.importFail'))
+  } finally {
+    dbBusy.value = false
   }
 }
 
@@ -447,6 +783,28 @@ async function runPublish(): Promise<void> {
     await loadDetail()
   } catch {
     ElMessage.error(t('ontology.publishFail'))
+  } finally {
+    actionBusy.value = false
+  }
+}
+
+async function runRollback(): Promise<void> {
+  if (!detail.value || !canRollback.value) return
+  try {
+    await ElMessageBox.confirm(t('ontology.rollbackConfirm'), t('ontology.rollback'), {
+      type: 'warning',
+    })
+  } catch {
+    return
+  }
+  actionBusy.value = true
+  try {
+    await rollbackSemanticVersion(detail.value.id)
+    ElMessage.success(t('ontology.rollbackOk'))
+    await loadVersions()
+    await loadDetail()
+  } catch {
+    ElMessage.error(t('ontology.rollbackFail'))
   } finally {
     actionBusy.value = false
   }
@@ -662,12 +1020,15 @@ function selectCanvasNode(id: string): void {
           <p class="hint">{{ t('ontology.hint') }}</p>
         </div>
         <div class="header-actions">
+          <el-button type="primary" plain @click="openConnectDb">
+            {{ t('ontology.connectDb') }}
+          </el-button>
           <el-button @click="openCreateVersion">{{ t('ontology.createVersion') }}</el-button>
           <el-button @click="openImport">{{ t('ontology.importSchema') }}</el-button>
           <el-button
             :disabled="!isDraft"
             :loading="actionBusy"
-            @click="runSuggest"
+            @click="openSuggestPreview"
           >
             {{ t('ontology.suggest') }}
           </el-button>
@@ -678,6 +1039,15 @@ function selectCanvasNode(id: string): void {
             @click="runPublish"
           >
             {{ t('ontology.publish') }}
+          </el-button>
+          <el-button
+            type="warning"
+            plain
+            :disabled="!canRollback"
+            :loading="actionBusy"
+            @click="runRollback"
+          >
+            {{ t('ontology.rollback') }}
           </el-button>
         </div>
       </div>
@@ -740,6 +1110,15 @@ function selectCanvasNode(id: string): void {
               @click="runBatch('approved')"
             >
               {{ t('ontology.batchApprove') }}
+            </el-button>
+            <el-button
+              size="small"
+              type="success"
+              :disabled="!isDraft"
+              :loading="actionBusy"
+              @click="approveAllDraft"
+            >
+              {{ t('ontology.approveAll') }}
             </el-button>
             <el-button
               size="small"
@@ -1109,6 +1488,192 @@ function selectCanvasNode(id: string): void {
       </el-button>
     </template>
   </el-dialog>
+
+  <el-dialog
+    v-model="dbDialog"
+    :title="t('ontology.connectDb')"
+    width="720px"
+    destroy-on-close
+  >
+    <el-steps :active="dbStep" finish-status="success" align-center class="db-steps">
+      <el-step :title="t('ontology.dbStepConnect')" />
+      <el-step :title="t('ontology.dbStepTables')" />
+      <el-step :title="t('ontology.dbStepPreview')" />
+    </el-steps>
+
+    <div v-show="dbStep === 0" class="db-step-body">
+      <p class="hint">{{ t('ontology.dbConnectHint') }}</p>
+      <el-form label-width="120px" class="mb">
+        <el-form-item :label="t('ontology.dbEngine')">
+          <el-radio-group
+            :model-value="dbEngine"
+            @update:model-value="(v: string | number | boolean | undefined) => onEngineChange(String(v) as DbEngine)"
+          >
+            <el-radio-button value="mysql">MySQL</el-radio-button>
+            <el-radio-button value="postgres">PostgreSQL</el-radio-button>
+            <el-radio-button value="mssql">SQL Server</el-radio-button>
+            <el-radio-button value="mongo">MongoDB</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+      </el-form>
+      <el-radio-group v-model="dbMode" class="mb">
+        <el-radio-button value="manual">{{ t('ontology.dbModeManual') }}</el-radio-button>
+        <el-radio-button value="source">{{ t('ontology.dbModeSource') }}</el-radio-button>
+      </el-radio-group>
+      <el-form v-if="dbMode === 'source'" label-width="120px">
+        <el-form-item :label="t('ontology.dbSource')">
+          <el-select v-model="dbForm.source_id" style="width: 100%" filterable>
+            <el-option
+              v-for="s in engineSources"
+              :key="s.id"
+              :label="s.name"
+              :value="s.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item
+          v-if="dbEngine === 'postgres' || dbEngine === 'mssql'"
+          :label="t('ontology.dbSchema')"
+        >
+          <el-input v-model="dbForm.schema" :placeholder="defaultSchema(dbEngine)" />
+        </el-form-item>
+        <el-form-item v-if="dbEngine === 'mongo'" :label="t('ontology.dbAuthSource')">
+          <el-input v-model="dbForm.auth_source" placeholder="admin" />
+        </el-form-item>
+        <el-form-item :label="t('ontology.dbPasswordEnv')">
+          <el-input
+            v-model="dbForm.password_env"
+            :placeholder="defaultPasswordEnv(dbEngine)"
+          />
+        </el-form-item>
+        <el-form-item :label="t('ontology.dbPasswordOnce')">
+          <el-input v-model="dbForm.password" type="password" show-password />
+        </el-form-item>
+      </el-form>
+      <el-form v-else label-width="120px">
+        <el-form-item :label="t('ontology.dbHost')">
+          <el-input v-model="dbForm.host" />
+        </el-form-item>
+        <el-form-item :label="t('ontology.dbPort')">
+          <el-input-number v-model="dbForm.port" :min="1" :max="65535" />
+        </el-form-item>
+        <el-form-item :label="t('ontology.dbDatabase')">
+          <el-input v-model="dbForm.database" />
+        </el-form-item>
+        <el-form-item
+          v-if="dbEngine === 'postgres' || dbEngine === 'mssql'"
+          :label="t('ontology.dbSchema')"
+        >
+          <el-input v-model="dbForm.schema" :placeholder="defaultSchema(dbEngine)" />
+        </el-form-item>
+        <el-form-item v-if="dbEngine === 'mongo'" :label="t('ontology.dbAuthSource')">
+          <el-input v-model="dbForm.auth_source" placeholder="admin" />
+        </el-form-item>
+        <el-form-item :label="t('ontology.dbUser')">
+          <el-input
+            v-model="dbForm.user"
+            :placeholder="dbEngine === 'mongo' ? t('ontology.dbUserOptional') : ''"
+          />
+        </el-form-item>
+        <el-form-item :label="t('ontology.dbPasswordEnv')">
+          <el-input
+            v-model="dbForm.password_env"
+            :placeholder="defaultPasswordEnv(dbEngine)"
+          />
+        </el-form-item>
+        <el-form-item :label="t('ontology.dbPasswordOnce')">
+          <el-input v-model="dbForm.password" type="password" show-password />
+        </el-form-item>
+      </el-form>
+    </div>
+
+    <div v-show="dbStep === 1" class="db-step-body">
+      <p class="hint">{{ dbEngine === 'mongo' ? t('ontology.dbCollectionsHint') : t('ontology.dbTablesHint') }}</p>
+      <el-table
+        :data="dbTables"
+        height="320"
+        @selection-change="(rows: MysqlTableInfo[]) => (selectedTableNames = rows.map((r) => r.name))"
+      >
+        <el-table-column type="selection" width="42" />
+        <el-table-column prop="name" :label="t('ontology.tableName')" min-width="160" />
+        <el-table-column prop="approx_rows" :label="t('ontology.dbApproxRows')" width="100" />
+        <el-table-column prop="comment" :label="t('ontology.description')" min-width="140" />
+      </el-table>
+    </div>
+
+    <div v-show="dbStep === 2" class="db-step-body">
+      <p class="hint">{{ t('ontology.dbPreviewHint') }}</p>
+      <div v-for="trow in probedTables" :key="trow.name" class="probe-block">
+        <div class="probe-title">
+          <strong>{{ trow.name }}</strong>
+          <span class="meta-sub"> · {{ trow.row_count }} rows · {{ trow.columns.length }} cols</span>
+        </div>
+        <el-table :data="trow.columns" size="small" max-height="180">
+          <el-table-column prop="name" :label="t('ontology.columnName')" />
+          <el-table-column prop="type" :label="t('ontology.attrKind')" width="140" />
+          <el-table-column prop="key" label="Key" width="70" />
+          <el-table-column prop="nullable" label="Null" width="70" />
+        </el-table>
+      </div>
+      <el-checkbox v-model="dbAutoApprove" class="mt">
+        {{ t('ontology.autoApprove') }}
+      </el-checkbox>
+    </div>
+
+    <template #footer>
+      <el-button @click="dbDialog = false">{{ t('common.cancel') }}</el-button>
+      <el-button v-if="dbStep > 0" :disabled="dbBusy" @click="dbStep -= 1">
+        {{ t('ontology.dbPrev') }}
+      </el-button>
+      <el-button
+        v-if="dbStep === 0"
+        type="primary"
+        :loading="dbBusy"
+        @click="dbListTables"
+      >
+        {{ t('ontology.dbListTables') }}
+      </el-button>
+      <el-button
+        v-else-if="dbStep === 1"
+        type="primary"
+        :loading="dbBusy"
+        @click="dbProbeSelected"
+      >
+        {{ t('ontology.dbReadSchema') }}
+      </el-button>
+      <el-button
+        v-else
+        type="primary"
+        :loading="dbBusy"
+        @click="dbImportSchema"
+      >
+        {{ t('ontology.dbImportToDraft') }}
+      </el-button>
+    </template>
+  </el-dialog>
+
+  <el-dialog
+    v-model="suggestDialog"
+    :title="t('ontology.suggestPreview')"
+    width="780px"
+    destroy-on-close
+  >
+    <p class="hint">{{ t('ontology.suggestPreviewHint') }}</p>
+    <el-table :data="suggestRows" max-height="420">
+      <el-table-column prop="kind" :label="t('ontology.suggestKind')" width="90" />
+      <el-table-column prop="code" :label="t('ontology.localName')" min-width="120" />
+      <el-table-column prop="before_label" :label="t('ontology.suggestBefore')" min-width="120" />
+      <el-table-column prop="label" :label="t('ontology.suggestAfter')" min-width="120" />
+      <el-table-column prop="before_extra" :label="t('ontology.suggestBeforeType')" width="110" />
+      <el-table-column prop="extra" :label="t('ontology.suggestAfterType')" width="110" />
+    </el-table>
+    <template #footer>
+      <el-button @click="suggestDialog = false">{{ t('common.cancel') }}</el-button>
+      <el-button type="primary" :loading="suggestApplying" @click="applySuggest">
+        {{ t('ontology.suggestApply') }}
+      </el-button>
+    </template>
+  </el-dialog>
 </template>
 
 <style scoped>
@@ -1248,6 +1813,21 @@ function selectCanvasNode(id: string): void {
 }
 .mt {
   margin-top: 12px;
+}
+.mb {
+  margin-bottom: 12px;
+}
+.db-steps {
+  margin-bottom: 16px;
+}
+.db-step-body {
+  min-height: 280px;
+}
+.probe-block {
+  margin-bottom: 14px;
+}
+.probe-title {
+  margin-bottom: 6px;
 }
 @media (max-width: 1100px) {
   .studio-layout,

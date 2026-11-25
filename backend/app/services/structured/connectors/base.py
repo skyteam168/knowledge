@@ -86,6 +86,52 @@ class MysqlConfig(BaseModel):
     row_limit: int = Field(default=20_000, ge=1, le=100_000)
 
 
+class PostgresConfig(BaseModel):
+    """PostgreSQL table pull. Password via env — never commit secrets into meta."""
+
+    host: str = Field(min_length=1, max_length=255)
+    port: int = Field(default=5432, ge=1, le=65535)
+    database: str = Field(min_length=1, max_length=128)
+    user: str = Field(min_length=1, max_length=128)
+    password_env: str = Field(default="MES_PG_PASSWORD", min_length=1, max_length=128)
+    password: str | None = Field(default=None, max_length=256)
+    schema: str = Field(default="public", min_length=1, max_length=64)
+    table: str = Field(default="device_info", min_length=1, max_length=128)
+    connect_timeout_seconds: int = Field(default=10, ge=1, le=120)
+    row_limit: int = Field(default=20_000, ge=1, le=100_000)
+
+
+class MongoConfig(BaseModel):
+    """MongoDB collection pull. Password via env — never commit secrets into meta."""
+
+    host: str = Field(min_length=1, max_length=255)
+    port: int = Field(default=27017, ge=1, le=65535)
+    database: str = Field(min_length=1, max_length=128)
+    user: str = Field(default="", max_length=128)
+    """Empty user = no auth (common for internal factory Mongo)."""
+    password_env: str = Field(default="MES_MONGO_PASSWORD", min_length=1, max_length=128)
+    password: str | None = Field(default=None, max_length=256)
+    auth_source: str = Field(default="admin", min_length=1, max_length=128)
+    collection: str = Field(default="devices", min_length=1, max_length=128)
+    connect_timeout_seconds: int = Field(default=10, ge=1, le=120)
+    row_limit: int = Field(default=20_000, ge=1, le=100_000)
+
+
+class MssqlConfig(BaseModel):
+    """SQL Server table pull. Password via env — never commit secrets into meta."""
+
+    host: str = Field(min_length=1, max_length=255)
+    port: int = Field(default=1433, ge=1, le=65535)
+    database: str = Field(min_length=1, max_length=128)
+    user: str = Field(min_length=1, max_length=128)
+    password_env: str = Field(default="MES_MSSQL_PASSWORD", min_length=1, max_length=128)
+    password: str | None = Field(default=None, max_length=256)
+    schema: str = Field(default="dbo", min_length=1, max_length=64)
+    table: str = Field(default="device_info", min_length=1, max_length=128)
+    connect_timeout_seconds: int = Field(default=10, ge=1, le=120)
+    row_limit: int = Field(default=20_000, ge=1, le=100_000)
+
+
 class IncrementalConfig(BaseModel):
     """S1: cursor / watermark incremental pull (not full re-poll every time)."""
 
@@ -115,11 +161,14 @@ class FetchResult(BaseModel):
 class StructuredConnectorConfig(BaseModel):
     """Parsed from ``StructuredSource.meta`` (connector keys only)."""
 
-    connector: Literal["csv", "rest", "mysql"]
+    connector: Literal["csv", "rest", "mysql", "postgres", "mongo", "mssql"]
     sync_interval_minutes: int = Field(default=0, ge=0, le=10080)
     csv: CsvPaths | None = None
     rest: RestConfig | None = None
     mysql: MysqlConfig | None = None
+    postgres: PostgresConfig | None = None
+    mongo: MongoConfig | None = None
+    mssql: MssqlConfig | None = None
     column_map: dict[str, dict[str, str]] = Field(default_factory=dict)
     incremental: IncrementalConfig = Field(default_factory=IncrementalConfig)
 
@@ -136,6 +185,21 @@ class StructuredConnectorConfig(BaseModel):
         elif self.connector == "mysql":
             if self.mysql is None:
                 raise ValueError("mysql connector requires mysql.{host,database,user,table}")
+        elif self.connector == "postgres":
+            if self.postgres is None:
+                raise ValueError(
+                    "postgres connector requires postgres.{host,database,user,table}"
+                )
+        elif self.connector == "mongo":
+            if self.mongo is None:
+                raise ValueError(
+                    "mongo connector requires mongo.{host,database,collection}"
+                )
+        elif self.connector == "mssql":
+            if self.mssql is None:
+                raise ValueError(
+                    "mssql connector requires mssql.{host,database,user,table}"
+                )
         return self
 
 
@@ -216,4 +280,16 @@ def build_connector(
         from app.services.structured.connectors.mysql import MysqlEquipmentConnector
 
         return MysqlEquipmentConnector(config, settings)
+    if config.connector == "postgres":
+        from app.services.structured.connectors.postgres import PostgresEquipmentConnector
+
+        return PostgresEquipmentConnector(config, settings)
+    if config.connector == "mongo":
+        from app.services.structured.connectors.mongo import MongoEquipmentConnector
+
+        return MongoEquipmentConnector(config, settings)
+    if config.connector == "mssql":
+        from app.services.structured.connectors.mssql import MssqlEquipmentConnector
+
+        return MssqlEquipmentConnector(config, settings)
     raise ValidationAppError(f"Unknown connector: {config.connector}")

@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import AuthzCacheDep, DbSessionDep, RequestContextDep, require_permission
 from app.schemas.semantic import (
@@ -100,10 +100,15 @@ async def import_schema(data: SchemaImportIn, service: StudioDep) -> SchemaImpor
     response_model=SemanticSuggestOut,
 )
 async def suggest_labels(
-    version_id: str, service: StudioDep
+    version_id: str,
+    service: StudioDep,
+    dry_run: Annotated[bool, Query()] = False,
 ) -> SemanticSuggestOut:
-    """OS3: generate label/description/type suggestions for draft items."""
-    return await service.suggest_labels(version_id)
+    """OS3: generate label/description/type suggestions for draft items.
+
+    Pass ``dry_run=true`` to preview without writing (admin confirm UI).
+    """
+    return await service.suggest_labels(version_id, dry_run=dry_run)
 
 
 @router.post(
