@@ -914,10 +914,18 @@ function selectCanvasNode(id: string): void {
                 </el-table-column>
                 <el-table-column v-if="isDraft" width="160" fixed="right">
                   <template #default="{ row }">
-                    <el-button link type="primary" @click.stop="openEditAttribute(row)">
+                    <el-button
+                      link
+                      type="primary"
+                      @click.stop="openEditAttribute(row as SemanticAttribute)"
+                    >
                       {{ t('ontology.editAttribute') }}
                     </el-button>
-                    <el-button link type="primary" @click.stop="openAddMapping(row)">
+                    <el-button
+                      link
+                      type="primary"
+                      @click.stop="openAddMapping(row as SemanticAttribute)"
+                    >
                       {{ t('ontology.addMapping') }}
                     </el-button>
                   </template>
