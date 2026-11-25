@@ -1,5 +1,11 @@
 import { get, http, post } from './http'
 import type {
+  ActionType,
+  ActionTypeCreate,
+  ActionTypeUpdate,
+  OntologyRule,
+  OntologyRuleCreate,
+  OntologyRuleUpdate,
   SchemaImportIn,
   SchemaImportOut,
   SemanticAttribute,
@@ -9,6 +15,8 @@ import type {
   SemanticBatchStatusOut,
   SemanticEntity,
   SemanticEntityCreate,
+  SemanticEvidence,
+  SemanticEvidenceCreate,
   SemanticItemStatus,
   SemanticMapping,
   SemanticMappingCreate,
@@ -74,3 +82,32 @@ export const addSemanticMapping = (attributeId: string, body: SemanticMappingCre
 
 export const setSemanticMappingStatus = async (mappingId: string, status: SemanticItemStatus) =>
   (await http.patch<SemanticMapping>(`${BASE}/mappings/${mappingId}/status`, { status })).data
+
+export const listSemanticEvidences = (
+  versionId: string,
+  params?: { target_kind?: string; target_id?: string },
+) => get<SemanticEvidence[]>(`${BASE}/versions/${versionId}/evidences`, { params })
+
+export const addSemanticEvidence = (versionId: string, body: SemanticEvidenceCreate) =>
+  post<SemanticEvidence>(`${BASE}/versions/${versionId}/evidences`, body)
+
+export const deleteSemanticEvidence = async (evidenceId: string) => {
+  await http.delete(`${BASE}/evidences/${evidenceId}`)
+}
+
+export const listOntologyRules = () => get<OntologyRule[]>(`${BASE}/rules`)
+
+export const createOntologyRule = (body: OntologyRuleCreate) =>
+  post<OntologyRule>(`${BASE}/rules`, body)
+
+export const patchOntologyRule = async (ruleId: string, body: OntologyRuleUpdate) =>
+  (await http.patch<OntologyRule>(`${BASE}/rules/${ruleId}`, body)).data
+
+export const listActionTypes = (enabledOnly = false) =>
+  get<ActionType[]>(`${BASE}/action-types`, { params: { enabled_only: enabledOnly } })
+
+export const createActionType = (body: ActionTypeCreate) =>
+  post<ActionType>(`${BASE}/action-types`, body)
+
+export const patchActionType = async (actionId: string, body: ActionTypeUpdate) =>
+  (await http.patch<ActionType>(`${BASE}/action-types/${actionId}`, body)).data

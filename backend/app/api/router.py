@@ -22,7 +22,9 @@ from app.api.v1 import (
     models_admin,
     notifications,
     open_admin,
+    identity_admin,
     ontology_admin,
+    ontology_governance_admin,
     open_api,
     organizations,
     retrieval_admin,
@@ -50,7 +52,9 @@ api_router.include_router(search.router)
 api_router.include_router(retrieval_admin.router)
 api_router.include_router(terminology_admin.router)
 api_router.include_router(structured_admin.router)
+api_router.include_router(identity_admin.router)
 api_router.include_router(ontology_admin.router)
+api_router.include_router(ontology_governance_admin.router)
 api_router.include_router(chat.router)
 api_router.include_router(curation.router)
 api_router.include_router(notifications.router)

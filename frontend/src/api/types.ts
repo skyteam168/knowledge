@@ -2512,6 +2512,8 @@ export interface SemanticAttribute {
   unit?: string | null
   enum_map?: Record<string, { standard: string; label: string; labels?: Record<string, string> | null }>
   labels?: Record<string, string>
+  compute_expr?: string | null
+  compute_inputs?: string[]
   status: SemanticItemStatus | string
   created_at: string
   updated_at: string
@@ -2525,6 +2527,8 @@ export interface SemanticAttributeCreate {
   unit?: string | null
   enum_map?: Record<string, unknown>
   labels?: Record<string, string>
+  compute_expr?: string | null
+  compute_inputs?: string[]
 }
 
 export interface SemanticAttributeUpdate {
@@ -2534,6 +2538,29 @@ export interface SemanticAttributeUpdate {
   unit?: string | null
   enum_map?: Record<string, unknown> | null
   labels?: Record<string, string> | null
+  compute_expr?: string | null
+  compute_inputs?: string[] | null
+}
+
+export interface SemanticEvidence {
+  id: string
+  version_id: string
+  target_kind: 'entity' | 'attribute' | string
+  target_id: string
+  evidence_kind: 'ko' | 'document' | 'chunk' | string
+  evidence_id: string
+  note: string | null
+  created_by?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface SemanticEvidenceCreate {
+  target_kind: 'entity' | 'attribute'
+  target_id: string
+  evidence_kind: 'ko' | 'document' | 'chunk'
+  evidence_id: string
+  note?: string | null
 }
 
 export interface SemanticMapping {
@@ -2562,6 +2589,7 @@ export interface SemanticVersionDetail extends SemanticVersion {
   entities: SemanticEntity[]
   attributes: SemanticAttribute[]
   mappings: SemanticMapping[]
+  evidences?: SemanticEvidence[]
 }
 
 export interface SchemaColumnIn {
@@ -2731,4 +2759,119 @@ export interface SemanticBatchStatusOut {
   entities_updated: number
   attributes_updated: number
   mappings_updated: number
+}
+
+export interface CanonicalEntity {
+  id: string
+  object_type: string
+  display_name: string
+  status: string
+  structured_object_type?: string | null
+  structured_object_id?: string | null
+  created_at: string
+  updated_at: string
+  identifiers?: IdentifierOut[]
+}
+
+export interface CanonicalCreate {
+  object_type: string
+  display_name: string
+  structured_object_type?: string | null
+  structured_object_id?: string | null
+  status?: string
+}
+
+export interface IdentifierOut {
+  id: string
+  canonical_id: string
+  system: string
+  id_kind: string
+  external_id: string
+  is_primary: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface IdentifierCreate {
+  system: string
+  external_id: string
+  id_kind?: string
+  is_primary?: boolean
+}
+
+export interface ResolveMatchIn {
+  identifiers: Array<{ system: string; external_id: string; id_kind?: string }>
+}
+
+export interface ResolveMatchOut {
+  status: string
+  canonical_ids: string[]
+  canonical?: CanonicalEntity | null
+}
+
+export interface OntologyRule {
+  id: string
+  name: string
+  description: string | null
+  priority: number
+  enabled: boolean
+  condition: Record<string, unknown>
+  verdict: string
+  message: string | null
+  created_by?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface OntologyRuleCreate {
+  name: string
+  description?: string | null
+  priority?: number
+  enabled?: boolean
+  condition?: Record<string, unknown>
+  verdict?: string
+  message?: string | null
+}
+
+export interface OntologyRuleUpdate {
+  name?: string | null
+  description?: string | null
+  priority?: number | null
+  enabled?: boolean | null
+  condition?: Record<string, unknown> | null
+  verdict?: string | null
+  message?: string | null
+}
+
+export interface ActionType {
+  id: string
+  name: string
+  description: string | null
+  input_schema: Record<string, unknown>
+  preconditions: Record<string, unknown>
+  risk: string
+  systems: string[]
+  enabled: boolean
+  created_by?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ActionTypeCreate {
+  name: string
+  description?: string | null
+  input_schema?: Record<string, unknown>
+  preconditions?: Record<string, unknown>
+  risk?: string
+  systems?: string[]
+  enabled?: boolean
+}
+
+export interface ActionTypeUpdate {
+  description?: string | null
+  input_schema?: Record<string, unknown> | null
+  preconditions?: Record<string, unknown> | null
+  risk?: string | null
+  systems?: string[] | null
+  enabled?: boolean | null
 }

@@ -7,7 +7,16 @@ from enum import StrEnum
 
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, IdMixin, JsonType, TenantMixin, TimestampMixin
@@ -111,9 +120,42 @@ class SemanticAttribute(IdMixin, TenantMixin, TimestampMixin, Base):
     unit: Mapped[str | None] = mapped_column(String(32))
     enum_map: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict, nullable=False)
     labels: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict, nullable=False)
+    compute_expr: Mapped[str | None] = mapped_column(Text)
+    compute_inputs: Mapped[list[Any]] = mapped_column(JsonType, default=list, nullable=False)
     status: Mapped[str] = mapped_column(
         String(16), default=SemanticItemStatus.DRAFT.value, nullable=False
     )
+    created_by: Mapped[str | None] = mapped_column(String(32))
+
+
+class SemanticEvidence(IdMixin, TenantMixin, TimestampMixin, Base):
+    """Link a semantic entity/attribute to KO / document / chunk evidence."""
+
+    __tablename__ = "semantic_evidences"
+    __table_args__ = (
+        UniqueConstraint(
+            "org_id",
+            "version_id",
+            "target_kind",
+            "target_id",
+            "evidence_kind",
+            "evidence_id",
+            name="uq_semantic_evidences_target_ref",
+        ),
+        Index("ix_semantic_evidences_version", "org_id", "version_id"),
+        Index("ix_semantic_evidences_target", "org_id", "target_kind", "target_id"),
+    )
+
+    version_id: Mapped[str] = mapped_column(
+        String(32),
+        ForeignKey("semantic_model_versions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    target_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    target_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    evidence_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    evidence_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    note: Mapped[str | None] = mapped_column(String(512))
     created_by: Mapped[str | None] = mapped_column(String(32))
 
 

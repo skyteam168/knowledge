@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 
 from app.api.deps import AuthzCacheDep, DbSessionDep, RequestContextDep, require_permission
 from app.schemas.semantic import (
@@ -15,6 +15,8 @@ from app.schemas.semantic import (
     SemanticBatchStatusOut,
     SemanticEntityCreate,
     SemanticEntityOut,
+    SemanticEvidenceCreate,
+    SemanticEvidenceOut,
     SemanticItemStatusUpdate,
     SemanticMappingCreate,
     SemanticMappingOut,
@@ -185,3 +187,35 @@ async def set_mapping_status(
     mapping_id: str, data: SemanticItemStatusUpdate, service: StudioDep
 ) -> SemanticMappingOut:
     return await service.set_mapping_status(mapping_id, data.status)
+
+
+@router.get(
+    "/versions/{version_id}/evidences",
+    response_model=list[SemanticEvidenceOut],
+)
+async def list_evidences(
+    version_id: str,
+    service: StudioDep,
+    target_kind: str | None = Query(default=None),
+    target_id: str | None = Query(default=None),
+) -> list[SemanticEvidenceOut]:
+    return await service.list_evidences(
+        version_id, target_kind=target_kind, target_id=target_id
+    )
+
+
+@router.post(
+    "/versions/{version_id}/evidences",
+    response_model=SemanticEvidenceOut,
+    status_code=201,
+)
+async def add_evidence(
+    version_id: str, data: SemanticEvidenceCreate, service: StudioDep
+) -> SemanticEvidenceOut:
+    return await service.add_evidence(version_id, data)
+
+
+@router.delete("/evidences/{evidence_id}", status_code=204)
+async def delete_evidence(evidence_id: str, service: StudioDep) -> Response:
+    await service.delete_evidence(evidence_id)
+    return Response(status_code=204)

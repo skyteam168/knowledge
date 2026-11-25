@@ -154,7 +154,7 @@ pytest tests/test_ontology_tools.py -q
 4. 发布 `semantic_model_versions`（OS1）；一组织一 active published  
 5. Agent/MCP 自动读最新 published；平台核心类仍来自仓库 TBox，与组织扩展合并视图  
 
-前端（OS4）：实体列表 + 属性表 + 批量审核 + 连接库向导 + 发布。操作步骤见应用内使用说明「管理后台 → Ontology Studio」。连接器参数见 [`ops/structured-connectors.md`](ops/structured-connectors.md)。  
+前端（OS4）：实体列表 + 属性表 + 批量审核 + 连接库向导 + 发布 + 语义证据 + 属性计算口径。另有「跨系统身份」「规则与动作」管理台。操作步骤见应用内使用说明「管理后台」。连接器参数见 [`ops/structured-connectors.md`](ops/structured-connectors.md)；四能力入口见 [`ops/semantic-center.md`](ops/semantic-center.md)。  
 实例增量同步（S1）须在该源映射发布之后。
 
 ## 明确不做

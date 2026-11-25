@@ -112,6 +112,7 @@ from app.models.retrieval import RetrievalProfile, RetrievalTrace
 from app.models.semantic import (
     SemanticAttribute,
     SemanticEntity,
+    SemanticEvidence,
     SemanticItemStatus,
     SemanticMapping,
     SemanticModelStatus,
@@ -202,6 +203,7 @@ __all__ = [
     "RelationCardinality",
     "SemanticAttribute",
     "SemanticEntity",
+    "SemanticEvidence",
     "SemanticItemStatus",
     "SemanticMapping",
     "SemanticModelStatus",

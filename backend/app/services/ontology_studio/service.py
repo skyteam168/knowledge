@@ -10,6 +10,7 @@ from app.models.base import utcnow
 from app.models.semantic import (
     SemanticAttribute,
     SemanticEntity,
+    SemanticEvidence,
     SemanticItemStatus,
     SemanticMapping,
     SemanticModelStatus,
@@ -26,6 +27,8 @@ from app.schemas.semantic import (
     SemanticBatchStatusOut,
     SemanticEntityCreate,
     SemanticEntityOut,
+    SemanticEvidenceCreate,
+    SemanticEvidenceOut,
     SemanticMappingCreate,
     SemanticMappingOut,
     SemanticSuggestOut,
@@ -35,6 +38,8 @@ from app.schemas.semantic import (
 )
 from app.services.context import BaseService, RequestContext
 from app.services.authz.cache import AuthzCache
+from app.services.ontology_studio.compute import validate_compute_expr
+from app.services.ontology_studio.evidence import list_evidence_rows
 
 RESOURCE = "semantic_model"
 
@@ -87,12 +92,14 @@ class OntologyStudioService(BaseService):
                 .order_by(SemanticMapping.table_name, SemanticMapping.column_name)
             )
         )
+        evidences = await list_evidence_rows(self.session, self.org_id, version_id)
         base = self._version_out(row)
         return SemanticVersionDetailOut(
             **base.model_dump(),
             entities=[self._entity_out(e) for e in entities],
             attributes=[self._attr_out(a) for a in attrs],
             mappings=[self._map_out(m) for m in mappings],
+            evidences=[self._evidence_out(e) for e in evidences],
         )
 
     async def get_active_published(self) -> SemanticModelVersion | None:
@@ -176,6 +183,9 @@ class OntologyStudioService(BaseService):
         )
         if existing is not None:
             raise ConflictError("Attribute name already exists on this entity")
+        compute_expr, compute_inputs = self._normalize_compute(
+            data.compute_expr, data.compute_inputs
+        )
         row = SemanticAttribute(
             org_id=self.org_id,
             version_id=entity.version_id,
@@ -187,6 +197,8 @@ class OntologyStudioService(BaseService):
             unit=(data.unit or None),
             enum_map=dict(data.enum_map or {}),
             labels={str(k): str(v) for k, v in (data.labels or {}).items()},
+            compute_expr=compute_expr,
+            compute_inputs=compute_inputs,
             status=SemanticItemStatus.DRAFT.value,
             created_by=self.ctx.user.id,
         )
@@ -218,8 +230,100 @@ class OntologyStudioService(BaseService):
             attr.enum_map = dict(data.enum_map)
         if data.labels is not None:
             attr.labels = {str(k): str(v) for k, v in data.labels.items()}
+        if data.compute_expr is not None or data.compute_inputs is not None:
+            expr = data.compute_expr if data.compute_expr is not None else attr.compute_expr
+            inputs = (
+                data.compute_inputs
+                if data.compute_inputs is not None
+                else list(attr.compute_inputs or [])
+            )
+            if expr is None or not str(expr).strip():
+                attr.compute_expr = None
+                attr.compute_inputs = []
+            else:
+                attr.compute_expr, attr.compute_inputs = self._normalize_compute(
+                    expr, list(inputs)
+                )
         await self.session.flush()
         return self._attr_out(attr)
+
+    async def add_evidence(
+        self, version_id: str, data: SemanticEvidenceCreate
+    ) -> SemanticEvidenceOut:
+        await self._require_draft(version_id)
+        await self._require_evidence_target(
+            version_id, data.target_kind, data.target_id
+        )
+        eid = data.evidence_id.strip()
+        existing = await self.session.scalar(
+            select(SemanticEvidence).where(
+                SemanticEvidence.org_id == self.org_id,
+                SemanticEvidence.version_id == version_id,
+                SemanticEvidence.target_kind == data.target_kind,
+                SemanticEvidence.target_id == data.target_id,
+                SemanticEvidence.evidence_kind == data.evidence_kind,
+                SemanticEvidence.evidence_id == eid,
+            )
+        )
+        if existing is not None:
+            raise ConflictError("Evidence already linked")
+        row = SemanticEvidence(
+            org_id=self.org_id,
+            version_id=version_id,
+            target_kind=data.target_kind,
+            target_id=data.target_id,
+            evidence_kind=data.evidence_kind,
+            evidence_id=eid,
+            note=(data.note or "").strip() or None,
+            created_by=self.ctx.user.id,
+        )
+        self.session.add(row)
+        await self.session.flush()
+        await self.audit.record(
+            self.audit_ctx,
+            "semantic_evidence.create",
+            RESOURCE,
+            row.id,
+            None,
+            self._evidence_out(row).model_dump(mode="json"),
+        )
+        return self._evidence_out(row)
+
+    async def list_evidences(
+        self,
+        version_id: str,
+        *,
+        target_kind: str | None = None,
+        target_id: str | None = None,
+    ) -> list[SemanticEvidenceOut]:
+        await self._get_version_row(version_id)
+        stmt = select(SemanticEvidence).where(
+            SemanticEvidence.org_id == self.org_id,
+            SemanticEvidence.version_id == version_id,
+        )
+        if target_kind:
+            stmt = stmt.where(SemanticEvidence.target_kind == target_kind)
+        if target_id:
+            stmt = stmt.where(SemanticEvidence.target_id == target_id)
+        rows = await self.session.scalars(stmt.order_by(SemanticEvidence.created_at))
+        return [self._evidence_out(r) for r in rows]
+
+    async def delete_evidence(self, evidence_id: str) -> None:
+        row = await self.session.scalar(
+            select(SemanticEvidence).where(
+                SemanticEvidence.org_id == self.org_id,
+                SemanticEvidence.id == evidence_id,
+            )
+        )
+        if row is None:
+            raise NotFoundError("Semantic evidence not found")
+        await self._require_draft(row.version_id)
+        before = self._evidence_out(row).model_dump(mode="json")
+        await self.session.delete(row)
+        await self.session.flush()
+        await self.audit.record(
+            self.audit_ctx, "semantic_evidence.delete", RESOURCE, evidence_id, before, None
+        )
 
     async def add_mapping(
         self, attribute_id: str, data: SemanticMappingCreate
@@ -712,6 +816,7 @@ class OntologyStudioService(BaseService):
                 "published_at": None,
                 "entities": [],
                 "attribute_schemas": [],
+                "evidences": [],
             }
         detail = await self.get_version(version.id)
         approved_entities = [e for e in detail.entities if e.status == _APPROVED]
@@ -748,8 +853,15 @@ class OntologyStudioService(BaseService):
                     }
                     for m in maps_by_attr.get(a.id, [])
                 ]
+                compute = None
+                if a.compute_expr:
+                    compute = {
+                        "expr": a.compute_expr,
+                        "inputs": list(a.compute_inputs or []),
+                    }
                 attrs_out.append(
                     {
+                        "id": a.id,
                         "name": a.name,
                         "label": a.label,
                         "kind": a.attr_kind,
@@ -758,6 +870,7 @@ class OntologyStudioService(BaseService):
                         "enum_map": a.enum_map or {},
                         "labels": a.labels or {},
                         "represented_by": represented,
+                        "compute": compute,
                     }
                 )
             schemas.append(
@@ -766,10 +879,26 @@ class OntologyStudioService(BaseService):
                     "label": ent.label,
                     "description": ent.description or "",
                     "local_name": ent.local_name,
+                    "entity_id": ent.id,
                     "attributes": attrs_out,
                     "source": "org_published",
                 }
             )
+        evidences = [
+            {
+                "id": e.id,
+                "target_kind": e.target_kind,
+                "target_id": e.target_id,
+                "kind": e.evidence_kind,
+                "evidence_id": e.evidence_id,
+                "note": e.note,
+            }
+            for e in detail.evidences
+            if (
+                (e.target_kind == "entity" and e.target_id in approved_ids)
+                or (e.target_kind == "attribute" and e.target_id in attr_ids)
+            )
+        ]
         return {
             "version_id": version.id,
             "version_name": version.name,
@@ -778,6 +907,7 @@ class OntologyStudioService(BaseService):
             else None,
             "entities": [
                 {
+                    "id": e.id,
                     "local_name": e.local_name,
                     "label": e.label,
                     "description": e.description,
@@ -787,6 +917,7 @@ class OntologyStudioService(BaseService):
                 for e in approved_entities
             ],
             "attribute_schemas": schemas,
+            "evidences": evidences,
         }
 
     async def _get_version_row(self, version_id: str) -> SemanticModelVersion:
@@ -849,10 +980,72 @@ class OntologyStudioService(BaseService):
             unit=row.unit,
             enum_map=dict(row.enum_map or {}),
             labels={str(k): str(v) for k, v in (row.labels or {}).items()},
+            compute_expr=row.compute_expr,
+            compute_inputs=[str(x) for x in (row.compute_inputs or [])],
             status=row.status,
             created_at=row.created_at,
             updated_at=row.updated_at,
         )
+
+    @staticmethod
+    def _evidence_out(row: SemanticEvidence) -> SemanticEvidenceOut:
+        return SemanticEvidenceOut(
+            id=row.id,
+            version_id=row.version_id,
+            target_kind=row.target_kind,
+            target_id=row.target_id,
+            evidence_kind=row.evidence_kind,
+            evidence_id=row.evidence_id,
+            note=row.note,
+            created_by=row.created_by,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
+
+    async def _require_evidence_target(
+        self, version_id: str, target_kind: str, target_id: str
+    ) -> None:
+        if target_kind == "entity":
+            row = await self.session.scalar(
+                select(SemanticEntity).where(
+                    SemanticEntity.org_id == self.org_id,
+                    SemanticEntity.version_id == version_id,
+                    SemanticEntity.id == target_id,
+                )
+            )
+            if row is None:
+                raise NotFoundError("Semantic entity not found")
+            return
+        if target_kind == "attribute":
+            row = await self.session.scalar(
+                select(SemanticAttribute).where(
+                    SemanticAttribute.org_id == self.org_id,
+                    SemanticAttribute.version_id == version_id,
+                    SemanticAttribute.id == target_id,
+                )
+            )
+            if row is None:
+                raise NotFoundError("Semantic attribute not found")
+            return
+        raise ValidationAppError("Invalid evidence target_kind")
+
+    @staticmethod
+    def _normalize_compute(
+        expr: str | None, inputs: list[str] | None
+    ) -> tuple[str | None, list[str]]:
+        text = (expr or "").strip()
+        if not text:
+            return None, []
+        cleaned_inputs = [i.strip() for i in (inputs or []) if i and str(i).strip()]
+        if not cleaned_inputs:
+            # Infer identifiers from expression via validate
+            from app.services.ontology_studio.compute import _collect_names
+            import ast
+
+            tree = ast.parse(text, mode="eval")
+            cleaned_inputs = sorted(_collect_names(tree.body))
+        normalized = validate_compute_expr(text, inputs=cleaned_inputs)
+        return normalized, cleaned_inputs
 
     @staticmethod
     def _map_out(row: SemanticMapping) -> SemanticMappingOut:

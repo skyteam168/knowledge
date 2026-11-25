@@ -796,6 +796,33 @@ export const MANUAL_SECTIONS: ManualSection[] = [
             detail:
               'Trên bản nháp có thể Generate suggestions cho nhãn/kiểu, rồi Approve (hoặc duyệt tất cả). Xuất bản sau khi ít nhất một thực thể được duyệt. Agent chỉ thấy mô hình published đang hiệu lực. Để khôi phục bản cũ, chọn phiên bản đã lưu trữ / published không active rồi bấm Khôi phục phiên bản này.',
           },
+          {
+            title: 'Bằng chứng và biểu thức tính',
+            detail:
+              'Chọn thực thể rồi gắn KO/tài liệu/chunk trong Bằng chứng; sau publish Agent đọc tóm tắt qua describe_ontology. Thuộc tính có thể khai báo biểu thức an toàn (vd a+b); get_object trả giá trị suy ra.',
+          },
+        ],
+      },
+      {
+        title: 'Danh tính đa hệ thống',
+        permission: 'admin:retrieval',
+        steps: [
+          {
+            title: 'Canonical và Identifier',
+            detail:
+              'Mở Quản trị → Danh tính đa hệ thống: tạo Canonical, gắn Identifier, xem tab Xung đột khi ID trỏ tới thực thể khác. Không ghi đè im lặng.',
+          },
+        ],
+      },
+      {
+        title: 'Quy tắc và hành động',
+        permission: 'admin:retrieval',
+        steps: [
+          {
+            title: 'Bảo trì rules và ActionType',
+            detail:
+              'Mở Quản trị → Quy tắc & Hành động: cấu hình quy tắc theo ưu tiên và loại hành động. Tắt hành động thì list_actions không còn thấy.',
+          },
         ],
       },
     ],

@@ -800,6 +800,33 @@ export const MANUAL_SECTIONS: ManualSection[] = [
             detail:
               'On a draft, Generate suggestions for Chinese labels/types, then Approve (or Approve all drafts). Publish after at least one entity is approved. Agents then see only this org’s active published model. To restore a prior version, select an archived / non-active published version and click Roll back to this version.',
           },
+          {
+            title: 'Evidence and compute expressions',
+            detail:
+              'With an entity selected, attach KO/document/chunk IDs under Evidence; after publish, Agents get summaries via describe_ontology (no privileged body text). Attributes may declare a safe compute expression (e.g. a+b); get_object can return derived values.',
+          },
+        ],
+      },
+      {
+        title: 'Cross-system identity',
+        permission: 'admin:retrieval',
+        steps: [
+          {
+            title: 'Canonical and identifiers',
+            detail:
+              'Open Admin → Cross-system Identity: create Canonical entities, attach system Identifiers, and use the Conflicts tab when IDs point at different entities. Conflicts are never silently overwritten.',
+          },
+        ],
+      },
+      {
+        title: 'Rules and actions',
+        permission: 'admin:retrieval',
+        steps: [
+          {
+            title: 'Maintain rules and ActionTypes',
+            detail:
+              'Open Admin → Rules & Actions: configure ontology rules by priority (allow/deny/require_confirm) and action types (risk, systems, input schema). Disabled actions disappear from Open/MCP list_actions.',
+          },
         ],
       },
     ],

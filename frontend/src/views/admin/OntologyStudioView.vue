@@ -4,11 +4,13 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import {
   addSemanticAttribute,
+  addSemanticEvidence,
   updateSemanticAttribute,
   addSemanticEntity,
   addSemanticMapping,
   batchSetSemanticStatus,
   createSemanticVersion,
+  deleteSemanticEvidence,
   getSemanticVersion,
   importOntologySchema,
   listSemanticVersions,
@@ -34,6 +36,7 @@ import type {
   SchemaTableIn,
   SemanticAttribute,
   SemanticEntity,
+  SemanticEvidence,
   SemanticItemStatus,
   SemanticMapping,
   SemanticVersion,
@@ -249,6 +252,28 @@ const attrForm = reactive({
   label_zh: '',
   label_en: '',
   label_vi: '',
+  compute_expr: '',
+  compute_inputs: '',
+})
+
+const evidenceForm = reactive({
+  target_kind: 'entity' as 'entity' | 'attribute',
+  target_id: '',
+  evidence_kind: 'document' as 'ko' | 'document' | 'chunk',
+  evidence_id: '',
+  note: '',
+})
+const evidenceSaving = ref(false)
+
+const entityEvidences = computed(() => {
+  const list = detail.value?.evidences ?? []
+  if (!selectedEntityId.value) return []
+  const attrIds = new Set(entityAttributes.value.map((a) => a.id))
+  return list.filter(
+    (e) =>
+      (e.target_kind === 'entity' && e.target_id === selectedEntityId.value) ||
+      (e.target_kind === 'attribute' && attrIds.has(e.target_id)),
+  )
 })
 const attrRules = computed<FormRules>(() => ({
   name: [{ required: true, message: t('ontology.attrNameRequired'), trigger: 'blur' }],
@@ -265,6 +290,8 @@ function resetAttrForm(): void {
   attrForm.label_zh = ''
   attrForm.label_en = ''
   attrForm.label_vi = ''
+  attrForm.compute_expr = ''
+  attrForm.compute_inputs = ''
   attrEditingId.value = null
 }
 
@@ -291,6 +318,8 @@ function openEditAttribute(attr: SemanticAttribute): void {
   attrForm.label_zh = attr.labels?.zh || ''
   attrForm.label_en = attr.labels?.en || ''
   attrForm.label_vi = attr.labels?.vi || ''
+  attrForm.compute_expr = attr.compute_expr || ''
+  attrForm.compute_inputs = (attr.compute_inputs || []).join(', ')
   attrDialog.value = true
 }
 
@@ -318,6 +347,11 @@ async function submitAttribute(): Promise<void> {
   if (attrForm.label_zh.trim()) labels.zh = attrForm.label_zh.trim()
   if (attrForm.label_en.trim()) labels.en = attrForm.label_en.trim()
   if (attrForm.label_vi.trim()) labels.vi = attrForm.label_vi.trim()
+  const computeExpr = attrForm.compute_expr.trim() || null
+  const computeInputs = attrForm.compute_inputs
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
   attrSaving.value = true
   try {
     if (attrEditingId.value) {
@@ -328,6 +362,8 @@ async function submitAttribute(): Promise<void> {
         unit: attrForm.unit.trim() || null,
         enum_map: enumMap,
         labels,
+        compute_expr: computeExpr,
+        compute_inputs: computeInputs,
       })
     } else {
       if (!selectedEntityId.value) return
@@ -339,6 +375,8 @@ async function submitAttribute(): Promise<void> {
         unit: attrForm.unit.trim() || null,
         enum_map: enumMap,
         labels,
+        compute_expr: computeExpr,
+        compute_inputs: computeInputs,
       })
     }
     attrDialog.value = false
@@ -373,6 +411,45 @@ function openAddMapping(attr: SemanticAttribute | Record<string, unknown>): void
   mappingForm.source_of_truth = false
   mappingForm.freshness_sla_seconds = null
   mappingDialog.value = true
+}
+
+async function submitEvidence(): Promise<void> {
+  if (!detail.value || !isDraft.value) return
+  if (!evidenceForm.evidence_id.trim()) {
+    ElMessage.warning(t('ontology.evidenceIdRequired'))
+    return
+  }
+  const targetId =
+    evidenceForm.target_kind === 'entity'
+      ? selectedEntityId.value
+      : evidenceForm.target_id || selectedAttrIds.value[0] || ''
+  if (!targetId) {
+    ElMessage.warning(t('ontology.selectEntity'))
+    return
+  }
+  evidenceSaving.value = true
+  try {
+    await addSemanticEvidence(detail.value.id, {
+      target_kind: evidenceForm.target_kind,
+      target_id: targetId,
+      evidence_kind: evidenceForm.evidence_kind,
+      evidence_id: evidenceForm.evidence_id.trim(),
+      note: evidenceForm.note.trim() || null,
+    })
+    evidenceForm.evidence_id = ''
+    evidenceForm.note = ''
+    ElMessage.success(t('ontology.saveOk'))
+    await loadDetail()
+  } finally {
+    evidenceSaving.value = false
+  }
+}
+
+async function removeEvidence(row: SemanticEvidence): Promise<void> {
+  if (!isDraft.value) return
+  await deleteSemanticEvidence(row.id)
+  ElMessage.success(t('ontology.saveOk'))
+  await loadDetail()
 }
 
 async function submitMapping(): Promise<void> {
@@ -1313,6 +1390,66 @@ function selectCanvasNode(id: string): void {
                   <span>{{ t('ontology.noAttributes') }}</span>
                 </template>
               </el-table>
+
+              <div v-if="selectedEntityId" class="evidence-panel">
+                <div class="pane-title-row">
+                  <div class="pane-title">{{ t('ontology.evidence') }}</div>
+                </div>
+                <p class="sub">{{ t('ontology.evidenceHint') }}</p>
+                <el-table :data="entityEvidences" size="small">
+                  <el-table-column prop="target_kind" :label="t('ontology.evidenceTarget')" width="90" />
+                  <el-table-column prop="evidence_kind" :label="t('ontology.evidenceKind')" width="100" />
+                  <el-table-column prop="evidence_id" :label="t('ontology.evidenceId')" min-width="120" />
+                  <el-table-column prop="note" :label="t('ontology.evidenceNote')" min-width="120" />
+                  <el-table-column v-if="isDraft" width="80">
+                    <template #default="{ row }">
+                      <el-button link type="danger" @click="removeEvidence(row as SemanticEvidence)">
+                        {{ t('ontology.deleteEvidence') }}
+                      </el-button>
+                    </template>
+                  </el-table-column>
+                  <template #empty>
+                    <span>{{ t('ontology.evidenceEmpty') }}</span>
+                  </template>
+                </el-table>
+                <div v-if="isDraft" class="evidence-form">
+                  <el-select v-model="evidenceForm.target_kind" style="width: 110px">
+                    <el-option label="entity" value="entity" />
+                    <el-option label="attribute" value="attribute" />
+                  </el-select>
+                  <el-select
+                    v-if="evidenceForm.target_kind === 'attribute'"
+                    v-model="evidenceForm.target_id"
+                    style="width: 140px"
+                    :placeholder="t('ontology.attrName')"
+                  >
+                    <el-option
+                      v-for="a in entityAttributes"
+                      :key="a.id"
+                      :label="a.name"
+                      :value="a.id"
+                    />
+                  </el-select>
+                  <el-select v-model="evidenceForm.evidence_kind" style="width: 110px">
+                    <el-option label="document" value="document" />
+                    <el-option label="ko" value="ko" />
+                    <el-option label="chunk" value="chunk" />
+                  </el-select>
+                  <el-input
+                    v-model="evidenceForm.evidence_id"
+                    :placeholder="t('ontology.evidenceId')"
+                    style="width: 160px"
+                  />
+                  <el-input
+                    v-model="evidenceForm.note"
+                    :placeholder="t('ontology.evidenceNote')"
+                    style="width: 140px"
+                  />
+                  <el-button type="primary" size="small" :loading="evidenceSaving" @click="submitEvidence">
+                    {{ t('ontology.addEvidence') }}
+                  </el-button>
+                </div>
+              </div>
             </div>
           </div>
         </template>
@@ -1413,6 +1550,16 @@ function selectCanvasNode(id: string): void {
       </el-form-item>
       <el-form-item :label="t('ontology.description')">
         <el-input v-model="attrForm.description" type="textarea" :rows="2" maxlength="1024" />
+      </el-form-item>
+      <el-form-item :label="t('ontology.computeExpr')">
+        <el-input
+          v-model="attrForm.compute_expr"
+          maxlength="256"
+          :placeholder="t('ontology.computeExprHint')"
+        />
+      </el-form-item>
+      <el-form-item :label="t('ontology.computeInputs')">
+        <el-input v-model="attrForm.compute_inputs" maxlength="256" placeholder="a, b" />
       </el-form-item>
     </el-form>
     <template #footer>
@@ -1709,6 +1856,18 @@ function selectCanvasNode(id: string): void {
 .version-pane {
   border-right: 1px solid var(--el-border-color-lighter);
   padding-right: 8px;
+}
+.evidence-panel {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--el-border-color-lighter);
+}
+.evidence-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  align-items: center;
 }
 .pane-title {
   font-weight: 600;

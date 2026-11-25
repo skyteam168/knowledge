@@ -46,7 +46,7 @@
 | 组织与账号 | 部门、用户、用户组、角色权限；从企业微信、钉钉、泛微 e-cology、Excel 同步组织架构；企业微信 / 钉钉扫码登录，账号密码兜底 |
 | 知识运营闭环 | 系统自动收集“答不上来”和“答得不好”的问题，聚类成知识缺口 → 审核工作台 → 大模型辅助生成知识条目 → 审核发布 → 重新索引；知识条目可标业务类型（设备/工艺等）并维护条目间关系；检索可将关系图作为 RRF 第三路多跳召回 |
 | 概念层 / 本体合约 | 术语表、KO 关系、结构化挂接构成轻量概念层；正式 OWL TBox 见 `ontology/enterprise.ttl`（Protégé 可打开），**实例仍存 PostgreSQL**；本批不上 RDF 库与 SPARQL。说明见 [`docs/ontology.md`](ontology.md) |
-| 结构化数据镜像 | 按业务域管理本地 PG 镜像：设备维保用专用表，工艺/物料/质检等用通用记录；可新建域与外部编号，经映射挂到术语/KO；管理端「结构化数据」支持 MySQL / PostgreSQL / SQL Server / MongoDB / CSV / REST 拉取（见 [`docs/ops/structured-connectors.md`](ops/structured-connectors.md)）；Ontology Studio 可连同批引擎读表/集合导入语义草稿；不上 Ontop |
+| 结构化数据镜像 | 按业务域管理本地 PG 镜像：设备维保用专用表，工艺/物料/质检等用通用记录；可新建域与外部编号，经映射挂到术语/KO；管理端「结构化数据」支持 MySQL / PostgreSQL / SQL Server / MongoDB / CSV / REST 拉取（见 [`docs/ops/structured-connectors.md`](ops/structured-connectors.md)）；Ontology Studio 可连同批引擎读表/集合导入语义草稿，并维护证据/计算口径；另有跨系统身份与规则/Action 管理台（见 [`docs/ops/semantic-center.md`](ops/semantic-center.md)）；不上 Ontop |
 | 离线评测 | 维护评测集（问题 + 期望文档 + 参考答案），一键评测检索策略，自动算召回率并由大模型评分，可对比两次结果 |
 | 运营分析 | 提问量、活跃人数、回答质量分布、热门问题、被引用最多的文档、长期无人引用的“僵尸文档”、模型用量（含每人 token） |
 | 模型管理 | 对话 / 向量 / 重排模型可配置、可检测、可切换，带备用模型 |

@@ -114,6 +114,22 @@ const adminChildren: (RouteRecordRaw & MenuRoute)[] = [
     meta: { title: 'route.adminOntology', icon: 'Share', permission: 'admin:retrieval' },
   },
   {
+    path: '/admin/identity',
+    name: 'admin-identity',
+    component: () => import('@/views/admin/IdentityView.vue'),
+    meta: { title: 'route.adminIdentity', icon: 'Key', permission: 'admin:retrieval' },
+  },
+  {
+    path: '/admin/ontology-governance',
+    name: 'admin-ontology-governance',
+    component: () => import('@/views/admin/OntologyGovernanceView.vue'),
+    meta: {
+      title: 'route.adminOntologyGovernance',
+      icon: 'SetUp',
+      permission: 'admin:retrieval',
+    },
+  },
+  {
     path: '/admin/indexing',
     name: 'admin-indexing',
     component: () => import('@/views/admin/IndexingView.vue'),

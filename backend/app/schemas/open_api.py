@@ -429,6 +429,7 @@ class OpenOntologyDescribeOut(BaseModel):
     version_name: str | None = None
     published_at: str | None = None
     org_entities: list[dict[str, Any]] = Field(default_factory=list)
+    evidences: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class OpenGetObjectIn(BaseModel):
@@ -491,10 +492,12 @@ class OpenGetObjectOut(BaseModel):
     standard_status: str | None = None
     status_label: str | None = None
     attrs: dict[str, Any] = Field(default_factory=dict)
+    derived: dict[str, Any] = Field(default_factory=dict)
     neighbors: list[OpenObjectNeighborOut] = Field(default_factory=list)
     links: list[OpenObjectLinkOut] = Field(default_factory=list)
     canonical_id: str | None = None
     identifiers: list[OpenObjectIdentifierOut] = Field(default_factory=list)
+    evidences: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class OpenQueryObjectsIn(BaseModel):

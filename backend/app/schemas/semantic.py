@@ -62,6 +62,8 @@ class SemanticAttributeCreate(BaseModel):
     unit: str | None = Field(default=None, max_length=32)
     enum_map: dict[str, Any] = Field(default_factory=dict)
     labels: dict[str, str] = Field(default_factory=dict)
+    compute_expr: str | None = Field(default=None, max_length=256)
+    compute_inputs: list[str] = Field(default_factory=list, max_length=32)
 
     @field_validator("name")
     @classmethod
@@ -84,6 +86,8 @@ class SemanticAttributeUpdate(BaseModel):
     unit: str | None = Field(default=None, max_length=32)
     enum_map: dict[str, Any] | None = None
     labels: dict[str, str] | None = None
+    compute_expr: str | None = Field(default=None, max_length=256)
+    compute_inputs: list[str] | None = Field(default=None, max_length=32)
 
     @field_validator("unit")
     @classmethod
@@ -105,7 +109,35 @@ class SemanticAttributeOut(BaseModel):
     unit: str | None = None
     enum_map: dict[str, Any] = Field(default_factory=dict)
     labels: dict[str, str] = Field(default_factory=dict)
+    compute_expr: str | None = None
+    compute_inputs: list[str] = Field(default_factory=list)
     status: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class SemanticEvidenceCreate(BaseModel):
+    target_kind: str = Field(pattern="^(entity|attribute)$")
+    target_id: str = Field(min_length=1, max_length=32)
+    evidence_kind: str = Field(pattern="^(ko|document|chunk)$")
+    evidence_id: str = Field(min_length=1, max_length=64)
+    note: str | None = Field(default=None, max_length=512)
+
+    @field_validator("evidence_id")
+    @classmethod
+    def _eid(cls, value: str) -> str:
+        return value.strip()
+
+
+class SemanticEvidenceOut(BaseModel):
+    id: str
+    version_id: str
+    target_kind: str
+    target_id: str
+    evidence_kind: str
+    evidence_id: str
+    note: str | None
+    created_by: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -140,6 +172,7 @@ class SemanticVersionDetailOut(SemanticVersionOut):
     entities: list[SemanticEntityOut] = Field(default_factory=list)
     attributes: list[SemanticAttributeOut] = Field(default_factory=list)
     mappings: list[SemanticMappingOut] = Field(default_factory=list)
+    evidences: list[SemanticEvidenceOut] = Field(default_factory=list)
 
 
 class OpenOntologyDescribeIn(BaseModel):

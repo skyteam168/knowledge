@@ -173,6 +173,7 @@ class OpenOntologyTools:
 
         org_entities: list[dict[str, Any]] = []
         org_attrs: list[dict[str, Any]] = []
+        org_evidences: list[dict[str, Any]] = []
         version_id: str | None = None
         version_name: str | None = None
         published_at: str | None = None
@@ -180,6 +181,8 @@ class OpenOntologyTools:
 
         if version != "platform":
             from app.services.ontology_studio.service import OntologyStudioService
+            from app.services.ontology_studio.evidence import summarize_evidences_for_agent
+            from app.models.semantic import SemanticEvidence
 
             studio = OntologyStudioService(self.session, self.ctx, self.authz_cache)
             active = await studio.get_active_published()
@@ -192,6 +195,29 @@ class OpenOntologyTools:
                     org_entities = list(ext["entities"])  # type: ignore[arg-type]
                     org_attrs = list(ext["attribute_schemas"])  # type: ignore[arg-type]
                     version_label = "published"
+                    raw_ev = list(ext.get("evidences") or [])
+                    # Rebuild ORM-like stubs for ACL summarizer
+                    stubs = [
+                        SemanticEvidence(
+                            id=str(e.get("id") or ""),
+                            org_id=self.org_id,
+                            version_id=str(version_id or ""),
+                            target_kind=str(e.get("target_kind") or ""),
+                            target_id=str(e.get("target_id") or ""),
+                            evidence_kind=str(e.get("kind") or ""),
+                            evidence_id=str(e.get("evidence_id") or ""),
+                            note=e.get("note"),  # type: ignore[arg-type]
+                        )
+                        for e in raw_ev
+                        if e.get("id") and e.get("evidence_id")
+                    ]
+                    org_evidences = await summarize_evidences_for_agent(
+                        self.session,
+                        self.ctx.user,
+                        self.org_id,
+                        stubs,
+                        allowed_kb_ids=self.caller.kb_ids or None,
+                    )
             else:
                 # explicit version_id — only if it is the active published
                 if active is None or active.id != version:
@@ -203,6 +229,28 @@ class OpenOntologyTools:
                 org_entities = list(ext["entities"])  # type: ignore[arg-type]
                 org_attrs = list(ext["attribute_schemas"])  # type: ignore[arg-type]
                 version_label = "published"
+                raw_ev = list(ext.get("evidences") or [])
+                stubs = [
+                    SemanticEvidence(
+                        id=str(e.get("id") or ""),
+                        org_id=self.org_id,
+                        version_id=str(version_id or ""),
+                        target_kind=str(e.get("target_kind") or ""),
+                        target_id=str(e.get("target_id") or ""),
+                        evidence_kind=str(e.get("kind") or ""),
+                        evidence_id=str(e.get("evidence_id") or ""),
+                        note=e.get("note"),  # type: ignore[arg-type]
+                    )
+                    for e in raw_ev
+                    if e.get("id") and e.get("evidence_id")
+                ]
+                org_evidences = await summarize_evidences_for_agent(
+                    self.session,
+                    self.ctx.user,
+                    self.org_id,
+                    stubs,
+                    allowed_kb_ids=self.caller.kb_ids or None,
+                )
 
         classes = sorted(cat.all_required_classes()) if include_classes else []
         if include_classes and org_entities:
@@ -234,6 +282,7 @@ class OpenOntologyTools:
             version_name=version_name,
             published_at=published_at,
             org_entities=org_entities if include_classes else [],
+            evidences=org_evidences,
         )
 
     async def get_object(self, data: OpenGetObjectIn) -> OpenGetObjectOut:
@@ -317,6 +366,8 @@ class OpenOntologyTools:
             meta = dict(attrs.get("_meta") or {})
             meta["freshness"] = freshness
             attrs["_meta"] = meta
+        derived = await self._derived_attrs(obj["object_type"], attrs)
+        evidences = await self._object_evidences(obj["object_type"])
         return OpenGetObjectOut(
             object_type=obj["object_type"],
             object_id=obj["object_id"],
@@ -326,10 +377,12 @@ class OpenOntologyTools:
             standard_status=standard_status,
             status_label=status_label,
             attrs=attrs,
+            derived=derived,
             neighbors=neighbors,
             links=links,
             canonical_id=canonical.id if canonical else None,
             identifiers=identifiers,
+            evidences=evidences,
         )
 
     async def query_objects(self, data: OpenQueryObjectsIn) -> OpenQueryObjectsOut:
@@ -893,3 +946,106 @@ class OpenOntologyTools:
                 )
             )
         return None
+
+    async def _derived_attrs(
+        self, object_type: str, attrs: dict[str, Any]
+    ) -> dict[str, Any]:
+        from app.services.ontology_studio.compute import eval_compute_expr
+        from app.services.ontology_studio.service import OntologyStudioService
+
+        studio = OntologyStudioService(self.session, self.ctx, self.authz_cache)
+        ext = await studio.load_published_extension()
+        schemas = list(ext.get("attribute_schemas") or [])
+        match = next(
+            (
+                s
+                for s in schemas
+                if isinstance(s, dict)
+                and str(s.get("object_type") or "").lower() == object_type.lower()
+            ),
+            None,
+        )
+        if not match:
+            return {}
+        derived: dict[str, Any] = {}
+        for attr in match.get("attributes") or []:
+            if not isinstance(attr, dict):
+                continue
+            compute = attr.get("compute")
+            name = attr.get("name")
+            if not compute or not name:
+                continue
+            expr = (compute or {}).get("expr")
+            if not expr:
+                continue
+            try:
+                derived[str(name)] = {
+                    "value": eval_compute_expr(str(expr), attrs),
+                    "expr": expr,
+                    "inputs": list((compute or {}).get("inputs") or []),
+                }
+            except Exception:
+                derived[str(name)] = {
+                    "value": None,
+                    "expr": expr,
+                    "error": "eval_failed",
+                }
+        return derived
+
+    async def _object_evidences(self, object_type: str) -> list[dict[str, Any]]:
+        from app.services.ontology_studio.evidence import summarize_evidences_for_agent
+        from app.services.ontology_studio.service import OntologyStudioService
+        from app.models.semantic import SemanticEvidence
+
+        studio = OntologyStudioService(self.session, self.ctx, self.authz_cache)
+        ext = await studio.load_published_extension()
+        entity = next(
+            (
+                e
+                for e in (ext.get("entities") or [])
+                if isinstance(e, dict)
+                and str(e.get("object_type") or "").lower() == object_type.lower()
+            ),
+            None,
+        )
+        if not entity:
+            return []
+        entity_id = str(entity.get("id") or "")
+        attr_ids = {
+            str(a.get("id"))
+            for s in (ext.get("attribute_schemas") or [])
+            if isinstance(s, dict)
+            and str(s.get("object_type") or "").lower() == object_type.lower()
+            for a in (s.get("attributes") or [])
+            if isinstance(a, dict) and a.get("id")
+        }
+        raw = [
+            e
+            for e in (ext.get("evidences") or [])
+            if isinstance(e, dict)
+            and (
+                (e.get("target_kind") == "entity" and e.get("target_id") == entity_id)
+                or (e.get("target_kind") == "attribute" and e.get("target_id") in attr_ids)
+            )
+        ]
+        stubs = [
+            SemanticEvidence(
+                id=str(e.get("id") or ""),
+                org_id=self.org_id,
+                version_id=str(ext.get("version_id") or ""),
+                target_kind=str(e.get("target_kind") or ""),
+                target_id=str(e.get("target_id") or ""),
+                evidence_kind=str(e.get("kind") or ""),
+                evidence_id=str(e.get("evidence_id") or ""),
+                note=e.get("note"),  # type: ignore[arg-type]
+            )
+            for e in raw
+            if e.get("id") and e.get("evidence_id")
+        ]
+        return await summarize_evidences_for_agent(
+            self.session,
+            self.ctx.user,
+            self.org_id,
+            stubs,
+            allowed_kb_ids=self.caller.kb_ids or None,
+        )

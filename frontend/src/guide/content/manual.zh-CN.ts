@@ -795,6 +795,33 @@ export const MANUAL_SECTIONS: ManualSection[] = [
             detail:
               '草稿中可「生成建议」改中文显示名/类型，再「批准」或「批准全部草稿」；至少批准一个实体后「发布」。发布后该组织生效语义模型切换，Agent 只见本版本。若需恢复历史版，在左侧选中已归档/非生效已发布版本，点「回滚为此版本」。',
           },
+          {
+            title: '语义证据与计算口径',
+            detail:
+              '选中实体后可在「语义证据」挂 KO/文档/chunk ID 与备注；发布后 Agent 经 describe_ontology 只读摘要（无越权正文）。属性可填安全计算口径（如 a+b），get_object 可返回派生值。',
+          },
+        ],
+      },
+      {
+        title: '跨系统身份',
+        permission: 'admin:retrieval',
+        steps: [
+          {
+            title: 'Canonical 与 Identifier',
+            detail:
+              '打开「管理 → 跨系统身份」：创建 Canonical、挂各系统 Identifier、在「冲突」页签查看多系统 ID 指向不同实体的情况。冲突不可静默覆盖。',
+          },
+        ],
+      },
+      {
+        title: '规则与动作',
+        permission: 'admin:retrieval',
+        steps: [
+          {
+            title: '维护规则与 ActionType',
+            detail:
+              '打开「管理 → 规则与动作」：按优先级配置 ontology 规则（allow/deny/require_confirm）与动作类型（风险、系统、输入 schema）。禁用动作后 Open/MCP list_actions 不可见。',
+          },
         ],
       },
     ],
