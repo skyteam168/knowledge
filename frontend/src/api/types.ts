@@ -2474,6 +2474,11 @@ export interface StructuredResolve {
   label: string
   status: string
   links: StructuredLink[]
+  canonical_id?: string | null
+  matched_via?: string
+  matched_system?: string | null
+  matched_external_id?: string | null
+  record_external_id?: string | null
 }
 
 /** Ontology Studio (semantic layer) */

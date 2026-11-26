@@ -314,6 +314,12 @@ class StructuredResolveOut(BaseModel):
     label: str
     status: str
     links: list[StructuredLinkOut] = Field(default_factory=list)
+    # When resolved via cross-system identity (e.g. WMS alias → ERP material).
+    canonical_id: str | None = None
+    matched_via: str = "record"
+    matched_system: str | None = None
+    matched_external_id: str | None = None
+    record_external_id: str | None = None
 
 
 class StructuredSyncResult(BaseModel):

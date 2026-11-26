@@ -166,15 +166,34 @@ async function toggleAction(row: ActionType): Promise<void> {
   await load()
 }
 
+function payloadTemplate(row: ActionType): string {
+  if (row.name === 'material.transfer') {
+    return '{\n  "source_inventory_id": "",\n  "target_inventory_id": "",\n  "qty": 100,\n  "production_order_id": "",\n  "material_external_id": "MAT-3001"\n}'
+  }
+  if (row.name === 'production.query_risk') {
+    return '{\n  "risk_status": "at_risk"\n}'
+  }
+  if (row.name === 'device.record_note') {
+    return '{\n  "canonical_id": "",\n  "note": ""\n}'
+  }
+  if (row.name === 'device.set_status') {
+    return '{\n  "canonical_id": "",\n  "to_status": "RUNNING"\n}'
+  }
+  const required = Array.isArray((row.input_schema as { required?: unknown })?.required)
+    ? ((row.input_schema as { required: string[] }).required ?? [])
+    : []
+  if (required.length) {
+    const obj: Record<string, string> = {}
+    for (const key of required) obj[key] = ''
+    return `${JSON.stringify(obj, null, 2)}\n`
+  }
+  return '{}'
+}
+
 function openRun(row: ActionType, mode: 'dry_run' | 'approve' | 'invoke'): void {
   runMode.value = mode
   runForm.action_type = row.name
-  runForm.payload_json =
-    row.name === 'material.transfer'
-      ? '{\n  "source_inventory_id": "",\n  "target_inventory_id": "",\n  "qty": 100,\n  "production_order_id": ""\n}'
-      : row.name === 'production.query_risk'
-        ? '{\n  "risk_status": "at_risk"\n}'
-        : '{}'
+  runForm.payload_json = payloadTemplate(row)
   runForm.idempotency_key = `${row.name}-${Date.now()}`
   runForm.approval_id = ''
   runForm.acknowledge_risk = true
@@ -202,13 +221,20 @@ async function submitRun(): Promise<void> {
       ElMessage.success(`${t('governance.approve')}: ${approval.id}`)
       return
     }
-    const body = {
+    const body: {
+      action_type: string
+      payload: Record<string, unknown>
+      idempotency_key: string
+      approval_id?: string
+      dry_run: boolean
+    } = {
       action_type: runForm.action_type,
       payload,
       idempotency_key: runForm.idempotency_key.trim() || `${runForm.action_type}-${Date.now()}`,
-      approval_id: runForm.approval_id.trim() || null,
       dry_run: runMode.value === 'dry_run',
     }
+    const approvalId = runForm.approval_id.trim()
+    if (approvalId) body.approval_id = approvalId
     const result =
       runMode.value === 'dry_run' ? await dryRunAction(body) : await invokeAction(body)
     lastResult.value = result

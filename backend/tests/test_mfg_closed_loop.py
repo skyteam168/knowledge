@@ -106,6 +106,25 @@ async def test_seed_mfg_has_at_risk_order_and_identity(session: AsyncSession, mf
         )
 
 
+async def test_structured_resolve_falls_back_to_identity(
+    session: AsyncSession, mfg_world
+):
+    org, user, _counts = mfg_world
+    from app.services.structured.service import StructuredService
+
+    service = StructuredService(session, _ctx(user), AuthzCache(MemoryCache(), ttl_seconds=60))
+    via_alias = await service.resolve("material", "YN-MAT-3001")
+    assert via_alias.matched_via == "identity"
+    assert via_alias.matched_system == "vn-wms"
+    assert via_alias.record_external_id == MAT_PET
+    assert via_alias.canonical_id
+
+    via_primary = await service.resolve("material", MAT_PET)
+    assert via_primary.matched_via == "record"
+    assert via_primary.object_id == via_alias.object_id
+    assert via_primary.record_external_id == MAT_PET
+
+
 async def test_query_objects_risk_and_due_filters(session: AsyncSession, mfg_world):
     _org, user, _counts = mfg_world
     tools = _tools(session, user)

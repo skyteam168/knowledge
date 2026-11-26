@@ -125,6 +125,46 @@ class EntityIdentityService:
             stmt = stmt.where(CanonicalEntity.object_type == object_type.strip().lower())
         return await self.session.scalar(stmt)
 
+    async def find_by_external_id(
+        self,
+        org_id: str,
+        *,
+        external_id: str,
+        object_type: str | None = None,
+        system: str | None = None,
+    ) -> tuple[CanonicalEntity, EntityIdentifier] | None:
+        """Resolve any system identifier to a unique canonical (+ matching row).
+
+        When multiple systems share the same external_id but point at the same
+        canonical, returns that canonical with the first matching identifier.
+        Distinct canonicals for one external_id → None (ambiguous).
+        """
+        ext_n = external_id.strip()
+        if not ext_n:
+            return None
+        stmt = (
+            select(CanonicalEntity, EntityIdentifier)
+            .join(EntityIdentifier, EntityIdentifier.canonical_id == CanonicalEntity.id)
+            .where(
+                CanonicalEntity.org_id == org_id,
+                EntityIdentifier.org_id == org_id,
+                EntityIdentifier.external_id == ext_n,
+            )
+        )
+        if system:
+            stmt = stmt.where(EntityIdentifier.system == system.strip().lower())
+        if object_type:
+            stmt = stmt.where(CanonicalEntity.object_type == object_type.strip().lower())
+        rows = list(await self.session.execute(stmt))
+        if not rows:
+            return None
+        by_canonical: dict[str, tuple[CanonicalEntity, EntityIdentifier]] = {}
+        for entity, ident in rows:
+            by_canonical.setdefault(entity.id, (entity, ident))
+        if len(by_canonical) != 1:
+            return None
+        return next(iter(by_canonical.values()))
+
     async def resolve_match(
         self,
         org_id: str,

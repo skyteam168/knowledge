@@ -155,13 +155,21 @@ docker compose -f deploy/docker-compose.yml exec backend \
 | `material` | `vn-wms` | `YN-MAT-3001`；兼容 `YN-RM-150` | 越南仓料号 |
 | `equipment` | `mes` / `vn-mes` | `EQ-4001` | |
 
+**说明（易混淆点）：**
+
+- 结构化记录上的 `external_id` 是 **`MAT-3001`**（ERP 主号）。
+- **`YN-MAT-3001` / `YN-RM-150` / `RM-PET-150D`** 写在「跨系统身份」标识符表（如 `vn-wms` / `nb-erp`），不是记录主键。
+- 「编号解析」会先按记录外部编号查；找不到时再按跨系统身份别名回退，命中后返回关联的结构化物料（`matched_via=identity`，`record_external_id=MAT-3001`）。
+- 数据源筛选可选：选「制造试点 Fixture」时，最终关联记录须属于该源（种子数据满足）；不确定时可清空数据源。
+
 **手工解析步骤：**
 
 1. 打开结构化数据页底部「编号解析」。
-2. 对象类型选择 `material`（或输入）。
-3. 外部编号填 `YN-MAT-3001`（必填；空值会前端提示「请输入外部编号」，不再抛英文原文）。
-4. 可选数据源；点击「解析」。
-5. 结果应指向与 `MAT-3001` / `RM-PET-150D` 相同的 Canonical。
+2. 对象类型选择 `material`。
+3. 外部编号填 **`YN-MAT-3001`**（WMS 别名）或 **`MAT-3001`**（记录主号）；空值会提示「请输入外部编号」。
+4. 数据源可留空，或选「制造试点 Fixture」。
+5. 点击「解析」：应得到物料对象；若用了 WMS 别名，结果里 `matched_via` 为 `identity`，`canonical_id` 非空，`record_external_id` 为 `MAT-3001`。
+6. 也可在 **管理 → 跨系统身份** 用系统=`vn-wms`、编号=`YN-MAT-3001` 核对同一 Canonical。
 
 重复把已占用的 `(system, external_id)` 绑到另一 Canonical 应返回冲突（验收门禁期望 409）。
 

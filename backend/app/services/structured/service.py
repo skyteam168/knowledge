@@ -78,6 +78,7 @@ from app.services.authz.cache import AuthzCache
 from app.services.context import BaseService, RequestContext
 from app.services.knowledge.directory import PrincipalDirectory
 from app.services.structured.access import RESOURCE_STRUCTURED, StructuredAccess
+from app.services.structured.identity import EntityIdentityService
 
 RESOURCE_SOURCE = "structured_source"
 RESOURCE_DOMAIN = "structured_domain"
@@ -989,6 +990,12 @@ class StructuredService(BaseService):
                 detail={"fields": ["external_id"]},
             )
 
+        canonical_id: str | None = None
+        matched_via = "record"
+        matched_system: str | None = None
+        matched_external_id: str | None = None
+        record_external_id: str | None = None
+
         if object_type == StructuredObjectType.DEVICE.value:
             row = await self.repo.get_device_by_external(
                 self.org_id, external_id, source_id=source_id
@@ -997,6 +1004,7 @@ class StructuredService(BaseService):
                 raise NotFoundError("Device not found", code="DEVICE_NOT_FOUND")
             label, status = row.name, row.status
             object_id, src = row.id, row.source_id
+            record_external_id = row.external_id
         elif object_type == StructuredObjectType.WORK_ORDER.value:
             row = await self.repo.get_work_order_by_external(
                 self.org_id, external_id, source_id=source_id
@@ -1005,6 +1013,7 @@ class StructuredService(BaseService):
                 raise NotFoundError("Work order not found", code="WORK_ORDER_NOT_FOUND")
             label, status = row.title, row.status
             object_id, src = row.id, row.source_id
+            record_external_id = row.external_id
         elif object_type == StructuredObjectType.SPARE_PART.value:
             part = await self.repo.get_spare_part_by_external(
                 self.org_id, external_id, source_id=source_id
@@ -1014,16 +1023,49 @@ class StructuredService(BaseService):
             label = part.name
             status = "in_stock" if part.qty_on_hand > 0 else "out_of_stock"
             object_id, src = part.id, part.source_id
+            record_external_id = part.external_id
         else:
             rec = await self.repo.get_record_by_external(
                 self.org_id, object_type, external_id, source_id=source_id
             )
             if rec is None:
-                raise NotFoundError(
-                    "Structured record not found", code="STRUCTURED_RECORD_NOT_FOUND"
+                # Cross-system alias (e.g. vn-wms YN-MAT-3001 → material MAT-3001).
+                hit = await EntityIdentityService(self.session).find_by_external_id(
+                    self.org_id,
+                    external_id=external_id,
+                    object_type=object_type,
                 )
+                if hit is None:
+                    raise NotFoundError(
+                        "Structured record not found",
+                        code="STRUCTURED_RECORD_NOT_FOUND",
+                    )
+                entity, ident = hit
+                sid = entity.structured_object_id
+                stype = (entity.structured_object_type or entity.object_type or "").lower()
+                if not sid or stype != object_type:
+                    raise NotFoundError(
+                        "Identity found but not linked to a structured record",
+                        code="IDENTITY_NOT_LINKED",
+                    )
+                rec = await self.repo.get_record(self.org_id, sid)
+                if rec is None or rec.object_type != object_type:
+                    raise NotFoundError(
+                        "Identity found but not linked to a structured record",
+                        code="IDENTITY_NOT_LINKED",
+                    )
+                if source_id and rec.source_id != source_id:
+                    raise NotFoundError(
+                        "Structured record not found",
+                        code="STRUCTURED_RECORD_NOT_FOUND",
+                    )
+                canonical_id = entity.id
+                matched_via = "identity"
+                matched_system = ident.system
+                matched_external_id = ident.external_id
             label, status = rec.title, rec.status
             object_id, src = rec.id, rec.source_id
+            record_external_id = rec.external_id
 
         links = await self._link_outs(
             await self.repo.list_links_for(self.org_id, object_type, object_id)
@@ -1036,6 +1078,11 @@ class StructuredService(BaseService):
             label=label,
             status=status,
             links=links,
+            canonical_id=canonical_id,
+            matched_via=matched_via,
+            matched_system=matched_system,
+            matched_external_id=matched_external_id,
+            record_external_id=record_external_id,
         )
 
     async def _require_object_row(self, object_type: str, object_id: str) -> None:

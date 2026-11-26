@@ -25,6 +25,9 @@ const MESSAGE_KEYS: Record<string, string> = {
   'Work order not found': 'layout.apiMessages.workOrderNotFound',
   'Spare part not found': 'layout.apiMessages.sparePartNotFound',
   'Structured record not found': 'layout.apiMessages.structuredRecordNotFound',
+  'Identity found but not linked to a structured record':
+    'layout.apiMessages.identityNotLinked',
+  'Action input missing required fields': 'layout.apiMessages.actionMissingFields',
   'Structured source not found': 'layout.apiMessages.sourceNotFound',
   'Domain not found': 'layout.apiMessages.domainNotFound',
   'Bad request': 'layout.apiMessages.badRequest',
@@ -47,6 +50,7 @@ const CODE_KEYS: Record<string, string> = {
   WORK_ORDER_NOT_FOUND: 'layout.apiMessages.workOrderNotFound',
   SPARE_PART_NOT_FOUND: 'layout.apiMessages.sparePartNotFound',
   STRUCTURED_RECORD_NOT_FOUND: 'layout.apiMessages.structuredRecordNotFound',
+  IDENTITY_NOT_LINKED: 'layout.apiMessages.identityNotLinked',
 }
 
 function looksUserLocalized(message: string): boolean {
@@ -63,9 +67,26 @@ function translateIfExists(key: string): string | null {
  * Map API / HttpError into a short user-facing message.
  * Trace ids stay available for ops but are not the primary toast text.
  */
+function missingFieldsHint(detail: unknown): string | null {
+  if (!detail || typeof detail !== 'object') return null
+  const missing = (detail as { missing?: unknown }).missing
+  if (!Array.isArray(missing) || missing.length === 0) return null
+  const fields = missing.map((x) => String(x)).filter(Boolean)
+  if (!fields.length) return null
+  const base =
+    translateIfExists('layout.apiMessages.actionMissingFields') ??
+    t('layout.apiMessages.requestValidationFailed')
+  return `${base}: ${fields.join(', ')}`
+}
+
 export function formatApiError(err: HttpError): FormattedApiError {
   const code = err.code || 'UNKNOWN'
   const raw = (err.message || '').trim()
+
+  const missingHint = missingFieldsHint(err.detail)
+  if (raw === 'Action input missing required fields' && missingHint) {
+    return { message: missingHint, code, traceId: err.traceId }
+  }
 
   const byMessage = raw ? MESSAGE_KEYS[raw] : undefined
   if (byMessage) {
