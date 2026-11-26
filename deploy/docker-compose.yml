@@ -249,7 +249,8 @@ services:
     volumes:
       - ./opensearch/analysis:/opensearch-analysis
     ports:
-      - "8000:8000"
+      # Host port only; containers still talk to backend:8000. Override with BACKEND_HOST_PORT.
+      - "${BACKEND_HOST_PORT:-8000}:8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -331,7 +332,8 @@ services:
         VITE_KEYCLOAK_URL: ${KEYCLOAK_PUBLIC_URL:-http://localhost:8080}
     image: ekb/frontend:latest
     ports:
-      - "3000:8080"
+      # Host port only; override with FRONTEND_HOST_PORT when 3000 conflicts.
+      - "${FRONTEND_HOST_PORT:-3000}:8080"
     depends_on:
       backend:
         condition: service_healthy

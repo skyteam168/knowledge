@@ -36,8 +36,8 @@ make up                              # = docker compose -f deploy/docker-compose
 
 | 服务 | 地址 | 账号 |
 | --- | --- | --- |
-| 前端 | http://localhost:3000 | - |
-| 后端 API / 文档 | http://localhost:8000/docs | - |
+| 前端 | http://localhost:3000 | 冲突时可在 `deploy/.env` 设 `FRONTEND_HOST_PORT` |
+| 后端 API / 文档 | http://localhost:8000/docs | 冲突时可设 `BACKEND_HOST_PORT` |
 | 就绪检查 | http://localhost:8000/ready | - |
 | Keycloak | http://localhost:8080 | admin / admin |
 | MinIO 控制台 | http://localhost:9001 | minioadmin / minioadmin |
