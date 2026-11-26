@@ -13,11 +13,27 @@ const guide = useGuideStore()
 const route = useRoute()
 const current = ref(0)
 let timer: number | undefined
+let targetWatchTimer: number | undefined
 let unmounted = false
 
 function targetOf(target: string | undefined): (() => HTMLElement | null) | undefined {
   if (!target) return undefined
   return () => document.querySelector<HTMLElement>(guideSelector(target))
+}
+
+function stepTargetMissing(): boolean {
+  const step = guide.steps[current.value]
+  if (!step?.target) return false
+  return document.querySelector(guideSelector(step.target)) === null
+}
+
+/**
+ * Element Plus Tour mask uses pointer-events:auto when the highlight target is gone,
+ * covering the whole page (including the sidebar). Abort before the UI freezes.
+ */
+function abortIfTargetGone(): void {
+  if (!guide.running || unmounted) return
+  if (stepTargetMissing()) void guide.end('skipped')
 }
 
 function autoplay(): void {
@@ -44,14 +60,50 @@ function skip(): void {
   void guide.end('skipped')
 }
 
+function onModelUpdate(open: boolean): void {
+  if (!open && guide.running) skip()
+}
+
+function startTargetWatch(): void {
+  window.clearInterval(targetWatchTimer)
+  if (!guide.running) return
+  // Resize/scroll can leave a stale hole; also catch keep-alive DOM swaps without route change.
+  targetWatchTimer = window.setInterval(abortIfTargetGone, 800)
+  abortIfTargetGone()
+}
+
+function stopTargetWatch(): void {
+  window.clearInterval(targetWatchTimer)
+  targetWatchTimer = undefined
+}
+
 watch(
   () => guide.running,
   (running) => {
     current.value = 0
-    if (!running) autoplay()
+    if (running) startTargetWatch()
+    else {
+      stopTargetWatch()
+      autoplay()
+    }
   },
 )
-watch(() => route.name, autoplay)
+
+watch(
+  () => route.fullPath,
+  () => {
+    // Leaving a page mid-tour removes targets → full-screen blocking mask.
+    if (guide.running) {
+      void guide.end('skipped')
+      return
+    }
+    autoplay()
+  },
+)
+
+watch(current, () => {
+  void nextTick(abortIfTargetGone)
+})
 
 onMounted(async () => {
   await guide.load()
@@ -61,6 +113,8 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   unmounted = true
   window.clearTimeout(timer)
+  stopTargetWatch()
+  if (guide.running) void guide.end('skipped')
 })
 </script>
 
@@ -71,6 +125,7 @@ onBeforeUnmount(() => {
     :z-index="3000"
     :scroll-into-view-options="{ block: 'center' }"
     class="guide-tour"
+    @update:model-value="onModelUpdate"
     @finish="finish"
     @close="skip"
   >

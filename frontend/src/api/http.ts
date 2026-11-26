@@ -7,6 +7,7 @@ import axios, {
 import { ElMessage } from 'element-plus'
 import { getValidToken, login } from '@/auth/client'
 import { currentLocale, t } from '@/i18n'
+import { formatApiErrorToast } from '@/utils/apiError'
 import type { ApiErrorBody } from './types'
 
 declare module 'axios' {
@@ -66,8 +67,16 @@ export function toHttpError(error: unknown): HttpError {
 }
 
 function notify(err: HttpError): void {
-  const suffix = err.traceId ? t('layout.http.trace', { id: err.traceId }) : ''
-  ElMessage.error({ message: `${err.message}${suffix}`, grouping: true })
+  // Keep raw English + code in console for ops; toast stays localized for users.
+  if (import.meta.env.DEV || err.traceId) {
+    console.warn('[api-error]', { code: err.code, message: err.message, traceId: err.traceId })
+  }
+  ElMessage.error({
+    message: formatApiErrorToast(err),
+    grouping: true,
+    duration: err.traceId ? 6000 : 4000,
+    showClose: true,
+  })
 }
 
 export async function attachAuthHeader(

@@ -10,16 +10,27 @@
 
 # <<<ekb-terminology>>>
 ACL, access control list, 访问控制, 访问控制列表
+BOM物料清单, BOM, Bill of Materials, 物料清单
 DNS, domain name system, 域名系统, 域名解析
 LDAP, AD, active directory, 目录服务
 SMTP, smtp server, 简单邮件传输协议, 邮件发送协议
 VLAN, virtual lan, 虚拟局域网
 VPN, virtual private network, 虚拟专用网络
 交换机, cisco switch, switch, 思科交换机, 网络交换机
+原材料发放, Material Issue, 发料, 领料
 备份, DR, backup, 数据备份, 灾难恢复
-定型机, heat setter, stenter, 定型设备
+宁波ERP, ERP-NB01, NB-ERP
+宁波一厂, NB-Plant1, Ningbo Plant 1, PLANT-NB01
+定型机, heat setter, stenter, 定型设备, 定型预缩机, 预缩机
 浏览器测试术语, browser-e2e, 浏览器e2e
+涤纶纱150D, PET150D, RM-PET-150D, YN-RM-150
+申洲宁波分公司, NB-Branch, Ningbo Branch
+申洲越南分公司, VN-Branch, Vietnam Branch
+电脑编织横机, CMS编织机, STOLL横机, 横机, 电脑横机
 织机, knitting machine, loom, stoll编织横机, 飞织机
+越南WMS, VN-WMS, WMS-VN02
+越南二厂, PLANT-VN02, VN-Plant2, Vietnam Plant 2
 邮件退信, bounce, mail bounce, 发送失败, 退信
 防火墙, firewall, 安全网关
+飞织工单, WO, WorkOrder, 生产工单
 # <<<end-ekb-terminology>>>

@@ -58,6 +58,12 @@ from app.services.chat.expansion import (
     KnowledgeObjectSource,
 )
 from app.services.chat.rewriter import Intent, QueryRewriter, RewriteResult
+from app.services.chat.semantic_ops import (
+    SemanticKind,
+    SemanticOpsService,
+    detect_semantic_plan,
+    semantic_prompt_appendix,
+)
 from app.services.context import BaseService, RequestContext
 from app.services.knowledge.access import KnowledgeAccess
 from app.services.knowledge.ko_access import KoAccess
@@ -330,6 +336,41 @@ class AnswerService(BaseService):
                 yield event
             return
 
+        semantic_plan = detect_semantic_plan(rewrite.query or run.query)
+        semantic_bundle = None
+        if semantic_plan.kind != SemanticKind.NONE:
+            yield run.step("semantic_ops", "running")
+            t_sem = time.perf_counter()
+            semantic_bundle = await SemanticOpsService(self.session, self.ctx).run(
+                rewrite.query or run.query, semantic_plan
+            )
+            run.mark("semantic_ops", t_sem)
+            run.steps["semantic_ops"] = {
+                "kind": semantic_plan.kind.value,
+                "hit": semantic_bundle.hit,
+                "steps": semantic_bundle.steps,
+                "objects": semantic_bundle.objects[:40],
+                "action_result": semantic_bundle.action_result,
+            }
+            yield run.step(
+                "semantic_ops",
+                "done",
+                ms=run.timings.get("semantic_ops_ms"),
+                detail={
+                    "kind": semantic_plan.kind.value,
+                    "steps": len(semantic_bundle.steps),
+                    "objects": len(semantic_bundle.objects),
+                },
+            )
+            yield ChatEvent(
+                "semantic",
+                {
+                    "kind": semantic_plan.kind.value,
+                    "objects": semantic_bundle.objects[:40],
+                    "steps": semantic_bundle.steps,
+                },
+            )
+
         yield run.step("retrieve", "running")
         hits = await self._retrieve(run, rewrite)
         scores = [h.score for h in hits if h.score is not None]
@@ -398,7 +439,12 @@ class AnswerService(BaseService):
                 else None,
             },
         )
-        if decision.verdict == Verdict.REFUSE:
+        ontology_ctx = (
+            semantic_prompt_appendix(semantic_bundle)
+            if semantic_bundle is not None and semantic_bundle.hit
+            else ""
+        )
+        if decision.verdict == Verdict.REFUSE and not ontology_ctx:
             yield ChatEvent("token", {"text": prompt.NO_EVIDENCE_ANSWER})
             run.gap = self._gap(
                 run,
@@ -416,7 +462,7 @@ class AnswerService(BaseService):
                 yield event
             return
 
-        uncertain = decision.verdict == Verdict.UNCERTAIN
+        uncertain = decision.verdict == Verdict.UNCERTAIN and not ontology_ctx
         await attach_material_images(
             self.session,
             evidences,
@@ -426,7 +472,12 @@ class AnswerService(BaseService):
             absolute=self.absolute_links,
         )
         messages = prompt.answer_messages(
-            run.query, rewrite.query, evidences, run.history, uncertain=uncertain
+            run.query,
+            rewrite.query,
+            evidences,
+            run.history,
+            uncertain=uncertain,
+            ontology_context=ontology_ctx or None,
         )
         run.context_document_ids = list(dict.fromkeys(e.document.id for e in evidences))
         run.steps["prompt"] = {

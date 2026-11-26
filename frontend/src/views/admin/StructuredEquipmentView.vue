@@ -10,6 +10,7 @@ import {
   createStructuredSource,
   deleteObjectRelation,
   deleteStructuredLink,
+  deleteStructuredSource,
   getStructuredAttrSchema,
   getStructuredObjectAcl,
   listEquipDevices,
@@ -59,6 +60,19 @@ const pager = reactive({ page: 1, size: 20 })
 const total = ref(0)
 const loading = ref(false)
 
+function sourceHasConnector(source: StructuredSource | undefined): boolean {
+  const connector = source?.meta?.connector
+  return typeof connector === 'string' && connector.trim().length > 0 && connector !== 'none'
+}
+
+const selectedSource = computed(() => sources.value.find((s) => s.id === sourceFilter.value))
+const canSyncSelectedSource = computed(() => sourceHasConnector(selectedSource.value))
+
+function sourceOptionLabel(source: StructuredSource): string {
+  if (sourceHasConnector(source)) return source.name
+  return `${source.name} (${t('structured.connectorNone')})`
+}
+
 const devices = ref<EquipDevice[]>([])
 const workOrders = ref<EquipWorkOrder[]>([])
 const spareParts = ref<EquipSparePart[]>([])
@@ -102,8 +116,39 @@ async function loadSources(): Promise<void> {
 
 const syncing = ref(false)
 
+const deletingSource = ref(false)
+
+async function deleteSelectedSource(): Promise<void> {
+  const source = selectedSource.value
+  if (!source) {
+    ElMessage.warning(t('structured.deleteSourceNeedSelect'))
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      t('structured.deleteSourceConfirm', { name: source.name }),
+      t('structured.deleteSource'),
+      { type: 'warning' },
+    )
+  } catch {
+    return
+  }
+  deletingSource.value = true
+  try {
+    await deleteStructuredSource(source.id)
+    ElMessage.success(t('common.deleted'))
+    if (sourceFilter.value === source.id) sourceFilter.value = ''
+    if (recordForm.source_id === source.id) recordForm.source_id = ''
+    await Promise.all([loadSources(), loadRows()])
+    selectedObject.value = null
+    selectedRecord.value = null
+  } finally {
+    deletingSource.value = false
+  }
+}
+
 async function syncSelectedSource(forceFull = false): Promise<void> {
-  if (!sourceFilter.value) {
+  if (!sourceFilter.value || !canSyncSelectedSource.value) {
     ElMessage.warning(t('structured.syncNeedSource'))
     return
   }
@@ -124,14 +169,20 @@ async function syncSelectedSource(forceFull = false): Promise<void> {
     ElMessage.success(`${t('structured.syncOk')} (+${created})`)
     await Promise.all([loadSources(), loadRows()])
   } catch {
-    ElMessage.error(t('structured.syncFail'))
+    // Global http interceptor already toasts the API message.
   } finally {
     syncing.value = false
   }
 }
 
+let loadSeq = 0
+
 async function loadRows(): Promise<void> {
   if (!activeDomain.value) return
+  const seq = ++loadSeq
+  const domainId = activeDomain.value.id
+  const equipment = isEquipment.value
+  const tabName = tab.value
   loading.value = true
   try {
     const params = {
@@ -140,30 +191,34 @@ async function loadRows(): Promise<void> {
       q: q.value.trim() || undefined,
       source_id: sourceFilter.value || undefined,
     }
-    if (isEquipment.value) {
-      if (tab.value === 'devices') {
+    if (equipment) {
+      if (tabName === 'devices') {
         const page = await listEquipDevices(params)
+        if (seq !== loadSeq) return
         devices.value = page.items
         total.value = page.total
-      } else if (tab.value === 'workOrders') {
+      } else if (tabName === 'workOrders') {
         const page = await listEquipWorkOrders(params)
+        if (seq !== loadSeq) return
         workOrders.value = page.items
         total.value = page.total
       } else {
         const page = await listEquipSpareParts(params)
+        if (seq !== loadSeq) return
         spareParts.value = page.items
         total.value = page.total
       }
     } else {
       const page = await listStructuredRecords({
         ...params,
-        domain_id: activeDomain.value.id,
+        domain_id: domainId,
       })
+      if (seq !== loadSeq) return
       records.value = page.items
       total.value = page.total
     }
   } finally {
-    loading.value = false
+    if (seq === loadSeq) loading.value = false
   }
 }
 
@@ -179,6 +234,8 @@ watch(activeDomainId, () => {
   links.value = []
   relations.value = []
   tab.value = 'devices'
+  // Keep a source filter across domains easily yields an empty table.
+  sourceFilter.value = ''
   search()
 })
 
@@ -653,11 +710,21 @@ const resolveResult = ref<StructuredResolve | null>(null)
 const resolving = ref(false)
 
 async function doResolve(): Promise<void> {
+  const objectType = resolveForm.object_type.trim()
+  const externalId = resolveForm.external_id.trim()
+  if (!objectType) {
+    ElMessage.warning(t('structured.objectTypeRequired'))
+    return
+  }
+  if (!externalId) {
+    ElMessage.warning(t('structured.externalIdRequired'))
+    return
+  }
   resolving.value = true
   try {
     resolveResult.value = await resolveStructured({
-      object_type: resolveForm.object_type.trim(),
-      external_id: resolveForm.external_id.trim(),
+      object_type: objectType,
+      external_id: externalId,
       source_id: resolveForm.source_id || undefined,
     })
   } finally {
@@ -765,10 +832,15 @@ onMounted(async () => {
               v-model="sourceFilter"
               clearable
               :placeholder="t('structured.sources')"
-              style="width: 180px"
+              style="width: 220px"
               @change="search"
             >
-              <el-option v-for="s in sources" :key="s.id" :label="s.name" :value="s.id" />
+              <el-option
+                v-for="s in sources"
+                :key="s.id"
+                :label="sourceOptionLabel(s)"
+                :value="s.id"
+              />
             </el-select>
             <el-input
               v-model="q"
@@ -780,7 +852,7 @@ onMounted(async () => {
             <el-button @click="search">{{ t('structured.search') }}</el-button>
             <el-dropdown
               split-button
-              :disabled="!sourceFilter"
+              :disabled="!canSyncSelectedSource"
               :loading="syncing"
               @click="syncSelectedSource(false)"
               @command="(cmd: string) => syncSelectedSource(cmd === 'force')"
@@ -788,12 +860,22 @@ onMounted(async () => {
               {{ t('structured.syncSource') }}
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item command="force">
+                  <el-dropdown-item command="force" :disabled="!canSyncSelectedSource">
                     {{ t('structured.syncForceFull') }}
                   </el-dropdown-item>
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
+            <el-button
+              type="danger"
+              plain
+              :disabled="!sourceFilter"
+              :loading="deletingSource"
+              :title="t('structured.deleteSourceHint')"
+              @click="deleteSelectedSource"
+            >
+              {{ t('structured.deleteSource') }}
+            </el-button>
           </div>
 
           <template v-if="isEquipment">
@@ -852,10 +934,12 @@ onMounted(async () => {
               @row-click="(row: StructuredRecord) => selectRecordRow(row)"
             >
               <template #empty>
-                <EmptyState :description="t('structured.emptyRows')" />
+                <EmptyState :description="t('structured.emptyRows')">
+                  <p class="hint">{{ t('structured.emptyRowsHint') }}</p>
+                </EmptyState>
               </template>
-              <el-table-column prop="object_type" :label="t('structured.objectType')" width="120" />
-              <el-table-column prop="external_id" :label="t('structured.externalId')" width="140" />
+              <el-table-column prop="object_type" :label="t('structured.objectType')" width="130" />
+              <el-table-column prop="external_id" :label="t('structured.externalId')" width="150" />
               <el-table-column prop="title" :label="t('structured.titleCol')" min-width="180" />
               <el-table-column :label="t('structured.parent')" min-width="160">
                 <template #default="{ row }">
@@ -866,6 +950,12 @@ onMounted(async () => {
                 </template>
               </el-table-column>
               <el-table-column prop="status" :label="t('structured.status')" width="100" />
+              <el-table-column :label="t('structured.qty')" width="100">
+                <template #default="{ row }">
+                  <span v-if="row.attrs?.qty != null">{{ row.attrs.qty }}{{ row.attrs.uom ? ` ${row.attrs.uom}` : '' }}</span>
+                  <span v-else>—</span>
+                </template>
+              </el-table-column>
             </el-table>
           </template>
 
@@ -1014,15 +1104,26 @@ onMounted(async () => {
         <el-card shadow="never" class="block">
           <template #header>{{ t('structured.resolve') }}</template>
           <div class="toolbar">
-            <el-input
+            <el-select
               v-model="resolveForm.object_type"
+              filterable
+              allow-create
+              default-first-option
               :placeholder="t('structured.objectType')"
-              style="width: 140px"
-            />
+              style="width: 160px"
+            >
+              <el-option
+                v-for="tp in industrialObjectTypes"
+                :key="tp"
+                :label="tp"
+                :value="tp"
+              />
+            </el-select>
             <el-input
               v-model="resolveForm.external_id"
-              :placeholder="t('structured.externalId')"
+              :placeholder="t('structured.externalIdRequired')"
               style="width: 200px"
+              @keyup.enter="doResolve"
             />
             <el-select
               v-model="resolveForm.source_id"

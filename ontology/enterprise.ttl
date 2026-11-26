@@ -221,6 +221,36 @@
     rdfs:label "事件/报警"@zh ;
     rdfs:comment "enum StructuredObjectType.event"@en .
 
+:Factory a owl:Class ;
+    rdfs:subClassOf :IndustrialObject ;
+    rdfs:label "Factory"@en ;
+    rdfs:label "工厂"@zh ;
+    rdfs:comment "enum StructuredObjectType.factory；制造试点工厂节点"@zh .
+
+:CustomerOrder a owl:Class ;
+    rdfs:subClassOf :IndustrialObject ;
+    rdfs:label "Customer order"@en ;
+    rdfs:label "客户订单"@zh ;
+    rdfs:comment "enum StructuredObjectType.customer_order；ERP 客户订单"@zh .
+
+:ProductionOrder a owl:Class ;
+    rdfs:subClassOf :IndustrialObject ;
+    rdfs:label "Production order"@en ;
+    rdfs:label "生产订单"@zh ;
+    rdfs:comment "enum StructuredObjectType.production_order"@en .
+
+:Inventory a owl:Class ;
+    rdfs:subClassOf :IndustrialObject ;
+    rdfs:label "Inventory"@en ;
+    rdfs:label "库存"@zh ;
+    rdfs:comment "enum StructuredObjectType.inventory；仓/线边库存镜像"@zh .
+
+:Employee a owl:Class ;
+    rdfs:subClassOf :IndustrialObject ;
+    rdfs:label "Employee"@en ;
+    rdfs:label "员工"@zh ;
+    rdfs:comment "enum StructuredObjectType.employee"@en .
+
 #################################################################
 # KoRelationType → object properties
 #################################################################
@@ -319,6 +349,20 @@
     rdfs:domain :StructuredObject ;
     rdfs:range :StructuredObject ;
     rdfs:comment "enum ObjectRelationType.spare_for"@en .
+
+:belongsTo a owl:ObjectProperty ;
+    rdfs:label "belongs to"@en ;
+    rdfs:label "归属"@zh ;
+    rdfs:domain :StructuredObject ;
+    rdfs:range :StructuredObject ;
+    rdfs:comment "enum ObjectRelationType.belongs_to"@en .
+
+:responsibleFor a owl:ObjectProperty ;
+    rdfs:label "responsible for"@en ;
+    rdfs:label "负责"@zh ;
+    rdfs:domain :StructuredObject ;
+    rdfs:range :StructuredObject ;
+    rdfs:comment "enum ObjectRelationType.responsible_for"@en .
 
 #################################################################
 # Structured link properties (structured_entity_links semantics)

@@ -43,6 +43,8 @@ terminology sync-synonyms [--org ORG_ID] [--output PATH] [--no-reload]
                                export active aliases into OpenSearch synonyms.txt and reload
 
 structured seed-equipment [--org ORG_ID]
+structured seed-mfg [--org ORG_ID]
+                               upsert manufacturing closed-loop fixture ABox (VN delay + identity)
 structured wire-mes-chain [--org ORG_ID] [--source NAME]
                                terminology + links + publish Studio for MES device_info Agent debug
                                upsert sample equipment MES mirror + terminology links
@@ -55,6 +57,8 @@ ontology validate [--ttl PATH]
                                check enterprise.ttl covers StrEnum classes / relations
 ontology export-sample [--out PATH]
                                write Protégé-only sample ABox TTL (not a runtime source)
+ontology accept-mfg [--org ORG_ID] [--user USERNAME] [--no-reseed]
+                               deterministic manufacturing closed-loop acceptance gate
 
 documents reprocess --kb KB_ID [--org ORG] [--failed] [--missing-pages] [--ids a,b]
                     [--limit N] [--dry-run]
@@ -385,6 +389,11 @@ def build_parser() -> argparse.ArgumentParser:
         "seed-equipment", help="upsert sample equipment MES mirror + terminology links"
     )
     seed_eq.add_argument("--org", default="default", help="organization id (default: default)")
+    seed_mfg = structured_cmds.add_parser(
+        "seed-mfg",
+        help="upsert manufacturing closed-loop fixture (production_order / inventory / identity)",
+    )
+    seed_mfg.add_argument("--org", default="default", help="organization id (default: default)")
     sync_eq = structured_cmds.add_parser(
         "sync",
         help="pull a CSV/REST connector into equip_* mirror tables for one source",
@@ -442,6 +451,21 @@ def build_parser() -> argparse.ArgumentParser:
         "--out",
         default=None,
         help="output path (default: <repo>/ontology/examples/seed-abox.ttl)",
+    )
+    ont_accept = ontology_cmds.add_parser(
+        "accept-mfg",
+        help="deterministic manufacturing ontology closed-loop acceptance (seed→query→transfer→audit)",
+    )
+    ont_accept.add_argument("--org", default="default", help="organization id")
+    ont_accept.add_argument(
+        "--user",
+        default=None,
+        help="actor username in org (default: first user in org)",
+    )
+    ont_accept.add_argument(
+        "--no-reseed",
+        action="store_true",
+        help="skip seed-mfg (use existing fixture rows)",
     )
 
     documents = groups.add_parser("documents", help="document ingest operations")
@@ -803,6 +827,20 @@ async def _structured_seed_equipment(settings: Settings, args: argparse.Namespac
     return 0
 
 
+async def _structured_seed_mfg(settings: Settings, args: argparse.Namespace) -> int:
+    from app.services.structured.seed_mfg import seed_mfg
+
+    engine = create_engine(settings)
+    try:
+        async with create_session_factory(engine)() as session:
+            counts = await seed_mfg(session, args.org)
+            await session.commit()
+        _print({"org_id": args.org, **counts})
+    finally:
+        await engine.dispose()
+    return 0
+
+
 def _structured_probe_mysql(args: argparse.Namespace) -> int:
     from app.services.structured.connectors.mysql import probe_mysql_table
 
@@ -892,6 +930,81 @@ async def _ontology_export_sample(settings: Settings, args: argparse.Namespace) 
     return 0
 
 
+async def _ontology_accept_mfg(settings: Settings, args: argparse.Namespace) -> int:
+    from sqlalchemy import select
+
+    from app.models import Organization, User
+    from app.services.audit_service import AuditContext
+    from app.services.authz.context import CurrentUser
+    from app.services.authz.principals import PrincipalResolver, Principals
+    from app.services.context import RequestContext
+    from app.services.ontology_studio.accept_mfg import run_mfg_acceptance
+
+    engine = create_engine(settings)
+    redis = RedisCache.from_url(settings.redis_url)
+    authz = AuthzCache(redis, settings.authz_cache_ttl_seconds)
+    try:
+        async with create_session_factory(engine)() as session:
+            org = await session.scalar(
+                select(Organization).where(Organization.id == args.org)
+            )
+            if org is None and args.org == "default":
+                org = await session.scalar(
+                    select(Organization).order_by(Organization.created_at)
+                )
+            if org is None:
+                print(f"error: organization not found: {args.org}", file=sys.stderr)
+                return 2
+            user_row = None
+            if args.user:
+                user_row = await session.scalar(
+                    select(User).where(
+                        User.org_id == org.id, User.username == args.user
+                    )
+                )
+            else:
+                user_row = await session.scalar(
+                    select(User)
+                    .where(User.org_id == org.id)
+                    .order_by(User.created_at.asc())
+                )
+            if user_row is None:
+                print(
+                    "error: no user in org (pass --user USERNAME)",
+                    file=sys.stderr,
+                )
+                return 2
+            try:
+                principals = await PrincipalResolver(session, authz).resolve(
+                    org.id, user_row.id
+                )
+            except Exception:  # noqa: BLE001 — offline / sparse orgs
+                principals = Principals(org.id, user_row.id)
+            actor = CurrentUser(
+                id=user_row.id,
+                org_id=org.id,
+                username=user_row.username,
+                display_name=user_row.display_name,
+                principals=principals,
+                permissions=frozenset({"*", "admin:retrieval"}),
+            )
+            report = await run_mfg_acceptance(
+                session,
+                org_id=org.id,
+                user=actor,
+                reseeds=not bool(args.no_reseed),
+            )
+            if report.ok:
+                await session.commit()
+            else:
+                await session.rollback()
+            _print(report.to_dict())
+            return 0 if report.ok else 1
+    finally:
+        await redis.close()
+        await engine.dispose()
+
+
 async def _documents_reprocess(settings: Settings, args: argparse.Namespace) -> int:
     """Ops batch reprocess: resets status to uploaded and enqueues parse (no ACL)."""
     from app.models import Document, DocumentStatus
@@ -977,10 +1090,14 @@ async def run(argv: list[str], settings: Settings, runtime: IndexingRuntime | No
             return _structured_probe_mysql(args)
         if args.command == "wire-mes-chain":
             return await _structured_wire_mes_chain(settings, args)
+        if args.command == "seed-mfg":
+            return await _structured_seed_mfg(settings, args)
         return await _structured_seed_equipment(settings, args)
     if args.group == "ontology":
         if args.command == "export-sample":
             return await _ontology_export_sample(settings, args)
+        if args.command == "accept-mfg":
+            return await _ontology_accept_mfg(settings, args)
         return await _ontology_validate(settings, args)
     if args.group == "documents":
         return await _documents_reprocess(settings, args)

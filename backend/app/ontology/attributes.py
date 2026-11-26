@@ -365,6 +365,81 @@ _SCHEMAS: dict[str, ObjectTypeSchema] = {
             _s("compatible_equipment_external_id", description="适用设备外部编号"),
         ),
     ),
+    StructuredObjectType.FACTORY.value: ObjectTypeSchema(
+        object_type="factory",
+        label="Factory",
+        description="制造工厂节点（可与 Site 并存）",
+        attributes=(
+            _s("code", required=True, description="工厂编码"),
+            _s("country", description="国家/地区"),
+            _s("timezone", description="时区"),
+            _s("company", description="公司/事业部"),
+        ),
+    ),
+    StructuredObjectType.CUSTOMER_ORDER.value: ObjectTypeSchema(
+        object_type="customer_order",
+        label="Customer order",
+        description="客户订单（ERP）",
+        attributes=(
+            _s("customer_name", required=True, description="客户名称"),
+            _s("due_date", required=True, description="客户交期 ISO-8601"),
+            _n("order_qty", required=True, minimum=0, description="订单数量"),
+            _e(
+                "order_status",
+                frozenset({"open", "in_production", "at_risk", "shipped", "closed"}),
+                description="订单状态",
+            ),
+            _s("factory_external_id", description="履约工厂"),
+            _s("product_sku", description="成品 SKU"),
+        ),
+    ),
+    StructuredObjectType.PRODUCTION_ORDER.value: ObjectTypeSchema(
+        object_type="production_order",
+        label="Production order",
+        description="生产订单/工单（延期风险闭环）",
+        attributes=(
+            _s("due_date", required=True, description="交期 ISO-8601 日期"),
+            _e(
+                "risk_status",
+                frozenset({"open", "at_risk", "delayed", "completed", "cancelled"}),
+                description="风险状态",
+            ),
+            _s("customer_order_external_id", description="所属客户订单"),
+            _s("material_external_id", description="主耗用物料外部编号"),
+            _n("planned_qty", minimum=0, description="计划数量"),
+            _n("completed_qty", minimum=0, description="完成数量"),
+            _n("required_qty", minimum=0, description="需求数量（兼容旧字段）"),
+            _n("shortage_qty", minimum=0, description="缺料数量"),
+            _s("factory_external_id", description="所属工厂"),
+            _s("line_external_id", description="所属产线"),
+            _s("equipment_external_id", description="主执行设备"),
+            _s("product_sku", description="成品 SKU"),
+            _s("anomaly", description="生产异常摘要"),
+        ),
+    ),
+    StructuredObjectType.INVENTORY.value: ObjectTypeSchema(
+        object_type="inventory",
+        label="Inventory",
+        description="仓/线边库存镜像",
+        attributes=(
+            _s("material_external_id", required=True, description="物料外部编号"),
+            _n("qty", required=True, minimum=0, description="可用数量"),
+            _s("uom", description="单位"),
+            _s("factory_external_id", description="所在工厂"),
+            _s("line_external_id", description="所在产线/库位"),
+            _s("warehouse_code", description="仓库编码"),
+        ),
+    ),
+    StructuredObjectType.EMPLOYEE.value: ObjectTypeSchema(
+        object_type="employee",
+        label="Employee",
+        description="制造域责任人",
+        attributes=(
+            _s("employee_no", required=True, description="工号"),
+            _s("role", description="岗位"),
+            _s("factory_external_id", description="所属工厂"),
+        ),
+    ),
 }
 
 # Shared MES-style device status raw→standard map (column or meta).

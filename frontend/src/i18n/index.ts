@@ -96,6 +96,10 @@ export function t(key: string, named?: Record<string, unknown>): string {
   return named ? i18n.global.t(key, named) : i18n.global.t(key)
 }
 
+export function te(key: string): boolean {
+  return i18n.global.te(key)
+}
+
 /** Element Plus locale following the app locale (dates, pagination, empty states…). */
 export const elementLocale = computed(() => {
   const locale = currentLocale()

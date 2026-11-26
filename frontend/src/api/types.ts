@@ -2255,7 +2255,24 @@ export interface TerminologyNeighborhood {
 }
 
 export type StructuredSourceType = 'erp' | 'mes' | 'manual' | 'qms' | 'plm' | 'wms'
-export type StructuredObjectType = 'device' | 'work_order' | 'spare_part'
+export type StructuredObjectType =
+  | 'device'
+  | 'work_order'
+  | 'spare_part'
+  | 'site'
+  | 'area'
+  | 'line'
+  | 'equipment'
+  | 'component'
+  | 'material'
+  | 'operation'
+  | 'process_parameter'
+  | 'failure_mode'
+  | 'event'
+  | 'factory'
+  | 'production_order'
+  | 'inventory'
+  | 'employee'
 export type StructuredDomainKind = 'equipment' | 'generic'
 
 export interface StructuredSource {
@@ -2874,4 +2891,47 @@ export interface ActionTypeUpdate {
   risk?: string | null
   systems?: string[] | null
   enabled?: boolean | null
+}
+
+export interface ActionInvokeIn {
+  action_type: string
+  payload?: Record<string, unknown>
+  idempotency_key: string
+  approval_id?: string | null
+  dry_run?: boolean
+}
+
+export interface ActionApproveIn {
+  action_type: string
+  payload?: Record<string, unknown>
+  acknowledge_risk?: boolean
+}
+
+export interface ActionApprovalOut {
+  id: string
+  action_type: string
+  expires_at: string
+  acknowledge_risk: boolean
+}
+
+export interface ActionExecutionOut {
+  id?: string | null
+  status: string
+  action_type: string
+  result?: Record<string, unknown>
+  error?: string | null
+  approval_id?: string | null
+  rule_verdict?: string | null
+}
+
+export interface ActionExecutionListItem {
+  id: string
+  action_type: string
+  status: string
+  idempotency_key: string
+  error?: string | null
+  rule_verdict?: string | null
+  result?: Record<string, unknown>
+  created_at: string
+  duration_ms?: number | null
 }

@@ -143,6 +143,23 @@ class StructuredAccess:
             out.append(oid)
         return out
 
+    async def can_write(self, user: CurrentUser, object_id: str) -> bool:
+        """Write (edit) on structured object; org-default open unless restricted/denied."""
+        if user.is_superuser:
+            return True
+        ref = structured_ref(object_id)
+        if await self.acl.is_denied(user.principals, ref):
+            return False
+        restricted = await self._restricted_ids(user.org_id, [object_id])
+        if object_id not in restricted:
+            return True
+        granted = await self.acl.effective_permission(user.principals, ref)
+        return granted is not None and granted.level >= AclPermission.EDIT.level
+
+    async def require_write(self, user: CurrentUser, object_id: str) -> None:
+        if not await self.can_write(user, object_id):
+            raise PermissionDeniedError(detail={"required_acl": "edit"})
+
     async def require_manage(self, user: CurrentUser, object_id: str) -> None:
         """Admin ACL edits: platform/admin bypass via is_superuser; else need manage grant."""
         if user.is_superuser:

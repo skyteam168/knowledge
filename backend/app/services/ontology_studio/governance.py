@@ -5,8 +5,8 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import ConflictError, NotFoundError
-from app.models.action import ActionType, OntologyRule
+from app.core.exceptions import ConflictError, NotFoundError, ValidationAppError
+from app.models.action import ActionType, OntologyRule, RuleVerdict
 from app.schemas.ontology_governance import (
     ActionTypeCreate,
     ActionTypeOut,
@@ -22,6 +22,17 @@ RESOURCE_RULE = "ontology_rule"
 RESOURCE_ACTION = "action_type"
 
 
+def _reject_empty_restrictive_condition(condition: dict, verdict: str) -> None:
+    """Empty {} matches every action; forbid that for deny / require_confirm."""
+    v = (verdict or "").strip().lower()
+    if v in {RuleVerdict.DENY.value, RuleVerdict.REQUIRE_CONFIRM.value} and not condition:
+        raise ValidationAppError(
+            "deny/require_confirm rules must set a non-empty condition "
+            '(e.g. {"action": "material.transfer"}); empty {} matches all actions',
+            detail={"verdict": v, "condition": condition},
+        )
+
+
 class OntologyGovernanceService(BaseService):
     def __init__(
         self, session: AsyncSession, ctx: RequestContext, authz_cache: AuthzCache
@@ -29,6 +40,9 @@ class OntologyGovernanceService(BaseService):
         super().__init__(session, ctx, authz_cache)
 
     async def list_rules(self) -> list[OntologyRuleOut]:
+        from app.services.action.runtime import ActionRuntime
+
+        await ActionRuntime(self.session, self.ctx).ensure_builtins()
         rows = await self.session.scalars(
             select(OntologyRule)
             .where(OntologyRule.org_id == self.org_id)
@@ -37,14 +51,17 @@ class OntologyGovernanceService(BaseService):
         return [self._rule_out(r) for r in rows]
 
     async def create_rule(self, data: OntologyRuleCreate) -> OntologyRuleOut:
+        condition = dict(data.condition or {})
+        verdict = data.verdict.strip().lower()
+        _reject_empty_restrictive_condition(condition, verdict)
         row = OntologyRule(
             org_id=self.org_id,
             name=data.name.strip(),
             description=(data.description or "").strip() or None,
             priority=data.priority,
             enabled=data.enabled,
-            condition=dict(data.condition or {}),
-            verdict=data.verdict.strip().lower(),
+            condition=condition,
+            verdict=verdict,
             message=(data.message or "").strip() or None,
             created_by=self.ctx.user.id,
         )
@@ -78,6 +95,9 @@ class OntologyGovernanceService(BaseService):
             row.verdict = data.verdict.strip().lower()
         if data.message is not None:
             row.message = data.message.strip() or None
+        _reject_empty_restrictive_condition(
+            dict(row.condition or {}), str(row.verdict or "")
+        )
         await self.session.flush()
         out = self._rule_out(row)
         await self.audit.record(
@@ -91,6 +111,9 @@ class OntologyGovernanceService(BaseService):
         return out
 
     async def list_action_types(self, *, enabled_only: bool = False) -> list[ActionTypeOut]:
+        from app.services.action.runtime import ActionRuntime
+
+        await ActionRuntime(self.session, self.ctx).ensure_builtins()
         stmt = select(ActionType).where(ActionType.org_id == self.org_id)
         if enabled_only:
             stmt = stmt.where(ActionType.enabled.is_(True))

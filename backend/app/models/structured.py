@@ -57,6 +57,12 @@ class StructuredObjectType(StrEnum):
     PROCESS_PARAMETER = "process_parameter"
     FAILURE_MODE = "failure_mode"
     EVENT = "event"
+    # Manufacturing closed-loop (fixture ABox + Kinetic actions)
+    FACTORY = "factory"
+    CUSTOMER_ORDER = "customer_order"
+    PRODUCTION_ORDER = "production_order"
+    INVENTORY = "inventory"
+    EMPLOYEE = "employee"
 
 
 class ObjectEndpointKind(StrEnum):
@@ -77,6 +83,8 @@ class ObjectRelationType(StrEnum):
     CONSUMES = "consumes"
     WORK_ORDER_FOR = "work_order_for"
     SPARE_FOR = "spare_for"
+    BELONGS_TO = "belongs_to"
+    RESPONSIBLE_FOR = "responsible_for"
 
 
 class StructuredSource(IdMixin, TenantMixin, TimestampMixin, Base):

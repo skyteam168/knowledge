@@ -48,6 +48,9 @@ class StructuredRepository:
     def add_source(self, row: StructuredSource) -> None:
         self.session.add(row)
 
+    async def delete_source(self, row: StructuredSource) -> None:
+        await self.session.delete(row)
+
     # ---- domains ------------------------------------------------------------------
 
     async def get_domain(self, org_id: str, domain_id: str) -> StructuredDomain | None:

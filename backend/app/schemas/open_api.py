@@ -509,6 +509,14 @@ class OpenQueryObjectsIn(BaseModel):
     event_type: str | None = Field(default=None, max_length=32)
     occurred_from: datetime | None = None
     occurred_to: datetime | None = None
+    due_before: datetime | None = Field(
+        default=None, description="Filter production_order by attrs.due_date < due_before"
+    )
+    risk_status: str | None = Field(
+        default=None,
+        max_length=32,
+        description="Filter by attrs.risk_status (e.g. delayed|at_risk)",
+    )
     page: int = Field(default=1, ge=1)
     size: int = Field(default=20, ge=1, le=100)
 
@@ -520,6 +528,14 @@ class OpenQueryObjectsIn(BaseModel):
     @field_validator("event_type")
     @classmethod
     def _et(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        text = value.strip().lower()
+        return text or None
+
+    @field_validator("risk_status")
+    @classmethod
+    def _risk(cls, value: str | None) -> str | None:
         if value is None:
             return None
         text = value.strip().lower()

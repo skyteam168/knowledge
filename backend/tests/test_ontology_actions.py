@@ -96,8 +96,12 @@ async def test_list_actions_seeds_builtins(
     names = {r.name for r in rows}
     assert "device.set_status" in names
     assert "device.record_note" in names
+    assert "production.query_risk" in names
+    assert "material.transfer" in names
     high = next(r for r in rows if r.name == "device.set_status")
     assert high.risk == ActionRisk.HIGH.value
+    transfer = next(r for r in rows if r.name == "material.transfer")
+    assert transfer.risk == ActionRisk.HIGH.value
 
 
 async def test_low_risk_action_succeeds_and_is_idempotent(
@@ -124,6 +128,21 @@ async def test_low_risk_action_succeeds_and_is_idempotent(
     )
     assert second.execution_id == first.execution_id
     assert second.status == first.status
+
+
+async def test_approve_unknown_action_rejected(
+    session: AsyncSession, org_user
+) -> None:
+    from app.core.exceptions import NotFoundError
+
+    _org, user = org_user
+    rt = _runtime(session, user)
+    with pytest.raises(NotFoundError):
+        await rt.create_approval(
+            "material.transfer.does_not_exist",
+            {"qty": 1},
+            acknowledge_risk=True,
+        )
 
 
 async def test_high_risk_requires_approval_then_updates_state(

@@ -41,6 +41,9 @@ export const listStructuredSources = () => get<StructuredSource[]>(`${BASE}/sour
 export const createStructuredSource = (body: StructuredSourceCreate) =>
   post<StructuredSource>(`${BASE}/sources`, body)
 
+export const deleteStructuredSource = (sourceId: string) =>
+  del<void>(`${BASE}/sources/${sourceId}`)
+
 export const syncStructuredSource = (
   sourceId: string,
   dryRun = false,

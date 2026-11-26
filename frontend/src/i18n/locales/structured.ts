@@ -8,6 +8,10 @@ export default {
     createDomain: '新建业务域',
     createRecord: '新建记录',
     createSource: '新建数据源',
+    deleteSource: '删除数据源',
+    deleteSourceConfirm:
+      '确定删除数据源「{name}」？将级联删除其下全部镜像记录、设备/工单/备件及相关关系，且不可恢复。',
+    deleteSourceNeedSelect: '请先在筛选中选择要删除的数据源',
     syncSource: '同步数据源',
     syncForceFull: '强制全量同步',
     syncForceFullConfirm: '忽略水位游标，全量拉取该数据源？可能较慢。',
@@ -58,6 +62,9 @@ export default {
     emptySources: '暂无数据源，请先新建',
     emptyDomains: '暂无业务域',
     emptyRows: '暂无数据，可点击「新建记录」添加',
+    emptyRowsHint:
+      '若刚切换业务域，请清空数据源筛选后点「搜索」。制造试点 Fixture 的订单/库存在「制造试点」域下。',
+    deleteSourceHint: '先在上方筛选中选中要删的数据源，再点「删除数据源」',
     externalId: '外部编号',
     name: '名称',
     status: '状态',
@@ -145,6 +152,10 @@ export default {
     createDomain: 'New domain',
     createRecord: 'New record',
     createSource: 'New source',
+    deleteSource: 'Delete source',
+    deleteSourceConfirm:
+      'Delete source "{name}"? This cascades all mirrored records, devices/work orders/spares and related links, and cannot be undone.',
+    deleteSourceNeedSelect: 'Select a source in the filter first',
     syncSource: 'Sync source',
     syncForceFull: 'Force full sync',
     syncForceFullConfirm: 'Ignore watermarks and pull the full source? This may be slow.',
@@ -199,6 +210,9 @@ export default {
     emptySources: 'No sources yet. Create one first.',
     emptyDomains: 'No domains',
     emptyRows: 'No rows. Click “New record” to add one.',
+    emptyRowsHint:
+      'After switching domains, clear the source filter and click Search. Shenzhou fixture orders/inventory live under the Manufacturing Pilot domain.',
+    deleteSourceHint: 'Select the source in the filter above, then click Delete source',
     externalId: 'External ID',
     name: 'Name',
     status: 'Status',
@@ -286,6 +300,10 @@ export default {
     createDomain: 'Miền mới',
     createRecord: 'Bản ghi mới',
     createSource: 'Nguồn dữ liệu mới',
+    deleteSource: 'Xóa nguồn',
+    deleteSourceConfirm:
+      'Xóa nguồn "{name}"? Sẽ xóa kèm toàn bộ bản ghi gương, thiết bị/lệnh/phụ tùng và quan hệ liên quan, không hoàn tác được.',
+    deleteSourceNeedSelect: 'Hãy chọn nguồn trong bộ lọc trước',
     syncSource: 'Đồng bộ nguồn',
     syncForceFull: 'Đồng bộ toàn bộ (force)',
     syncForceFullConfirm: 'Bỏ watermark và kéo toàn bộ nguồn? Có thể chậm.',
@@ -340,6 +358,9 @@ export default {
     emptySources: 'Chưa có nguồn. Hãy tạo nguồn trước.',
     emptyDomains: 'Chưa có miền',
     emptyRows: 'Chưa có dữ liệu. Nhấn "Bản ghi mới" để thêm.',
+    emptyRowsHint:
+      'Sau khi đổi miền, hãy xóa bộ lọc nguồn rồi bấm Tìm. Đơn/kho fixture nằm trong miền Manufacturing Pilot.',
+    deleteSourceHint: 'Chọn nguồn trong bộ lọc phía trên, rồi bấm Xóa nguồn',
     externalId: 'Mã bên ngoài',
     name: 'Tên',
     status: 'Trạng thái',

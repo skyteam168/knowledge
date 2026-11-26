@@ -57,9 +57,17 @@ class StructuredSyncExecutor:
             raise ValidationAppError("Structured source is disabled")
         config = parse_connector_config(source.meta)
         if config is None:
+            meta = dict(source.meta or {})
+            if meta.get("seed"):
+                raise ValidationAppError(
+                    "Seed/manual source cannot sync from an external system; "
+                    "pick a source with meta.connector, or edit this source to add one "
+                    "(csv|rest|mysql|postgres|mongo|mssql)"
+                )
             raise ValidationAppError(
                 "Source has no connector in meta "
-                "(set meta.connector=csv|rest|mysql|postgres|mongo|mssql)"
+                "(set meta.connector=csv|rest|mysql|postgres|mongo|mssql, "
+                "or choose a connector-enabled source)"
             )
 
         cursor = None if force_full else parse_sync_cursor(source.meta)

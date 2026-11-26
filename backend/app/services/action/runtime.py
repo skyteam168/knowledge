@@ -33,7 +33,7 @@ from app.services.structured.state_history import EntityStateHistoryService
 
 APPROVAL_TTL = timedelta(minutes=30)
 
-# Built-in pilot actions (seeded per org on first list if empty).
+# Built-in pilot actions (seeded per org on first list / ensure_builtins).
 BUILTIN_ACTIONS: list[dict[str, Any]] = [
     {
         "name": "device.set_status",
@@ -68,6 +68,59 @@ BUILTIN_ACTIONS: list[dict[str, Any]] = [
         "preconditions": {"object_type": "device"},
         "risk": ActionRisk.LOW.value,
         "systems": ["kb"],
+    },
+    {
+        "name": "production.query_risk",
+        "description": "Aggregate at-risk / delayed production orders and shortage hints",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "factory_external_id": {"type": "string"},
+                "risk_status": {
+                    "type": "string",
+                    "enum": ["at_risk", "delayed", "open"],
+                },
+            },
+        },
+        "preconditions": {"object_type": "production_order"},
+        "risk": ActionRisk.LOW.value,
+        "systems": ["erp", "mes"],
+    },
+    {
+        "name": "material.transfer",
+        "description": "Transfer inventory qty between mirrored warehouses (high risk)",
+        "input_schema": {
+            "type": "object",
+            "required": ["source_inventory_id", "target_inventory_id", "qty"],
+            "properties": {
+                "source_inventory_id": {"type": "string"},
+                "target_inventory_id": {"type": "string"},
+                "qty": {"type": "number", "minimum": 0},
+                "production_order_id": {"type": "string"},
+                "material_external_id": {"type": "string"},
+                "note": {"type": "string", "maxLength": 500},
+            },
+        },
+        "preconditions": {"object_type": "inventory"},
+        "risk": ActionRisk.HIGH.value,
+        "systems": ["wms", "erp"],
+    },
+]
+
+BUILTIN_RULES: list[dict[str, Any]] = [
+    {
+        "name": "mfg.transfer.require_identity",
+        "priority": 10,
+        "condition": {"action": "material.transfer", "has_identity_mapping": False},
+        "verdict": RuleVerdict.DENY.value,
+        "message": "material.transfer denied: material has no cross-system identity mapping",
+    },
+    {
+        "name": "mfg.transfer.cross_plant_confirm",
+        "priority": 20,
+        "condition": {"action": "material.transfer", "cross_plant": True},
+        "verdict": RuleVerdict.REQUIRE_CONFIRM.value,
+        "message": "cross-plant material transfer requires confirmation",
     },
 ]
 
@@ -123,6 +176,27 @@ class ActionRuntime:
                     created_by=self.ctx.user.id,
                 )
             )
+        existing_rules = {
+            r.name
+            for r in await self.session.scalars(
+                select(OntologyRule).where(OntologyRule.org_id == self.org_id)
+            )
+        }
+        for spec in BUILTIN_RULES:
+            if spec["name"] in existing_rules:
+                continue
+            self.session.add(
+                OntologyRule(
+                    org_id=self.org_id,
+                    name=spec["name"],
+                    condition=dict(spec.get("condition") or {}),
+                    verdict=spec["verdict"],
+                    priority=int(spec.get("priority") or 100),
+                    message=spec.get("message"),
+                    enabled=True,
+                    created_by=self.ctx.user.id,
+                )
+            )
         await self.session.flush()
 
     async def list_actions(self) -> list[ActionType]:
@@ -148,10 +222,20 @@ class ActionRuntime:
         return row
 
     async def list_rules(self) -> list[OntologyRule]:
+        await self.ensure_builtins()
         rows = await self.session.scalars(
             select(OntologyRule)
             .where(OntologyRule.org_id == self.org_id, OntologyRule.enabled.is_(True))
             .order_by(OntologyRule.priority, OntologyRule.name)
+        )
+        return list(rows)
+
+    async def list_executions(self, *, limit: int = 50) -> list[ActionExecution]:
+        rows = await self.session.scalars(
+            select(ActionExecution)
+            .where(ActionExecution.org_id == self.org_id)
+            .order_by(ActionExecution.created_at.desc())
+            .limit(limit)
         )
         return list(rows)
 
@@ -192,11 +276,13 @@ class ActionRuntime:
                 "High-risk actions require acknowledge_risk=true",
                 detail={"required": "acknowledge_risk"},
             )
+        # Must match invoke_action: unknown / disabled action types cannot mint tokens.
+        await self.get_action(action_type)
         row = ActionApproval(
             org_id=self.org_id,
-            action_type=action_type,
+            action_type=action_type.strip(),
             actor_id=self.ctx.user.id,
-            payload_hash=_payload_hash(action_type, payload),
+            payload_hash=_payload_hash(action_type.strip(), payload),
             expires_at=datetime.now(UTC) + APPROVAL_TTL,
             acknowledge_risk=True,
         )
@@ -375,7 +461,56 @@ class ActionRuntime:
         if "to_status" in payload:
             ctx["to_status"] = payload["to_status"]
             ctx["to"] = payload["to_status"]
+        if action_type == "material.transfer":
+            await self._enrich_transfer_context(ctx, payload)
         return ctx
+
+    async def _enrich_transfer_context(
+        self, ctx: dict[str, Any], payload: dict[str, Any]
+    ) -> None:
+        from app.models import StructuredRecord
+
+        src = await self.session.get(StructuredRecord, str(payload.get("source_inventory_id") or ""))
+        tgt = await self.session.get(StructuredRecord, str(payload.get("target_inventory_id") or ""))
+        if src is None or src.org_id != self.org_id or src.object_type != "inventory":
+            raise ValidationAppError("source_inventory_id invalid")
+        if tgt is None or tgt.org_id != self.org_id or tgt.object_type != "inventory":
+            raise ValidationAppError("target_inventory_id invalid")
+        src_attrs = dict(src.attrs or {})
+        tgt_attrs = dict(tgt.attrs or {})
+        src_fac = str(src_attrs.get("factory_external_id") or src.parent_external_id or "")
+        tgt_fac = str(tgt_attrs.get("factory_external_id") or tgt.parent_external_id or "")
+        ctx["cross_plant"] = bool(src_fac and tgt_fac and src_fac != tgt_fac)
+        mat_ext = str(
+            payload.get("material_external_id")
+            or src_attrs.get("material_external_id")
+            or tgt_attrs.get("material_external_id")
+            or ""
+        ).strip()
+        ctx["material_external_id"] = mat_ext or None
+        has_identity = False
+        if mat_ext:
+            mat_row = await self.session.scalar(
+                select(StructuredRecord).where(
+                    StructuredRecord.org_id == self.org_id,
+                    StructuredRecord.object_type == "material",
+                    StructuredRecord.external_id == mat_ext,
+                )
+            )
+            if mat_row is not None:
+                canon = await self.identity.get_by_structured(
+                    self.org_id,
+                    structured_object_type="material",
+                    structured_object_id=mat_row.id,
+                )
+                if canon is not None:
+                    ids = await self.identity.list_identifiers(self.org_id, canon.id)
+                    has_identity = len(ids) >= 2
+        ctx["has_identity_mapping"] = has_identity
+        ctx["source_factory"] = src_fac or None
+        ctx["target_factory"] = tgt_fac or None
+        ctx["source_qty"] = float(src_attrs.get("qty") or 0)
+        ctx["target_qty"] = float(tgt_attrs.get("qty") or 0)
 
     async def _dispatch(
         self, action_type: str, payload: dict[str, Any], context: dict[str, Any]
@@ -388,7 +523,152 @@ class ActionRuntime:
                 "note": str(payload["note"]).strip(),
                 "recorded": True,
             }
-        raise ValidationAppError(f"No handler for action {action_type}")
+        if action_type == "production.query_risk":
+            return await self._query_production_risk(payload)
+        if action_type == "material.transfer":
+            return await self._transfer_material(payload, context)
+        raise ValidationAppError(
+            f"No handler for action {action_type}",
+            detail={"hint": "custom ActionTypes need a built-in handler name"},
+        )
+
+    async def _query_production_risk(self, payload: dict[str, Any]) -> dict[str, Any]:
+        from app.models import StructuredRecord
+
+        risk_filter = (payload.get("risk_status") or "").strip().lower() or None
+        factory = (payload.get("factory_external_id") or "").strip() or None
+        rows = list(
+            await self.session.scalars(
+                select(StructuredRecord).where(
+                    StructuredRecord.org_id == self.org_id,
+                    StructuredRecord.object_type == "production_order",
+                )
+            )
+        )
+        items: list[dict[str, Any]] = []
+        for row in rows:
+            attrs = dict(row.attrs or {})
+            status = str(attrs.get("risk_status") or row.status or "").lower()
+            if risk_filter:
+                if status != risk_filter:
+                    continue
+            elif status not in {"at_risk", "delayed"}:
+                continue
+            if factory and str(attrs.get("factory_external_id") or "") != factory:
+                continue
+            items.append(
+                {
+                    "object_id": row.id,
+                    "external_id": row.external_id,
+                    "title": row.title,
+                    "status": row.status,
+                    "risk_status": status,
+                    "due_date": attrs.get("due_date"),
+                    "material_external_id": attrs.get("material_external_id"),
+                    "required_qty": attrs.get("required_qty"),
+                    "shortage_qty": attrs.get("shortage_qty"),
+                    "factory_external_id": attrs.get("factory_external_id"),
+                    "line_external_id": attrs.get("line_external_id"),
+                }
+            )
+        return {"count": len(items), "items": items}
+
+    async def _transfer_material(
+        self, payload: dict[str, Any], context: dict[str, Any]
+    ) -> dict[str, Any]:
+        from app.models import StructuredRecord
+        from app.services.audit_service import AuditService
+
+        qty = float(payload["qty"])
+        if qty <= 0:
+            raise ValidationAppError("qty must be > 0")
+        src = await self.session.get(StructuredRecord, str(payload["source_inventory_id"]))
+        tgt = await self.session.get(StructuredRecord, str(payload["target_inventory_id"]))
+        if src is None or src.org_id != self.org_id or src.object_type != "inventory":
+            raise ValidationAppError("source_inventory_id invalid")
+        if tgt is None or tgt.org_id != self.org_id or tgt.object_type != "inventory":
+            raise ValidationAppError("target_inventory_id invalid")
+
+        from app.services.structured.access import StructuredAccess
+
+        acl = StructuredAccess(self.session)
+        await acl.require_write(self.ctx.user, src.id)
+        await acl.require_write(self.ctx.user, tgt.id)
+
+        src_attrs = dict(src.attrs or {})
+        tgt_attrs = dict(tgt.attrs or {})
+        src_qty = float(src_attrs.get("qty") or 0)
+        if src_qty < qty:
+            raise ValidationAppError(
+                "insufficient source inventory",
+                detail={"source_qty": src_qty, "requested": qty},
+            )
+        src_attrs["qty"] = src_qty - qty
+        tgt_attrs["qty"] = float(tgt_attrs.get("qty") or 0) + qty
+        src.attrs = src_attrs
+        tgt.attrs = tgt_attrs
+        if src_attrs["qty"] <= 50:
+            src.status = "low"
+        elif src.status == "low":
+            src.status = "ok"
+        if tgt_attrs["qty"] > 50 and tgt.status == "low":
+            tgt.status = "ok"
+
+        po_update: dict[str, Any] | None = None
+        po_id = (payload.get("production_order_id") or "").strip() or None
+        if po_id:
+            po = await self.session.get(StructuredRecord, po_id)
+            if po is not None and po.org_id == self.org_id and po.object_type == "production_order":
+                po_attrs = dict(po.attrs or {})
+                shortage = float(po_attrs.get("shortage_qty") or 0)
+                new_shortage = max(0.0, shortage - qty)
+                po_attrs["shortage_qty"] = new_shortage
+                if new_shortage <= 0:
+                    po_attrs["risk_status"] = "open"
+                    po.status = "open"
+                else:
+                    po_attrs["risk_status"] = po_attrs.get("risk_status") or "at_risk"
+                po.attrs = po_attrs
+                po_update = {
+                    "object_id": po.id,
+                    "external_id": po.external_id,
+                    "shortage_qty": new_shortage,
+                    "risk_status": po_attrs.get("risk_status"),
+                    "status": po.status,
+                }
+
+        await self.session.flush()
+        result = {
+            "source_inventory_id": src.id,
+            "target_inventory_id": tgt.id,
+            "qty": qty,
+            "source_qty_after": src_attrs["qty"],
+            "target_qty_after": tgt_attrs["qty"],
+            "cross_plant": bool(context.get("cross_plant")),
+            "production_order": po_update,
+            "note": (payload.get("note") or None),
+        }
+        await AuditService(self.session).record(
+            self.ctx.audit,
+            "ontology.action",
+            resource_type="action",
+            resource_id="material.transfer",
+            after={
+                "action_type": "material.transfer",
+                "payload": {
+                    "source_inventory_id": src.id,
+                    "target_inventory_id": tgt.id,
+                    "qty": qty,
+                    "production_order_id": po_id,
+                },
+                "result": {
+                    "source_qty_after": src_attrs["qty"],
+                    "target_qty_after": tgt_attrs["qty"],
+                    "cross_plant": bool(context.get("cross_plant")),
+                },
+            },
+        )
+        return result
 
     async def _set_device_status(
         self, payload: dict[str, Any], context: dict[str, Any]

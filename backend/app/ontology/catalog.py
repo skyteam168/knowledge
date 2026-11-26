@@ -40,6 +40,11 @@ INDUSTRIAL_OBJECT_CLASSES: frozenset[str] = frozenset(
         "ProcessParameter",
         "FailureMode",
         "Event",
+        "Factory",
+        "CustomerOrder",
+        "ProductionOrder",
+        "Inventory",
+        "Employee",
     }
 )
 
@@ -65,6 +70,11 @@ INDUSTRIAL_RECORD_OBJECT_TYPES: frozenset[str] = frozenset(
         StructuredObjectType.PROCESS_PARAMETER.value,
         StructuredObjectType.FAILURE_MODE.value,
         StructuredObjectType.EVENT.value,
+        StructuredObjectType.FACTORY.value,
+        StructuredObjectType.CUSTOMER_ORDER.value,
+        StructuredObjectType.PRODUCTION_ORDER.value,
+        StructuredObjectType.INVENTORY.value,
+        StructuredObjectType.EMPLOYEE.value,
     }
 )
 
@@ -85,6 +95,17 @@ _PARENT_CANDIDATES: dict[str, tuple[tuple[str, str], ...]] = {
     "event": (("equipment_external_id", "equipment"),),
     "operation": (("line_external_id", "line"), ("area_external_id", "area")),
     "process_parameter": (("operation_external_id", "operation"),),
+    "customer_order": (("factory_external_id", "factory"),),
+    "production_order": (
+        ("customer_order_external_id", "customer_order"),
+        ("line_external_id", "line"),
+        ("factory_external_id", "factory"),
+    ),
+    "inventory": (
+        ("factory_external_id", "factory"),
+        ("line_external_id", "line"),
+    ),
+    "employee": (("factory_external_id", "factory"),),
 }
 
 

@@ -5,6 +5,7 @@ import re
 from datetime import datetime
 from typing import Any
 
+from sqlalchemy import and_, delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ConflictError, NotFoundError, ValidationAppError
@@ -12,6 +13,7 @@ from app.models import (
     EquipDevice,
     EquipSparePart,
     EquipWorkOrder,
+    ObjectRelation,
     StructuredDomain,
     StructuredDomainKind,
     StructuredEntityLink,
@@ -20,6 +22,8 @@ from app.models import (
     StructuredSource,
     StructuredSourceType,
 )
+from app.models.entity_identity import CanonicalEntity
+from app.models.structured import ObjectEndpointKind
 from app.repositories.structured_repo import StructuredRepository
 from app.schemas.common import Page
 from app.schemas.structured import (
@@ -147,6 +151,89 @@ class StructuredService(BaseService):
             self._source_out(row).model_dump(mode="json"),
         )
         return self._source_out(row)
+
+    async def delete_source(self, source_id: str) -> None:
+        row = await self.repo.get_source(self.org_id, source_id)
+        if row is None:
+            raise NotFoundError("Structured source not found")
+        before = self._source_out(row).model_dump(mode="json")
+
+        record_ids = list(
+            await self.session.scalars(
+                select(StructuredRecord.id).where(
+                    StructuredRecord.org_id == self.org_id,
+                    StructuredRecord.source_id == source_id,
+                )
+            )
+        )
+        device_ids = list(
+            await self.session.scalars(
+                select(EquipDevice.id).where(
+                    EquipDevice.org_id == self.org_id,
+                    EquipDevice.source_id == source_id,
+                )
+            )
+        )
+        work_order_ids = list(
+            await self.session.scalars(
+                select(EquipWorkOrder.id).where(
+                    EquipWorkOrder.org_id == self.org_id,
+                    EquipWorkOrder.source_id == source_id,
+                )
+            )
+        )
+        spare_ids = list(
+            await self.session.scalars(
+                select(EquipSparePart.id).where(
+                    EquipSparePart.org_id == self.org_id,
+                    EquipSparePart.source_id == source_id,
+                )
+            )
+        )
+        object_ids = list({*record_ids, *device_ids, *work_order_ids, *spare_ids})
+
+        if object_ids:
+            kind = ObjectEndpointKind.STRUCTURED.value
+            await self.session.execute(
+                delete(ObjectRelation).where(
+                    ObjectRelation.org_id == self.org_id,
+                    or_(
+                        and_(
+                            ObjectRelation.from_kind == kind,
+                            ObjectRelation.from_id.in_(object_ids),
+                        ),
+                        and_(
+                            ObjectRelation.to_kind == kind,
+                            ObjectRelation.to_id.in_(object_ids),
+                        ),
+                    ),
+                )
+            )
+            await self.session.execute(
+                delete(StructuredEntityLink).where(
+                    StructuredEntityLink.org_id == self.org_id,
+                    StructuredEntityLink.object_id.in_(object_ids),
+                )
+            )
+            await self.session.execute(
+                update(CanonicalEntity)
+                .where(
+                    CanonicalEntity.org_id == self.org_id,
+                    CanonicalEntity.structured_object_id.in_(object_ids),
+                )
+                .values(structured_object_id=None, structured_object_type=None)
+            )
+
+        await self.repo.delete_source(row)
+        await self.session.flush()
+        await self.audit.record(
+            self.audit_ctx,
+            "structured_source.delete",
+            RESOURCE_SOURCE,
+            source_id,
+            before,
+            None,
+        )
 
     async def _resolve_mysql_connect(
         self, data: MysqlConnectIn
@@ -883,15 +970,31 @@ class StructuredService(BaseService):
     ) -> StructuredResolveOut:
         object_type = object_type.strip().lower()
         external_id = external_id.strip()
-        if not object_type or not external_id:
-            raise ValidationAppError("object_type and external_id are required")
+        if not object_type and not external_id:
+            raise ValidationAppError(
+                "object_type and external_id are required",
+                code="MISSING_FIELDS",
+                detail={"fields": ["object_type", "external_id"]},
+            )
+        if not object_type:
+            raise ValidationAppError(
+                "object_type is required",
+                code="MISSING_OBJECT_TYPE",
+                detail={"fields": ["object_type"]},
+            )
+        if not external_id:
+            raise ValidationAppError(
+                "external_id is required",
+                code="MISSING_EXTERNAL_ID",
+                detail={"fields": ["external_id"]},
+            )
 
         if object_type == StructuredObjectType.DEVICE.value:
             row = await self.repo.get_device_by_external(
                 self.org_id, external_id, source_id=source_id
             )
             if row is None:
-                raise NotFoundError("Device not found")
+                raise NotFoundError("Device not found", code="DEVICE_NOT_FOUND")
             label, status = row.name, row.status
             object_id, src = row.id, row.source_id
         elif object_type == StructuredObjectType.WORK_ORDER.value:
@@ -899,7 +1002,7 @@ class StructuredService(BaseService):
                 self.org_id, external_id, source_id=source_id
             )
             if row is None:
-                raise NotFoundError("Work order not found")
+                raise NotFoundError("Work order not found", code="WORK_ORDER_NOT_FOUND")
             label, status = row.title, row.status
             object_id, src = row.id, row.source_id
         elif object_type == StructuredObjectType.SPARE_PART.value:
@@ -907,7 +1010,7 @@ class StructuredService(BaseService):
                 self.org_id, external_id, source_id=source_id
             )
             if part is None:
-                raise NotFoundError("Spare part not found")
+                raise NotFoundError("Spare part not found", code="SPARE_PART_NOT_FOUND")
             label = part.name
             status = "in_stock" if part.qty_on_hand > 0 else "out_of_stock"
             object_id, src = part.id, part.source_id
@@ -916,7 +1019,9 @@ class StructuredService(BaseService):
                 self.org_id, object_type, external_id, source_id=source_id
             )
             if rec is None:
-                raise NotFoundError("Structured record not found")
+                raise NotFoundError(
+                    "Structured record not found", code="STRUCTURED_RECORD_NOT_FOUND"
+                )
             label, status = rec.title, rec.status
             object_id, src = rec.id, rec.source_id
 

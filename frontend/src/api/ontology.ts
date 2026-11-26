@@ -1,5 +1,10 @@
 import { get, http, post } from './http'
 import type {
+  ActionApproveIn,
+  ActionApprovalOut,
+  ActionExecutionListItem,
+  ActionExecutionOut,
+  ActionInvokeIn,
   ActionType,
   ActionTypeCreate,
   ActionTypeUpdate,
@@ -111,3 +116,17 @@ export const createActionType = (body: ActionTypeCreate) =>
 
 export const patchActionType = async (actionId: string, body: ActionTypeUpdate) =>
   (await http.patch<ActionType>(`${BASE}/action-types/${actionId}`, body)).data
+
+export const dryRunAction = (body: ActionInvokeIn) =>
+  post<ActionExecutionOut>(`${BASE}/actions/dry-run`, body)
+
+export const approveAction = (body: ActionApproveIn) =>
+  post<ActionApprovalOut>(`${BASE}/actions/approve`, body)
+
+export const invokeAction = (body: ActionInvokeIn) =>
+  post<ActionExecutionOut>(`${BASE}/actions/invoke`, body)
+
+export const listActionExecutions = (limit = 50) =>
+  get<ActionExecutionListItem[]>(`${BASE}/actions/executions`, {
+    params: { limit },
+  })

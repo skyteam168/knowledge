@@ -78,3 +78,49 @@ class ActionTypeOut(BaseModel):
     created_by: str | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class ActionInvokeIn(BaseModel):
+    action_type: str = Field(min_length=1, max_length=128)
+    payload: dict[str, Any] = Field(default_factory=dict)
+    idempotency_key: str = Field(min_length=1, max_length=128)
+    approval_id: str | None = Field(default=None, max_length=32)
+    dry_run: bool = False
+
+
+class ActionApproveIn(BaseModel):
+    action_type: str = Field(min_length=1, max_length=128)
+    payload: dict[str, Any] = Field(default_factory=dict)
+    acknowledge_risk: bool = False
+
+
+class ActionApprovalOut(BaseModel):
+    id: str
+    action_type: str
+    expires_at: datetime
+    acknowledge_risk: bool
+
+
+class ActionExecutionOut(BaseModel):
+    id: str | None = None
+    status: str
+    action_type: str
+    result: dict[str, Any] = Field(default_factory=dict)
+    error: str | None = None
+    approval_id: str | None = None
+    rule_verdict: str | None = None
+    idempotency_key: str | None = None
+    created_at: datetime | None = None
+    duration_ms: int | None = None
+
+
+class ActionExecutionListItem(BaseModel):
+    id: str
+    action_type: str
+    status: str
+    idempotency_key: str
+    error: str | None = None
+    rule_verdict: str | None = None
+    result: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+    duration_ms: int | None = None

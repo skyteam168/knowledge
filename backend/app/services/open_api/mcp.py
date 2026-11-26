@@ -241,6 +241,14 @@ TOOLS: dict[str, dict[str, Any]] = {
                     "type": "string",
                     "description": "ISO-8601；不含该时刻",
                 },
+                "due_before": {
+                    "type": "string",
+                    "description": "ISO-8601；过滤 attrs.due_date < due_before（生产订单）",
+                },
+                "risk_status": {
+                    "type": "string",
+                    "description": "过滤 attrs.risk_status，如 at_risk|delayed",
+                },
                 "page": {"type": "integer", "minimum": 1, "default": 1},
                 "size": {"type": "integer", "minimum": 1, "maximum": 100, "default": 20},
             },

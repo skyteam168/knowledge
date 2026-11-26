@@ -96,8 +96,10 @@ _OBJECT_RELATION_CONSTRAINTS: dict[ObjectRelationType, ObjectRelationConstraint]
         hard=True,
     ),
     ObjectRelationType.WORK_ORDER_FOR: ObjectRelationConstraint(
-        from_types=frozenset({"work_order"}),
-        to_types=frozenset({"device", "equipment"}),
+        from_types=frozenset({"work_order", "production_order"}),
+        to_types=frozenset(
+            {"device", "equipment", "line", "factory", "customer_order"}
+        ),
         hard=True,
     ),
     ObjectRelationType.SPARE_FOR: ObjectRelationConstraint(
@@ -107,14 +109,56 @@ _OBJECT_RELATION_CONSTRAINTS: dict[ObjectRelationType, ObjectRelationConstraint]
     ),
     ObjectRelationType.LOCATED_IN: ObjectRelationConstraint(
         from_types=frozenset(
-            {"equipment", "device", "component", "line", "area", "material"}
+            {
+                "equipment",
+                "device",
+                "component",
+                "line",
+                "area",
+                "material",
+                "inventory",
+                "production_order",
+                "employee",
+            }
         ),
-        to_types=frozenset({"site", "area", "line"}),
+        to_types=frozenset({"site", "area", "line", "factory"}),
         hard=False,
     ),
     ObjectRelationType.CONSUMES: ObjectRelationConstraint(
-        from_types=frozenset({"operation", "equipment", "device", "work_order"}),
-        to_types=frozenset({"material", "spare_part"}),
+        from_types=frozenset(
+            {"operation", "equipment", "device", "work_order", "production_order"}
+        ),
+        to_types=frozenset({"material", "spare_part", "inventory"}),
+        hard=False,
+    ),
+    ObjectRelationType.BELONGS_TO: ObjectRelationConstraint(
+        from_types=frozenset(
+            {
+                "line",
+                "area",
+                "inventory",
+                "material",
+                "production_order",
+                "customer_order",
+                "employee",
+                "equipment",
+            }
+        ),
+        to_types=frozenset({"factory", "site", "area", "line", "customer_order"}),
+        hard=False,
+    ),
+    ObjectRelationType.RESPONSIBLE_FOR: ObjectRelationConstraint(
+        from_types=frozenset({"employee"}),
+        to_types=frozenset(
+            {
+                "production_order",
+                "customer_order",
+                "line",
+                "factory",
+                "equipment",
+                "device",
+            }
+        ),
         hard=False,
     ),
 }
@@ -128,6 +172,8 @@ _DEFAULT_CARDINALITY: dict[ObjectRelationType, RelationCardinality] = {
     ObjectRelationType.SPARE_FOR: RelationCardinality.MANY_TO_MANY,
     ObjectRelationType.LOCATED_IN: RelationCardinality.MANY_TO_ONE,
     ObjectRelationType.CONSUMES: RelationCardinality.ONE_TO_MANY,
+    ObjectRelationType.BELONGS_TO: RelationCardinality.MANY_TO_ONE,
+    ObjectRelationType.RESPONSIBLE_FOR: RelationCardinality.ONE_TO_MANY,
 }
 
 

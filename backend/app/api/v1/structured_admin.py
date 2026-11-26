@@ -80,6 +80,12 @@ async def create_source(
     return await service.create_source(data)
 
 
+@router.delete("/sources/{source_id}", status_code=204)
+async def delete_source(source_id: str, service: ServiceDep) -> Response:
+    await service.delete_source(source_id)
+    return Response(status_code=204)
+
+
 @router.post("/sources/{source_id}/sync", response_model=StructuredSyncResult)
 async def sync_source(
     source_id: str,

@@ -1,11 +1,9 @@
 # 企业知识库平台（Enterprise Knowledge Base）
 
-当前阶段：**阶段 7 — 分析与加固**（已完成）。已具备文档入库与索引、权限过滤的混合检索与重排、带引用的流式问答，
-以及运营分析看板、离线评测、可观测性、安全加固、压测与生产部署；已接入阿里云百炼真实模型（见下文）。
-近期补充：页/幻灯片附图入库、答案内嵌图与可视化、Open API / MCP 返回 `image_url`（见「文档附图与答案可视化」）；
-AI 管理助手（见「AI 管理助手」）；问答入口更名为「知识库问答专家」（原「AI 助手」）。
-**2026-10 文档治理与协作**：水印 / 下载控制、版本历史、负责人与定期复核、收藏 / 评论 / Markdown 在线编辑
-（见「文档保护、版本与协作」；汇报口径见 [docs/system-overview.md](docs/system-overview.md)）。
+当前阶段：**阶段 7 — 分析与加固**（已完成）+ **工业级 Ontology 闭环**（Semantic + Identity + Governance + Kinetic，自检 **29/29**）。  
+已具备文档入库与索引、权限过滤的混合检索与重排、带引用的流式问答，以及运营分析看板、离线评测、可观测性、安全加固、压测与生产部署；已接入阿里云百炼真实模型（见下文）。  
+近期补充：页/幻灯片附图入库、答案内嵌图与可视化、Open API / MCP 返回 `image_url`；AI 管理助手；问答入口「知识库问答专家」；文档保护 / 版本 / 协作；结构化 ABox、跨系统身份、规则与 Action、制造试点（申洲越南厂延期场景）。  
+汇报口径见 [docs/system-overview.md](docs/system-overview.md)；制造试点逐步说明书见 [docs/ops/shenzhou-vn-delay-playbook.md](docs/ops/shenzhou-vn-delay-playbook.md)。
 
 | 阶段 | 名称 | 主要内容 |
 | --- | --- | --- |
@@ -17,6 +15,7 @@ AI 管理助手（见「AI 管理助手」）；问答入口更名为「知识�
 | 5 | 知识库问答专家（原 AI 助手） | 多轮会话、问题改写与意图分类、知识扩展、ACL 复检、证据阈值校验、带引用的流式回答 |
 | 6 | 知识闭环 | 知识缺口收集与聚类、审核工作台、LLM 辅助生成知识条目（KO）、发布审核与重新索引 |
 | 7 | 分析与加固 | 运营分析看板、离线评测、OpenTelemetry / Prometheus、限流与脱敏、压测、生产部署 |
+| 8 | 工业 Ontology | OWL TBox 合约、结构化 ABox、跨系统 Canonical、Ontology Studio、规则/Action 运行时、MCP 语义与受控写、制造试点验收 |
 
 ## 目录
 
@@ -24,8 +23,33 @@ AI 管理助手（见「AI 管理助手」）；问答入口更名为「知识�
 backend/    FastAPI 后端 + Dramatiq worker（uv 管理依赖）
 frontend/   Vue 3 + TS + Vite + Element Plus 前端
 deploy/     docker-compose 及各基础设施配置（opensearch IK、keycloak realm、mock-llm）
-docs/       ADR 与接口说明
+docs/       ADR、运维、评测、Ontology 与试点说明书
+ontology/   平台 TBox（enterprise.ttl）与示例 ABox
 ```
+
+## 系统架构（摘要）
+
+```
+浏览器 ──► frontend(nginx)
+ ├─ /api、/oidc、/health|/ready ──► backend:8000
+ └─ 静态 SPA
+Keycloak ◄── OIDC 登录 / 身份代理（企微/钉钉/AD）
+backend ◄──► postgres | redis | minio | qdrant | opensearch | 外部 LLM
+worker(dramatiq) ◄── redis（ingest / index / curation / directory / eval …）
+outbox-dispatcher ──claim──► outbox ──► 索引消费
+scheduler ──► 周期任务（聚类、分析聚合、保留策略等）
+```
+
+| 层 | 职责 |
+| --- | --- |
+| `api/` | 鉴权、参数校验、编排、SSE/HTTP |
+| `services/` | 业务事务、审计、问答、结构化、Action、管理助手 |
+| `repositories/` | ORM 查询 |
+| `retrieval/` / `llm/` | 双路召回融合与模型网关 |
+| `workers/` | Dramatiq / outbox / 调度 |
+
+原则：PostgreSQL 为唯一真相源；Qdrant / OpenSearch 可全量重建；检索 ACL 前置过滤 + 回答前 PG 复检；写操作审计；多租户按 `org_id` 隔离。  
+详细拓扑与数据流见 [docs/system-overview.md](docs/system-overview.md)；Ontology 合约见 [docs/ontology.md](docs/ontology.md)。
 
 ## 一键启动（全部容器）
 
@@ -183,6 +207,66 @@ rerank 最高分分布：
 - 阈值只适用于 `qwen3-rerank`，换 rerank 模型后需要重新校准。
 
 两次运行（「真实模型基线（默认阈值 0.2/0.5）」和「真实模型基线（阈值 0.45/0.7）」）都可以在前端「离线评测」页面的对比视图中查看逐题差异。
+
+### 工业 Ontology / 制造闭环验收（2026-11）
+
+自检清单 [docs/superpowers/specs/2026-11-25-industrial-ontology.md](docs/superpowers/specs/2026-11-25-industrial-ontology.md)：**29 / 29**（业务语义、数据与身份、业务执行、安全与治理、AI/MCP）。
+
+制造试点（申洲国际越南厂缺料延期）一键门禁：
+
+```bash
+docker compose -f deploy/docker-compose.yml exec backend \
+  python -m app.cli structured seed-mfg --org default
+docker compose -f deploy/docker-compose.yml exec backend \
+  python -m app.cli ontology accept-mfg --org default --user alice
+```
+
+| 门禁步骤 | 期望 |
+| --- | --- |
+| `seed_mfg` | 幂等写入工厂/产线/设备/物料/订单/工单/库存/人员、关系、身份、SOP |
+| `identity_resolve` | ERP `RM-PET-150D` 与 WMS `YN-RM-150` 同 Canonical；重复绑码 409 |
+| `query_traverse` | `production_order` + `risk_status=at_risk` 命中 `MO-2001`；邻居/遍历非空 |
+| Action | `production.query_risk` 成功；`material.transfer` 无审批待批 → 审批+`acknowledge_risk` 成功且幂等 |
+| 审计 | 调拨写入审计 |
+
+逐步登记与手工操作说明书：[docs/ops/shenzhou-vn-delay-playbook.md](docs/ops/shenzhou-vn-delay-playbook.md)。  
+自动化单测：`backend/tests/test_mfg_closed_loop.py`、`test_mfg_acceptance.py`、`test_ontology_actions.py`、`test_ontology_tools.py`。
+
+### AI 管理助手理解评测（2026-10-19）
+
+82 条中/英/越指令（`backend/app/services/admin_agent/eval_cases.json`）：`deepseek-v4.1-flash` 下函数调用与 JSON 模式均 **81/82（98.8%）**，意图准确率 100%，编造值 0；唯一失败为越南语授权漏对象，会被必填门禁拦住不执行。
+
+```bash
+docker compose -f deploy/docker-compose.yml exec backend \
+  python -m app.cli agent eval [--lang zh|en|vi] [--no-tools] [--out report.json]
+```
+
+### 其他评测 / 验收文档索引
+
+| 文档 | 内容 |
+| --- | --- |
+| [docs/testing/eval-baseline-expand-20261116.md](docs/testing/eval-baseline-expand-20261116.md) | 扩展集 138 题纪要 |
+| [docs/testing/eval-gate-20261114.md](docs/testing/eval-gate-20261114.md) | 评测门禁 |
+| [docs/testing/production-acceptance-report.md](docs/testing/production-acceptance-report.md) | 生产验收 |
+| [docs/audit/production-readiness-report.md](docs/audit/production-readiness-report.md) | 生产就绪审计 |
+| [docs/perf/load-test-report.md](docs/perf/load-test-report.md) | 压测 |
+| [docs/audit/permission-security-matrix.md](docs/audit/permission-security-matrix.md) | 权限安全矩阵 |
+
+## 近期新增能力（工业语义中心）
+
+| 能力 | 说明 |
+| --- | --- |
+| Ontology TBox | `ontology/enterprise.ttl` + `ontology validate`；实例仍在 PG（不上 SPARQL/Neo4j） |
+| 结构化 ABox | 域 / 数据源 / 记录 / 父子 / 有向关系；属性 schema 与单位校验；连接器同步（种子源无连接器时友好提示） |
+| Ontology Studio | Steward 草稿 → 审核 → 发布；Agent 只读已发布契约 |
+| 跨系统身份 | Canonical Entity + 多系统 external_id；编号解析；冲突拒绝 |
+| 规则与 Action | `production.query_risk`、`material.transfer`（审批、幂等、跨厂风险确认、审计） |
+| MCP / Open API | `describe_ontology` / `query_objects` / `traverse` / `list_actions` / 受控 `invoke` |
+| 制造试点 | 申洲越南厂延期 Fixture（`seed-mfg` / `accept-mfg`）+ SOP KO |
+| 问答语义支路 | 延期/缺料/同料身份等问题走结构化语义，保养类仍走 RAG |
+| API 错误多语言 | 前端 `formatApiError`：错误码 / 英文原文 → 中英越友好文案；trace 单独提示运维 |
+
+运维与语义中心说明：[docs/ops/semantic-center.md](docs/ops/semantic-center.md)、[docs/ops/structured-connectors.md](docs/ops/structured-connectors.md)。
 
 ## 文档保护、版本与协作
 

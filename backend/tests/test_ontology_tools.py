@@ -54,6 +54,17 @@ def _tools(session: AsyncSession, ctx: RequestContext) -> OpenOntologyTools:
     return OpenOntologyTools(session, ctx, AuthzCache(MemoryCache(), ttl_seconds=60), caller)
 
 
+async def test_query_unknown_object_type_errors(session: AsyncSession) -> None:
+    from app.core.exceptions import ValidationAppError
+
+    tools = _tools(session, _ctx())
+    with pytest.raises(ValidationAppError) as ei:
+        await tools.query_objects(
+            OpenQueryObjectsIn(object_type="not_a_real_type")
+        )
+    assert "Unknown object_type" in str(ei.value)
+
+
 async def test_describe_ontology_contract_fields(session: AsyncSession) -> None:
     tools = _tools(session, _ctx())
     summary = await tools.describe_ontology(scope="summary", version="platform")

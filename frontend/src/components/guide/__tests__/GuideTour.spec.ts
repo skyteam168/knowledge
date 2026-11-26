@@ -102,4 +102,24 @@ describe('GuideTour', () => {
     expect(guide.running).toBe(false)
     wrapper.unmount()
   })
+
+  it('aborts the tour when navigating away so the mask cannot freeze the sidebar', async () => {
+    const { wrapper, guide, router } = await mountTour([row(LAYOUT_TOUR, 'completed')])
+    expect(guide.running).toBe(true)
+    await router.push('/other')
+    await flushPromises()
+    expect(guide.running).toBe(false)
+    expect(document.querySelector('.el-tour__mask')).toBeNull()
+    wrapper.unmount()
+  })
+
+  it('aborts when the current step target disappears from the DOM', async () => {
+    const { wrapper, guide } = await mountTour([row(LAYOUT_TOUR, 'completed')])
+    expect(guide.running).toBe(true)
+    document.querySelector('[data-guide="search-input"]')?.remove()
+    await new Promise((r) => setTimeout(r, 900))
+    await flushPromises()
+    expect(guide.running).toBe(false)
+    wrapper.unmount()
+  })
 })

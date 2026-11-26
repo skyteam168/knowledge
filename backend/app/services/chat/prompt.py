@@ -111,16 +111,33 @@ def answer_messages(
     history: Sequence[ChatMessage],
     *,
     uncertain: bool,
+    ontology_context: str | None = None,
 ) -> list[ChatMessage]:
     system = ANSWER_SYSTEM_PROMPT + ("\n" + UNCERTAIN_RULE if uncertain else "")
+    if ontology_context:
+        system += (
+            "\n8. 若用户消息含 <ontology_facts>，其中内容为系统编排的结构化业务事实，"
+            "可与 <materials> 一并引用；ontology 事实可用 [O] 标注。"
+        )
     ask = f"问题：{defuse(question)}"
     if rewritten and rewritten.strip() != question.strip():
         ask += f"\n（结合上下文，该问题可理解为：{defuse(rewritten)}）"
-    user = (
-        f"{render_materials(evidences)}\n\n"
-        "请仅依据以上资料回答下面的问题，并在每个事实句后标注资料编号 [n]。\n"
-        f"{ask}"
+    parts: list[str] = []
+    if evidences:
+        parts.append(render_materials(evidences))
+    if ontology_context:
+        parts.append(
+            "<ontology_facts>\n"
+            + defuse(ontology_context.strip())
+            + "\n</ontology_facts>"
+        )
+    body = "\n\n".join(parts) if parts else "<materials>\n</materials>"
+    cite_hint = (
+        "请依据以上资料与业务事实回答下面的问题；文档资料用 [n]，Ontology 事实可用 [O]。"
+        if ontology_context
+        else "请仅依据以上资料回答下面的问题，并在每个事实句后标注资料编号 [n]。"
     )
+    user = f"{body}\n\n{cite_hint}\n{ask}"
     return [
         ChatMessage(role="system", content=system),
         *history_messages(history),

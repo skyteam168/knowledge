@@ -22,7 +22,16 @@ from app.models import (
     StructuredRecord,
 )
 from app.ontology.attributes import list_schemas
-from app.ontology.catalog import EQUIP_TABLE_OBJECT_TYPES, NS, OntologyCatalog
+from app.ontology.catalog import (
+    EQUIP_TABLE_OBJECT_TYPES,
+    INDUSTRIAL_RECORD_OBJECT_TYPES,
+    NS,
+    OntologyCatalog,
+)
+
+_KNOWN_QUERY_OBJECT_TYPES: frozenset[str] = (
+    EQUIP_TABLE_OBJECT_TYPES | INDUSTRIAL_RECORD_OBJECT_TYPES
+)
 from app.ontology.constraints import object_relation_constraint
 from app.ontology.freshness import compute_freshness
 from app.ontology.state_machines import normalize_device_status
@@ -387,6 +396,15 @@ class OpenOntologyTools:
 
     async def query_objects(self, data: OpenQueryObjectsIn) -> OpenQueryObjectsOut:
         ot = data.object_type
+        if ot not in _KNOWN_QUERY_OBJECT_TYPES:
+            raise ValidationAppError(
+                f"Unknown object_type '{ot}'",
+                detail={
+                    "object_type": ot,
+                    "hint": "use describe_ontology / platform industrial types",
+                    "allowed_examples": sorted(_KNOWN_QUERY_OBJECT_TYPES)[:20],
+                },
+            )
         if ot in EQUIP_TABLE_OBJECT_TYPES:
             return await self._query_equip(data)
         filters = self._record_query_filters(data)
@@ -427,6 +445,25 @@ class OpenOntologyTools:
                     or attrs.get("equipment_external_id") == data.equipment_external_id
                 ):
                     continue
+            if data.risk_status:
+                risk = str(attrs.get("risk_status") or row.status or "").strip().lower()
+                if risk != data.risk_status:
+                    continue
+            if data.due_before is not None:
+                due_raw = attrs.get("due_date")
+                if not isinstance(due_raw, str) or not due_raw.strip():
+                    continue
+                try:
+                    due_dt = datetime.fromisoformat(due_raw.strip().replace("Z", "+00:00"))
+                except ValueError:
+                    continue
+                cutoff = data.due_before
+                if cutoff.tzinfo is None and due_dt.tzinfo is not None:
+                    due_dt = due_dt.replace(tzinfo=None)
+                elif cutoff.tzinfo is not None and due_dt.tzinfo is None:
+                    cutoff = cutoff.replace(tzinfo=None)
+                if due_dt >= cutoff:
+                    continue
             items.append(self._query_item(row, attrs))
             if len(items) >= fetch:
                 break
@@ -449,6 +486,11 @@ class OpenOntologyTools:
         if data.metric != "count":
             raise ValidationAppError("Unsupported aggregate metric")
         ot = data.object_type
+        if ot not in _KNOWN_QUERY_OBJECT_TYPES:
+            raise ValidationAppError(
+                f"Unknown object_type '{ot}'",
+                detail={"object_type": ot},
+            )
         if ot in EQUIP_TABLE_OBJECT_TYPES:
             raise ValidationAppError(
                 "Aggregate count for equipment tables is not supported; use query_objects"

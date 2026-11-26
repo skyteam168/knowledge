@@ -39,7 +39,8 @@
 12. 分析  
 13. FAQ  
 
-概念层相关运维补充：[ontology.md](ontology.md)、[ops/structured-connectors.md](ops/structured-connectors.md)。
+概念层相关运维补充：[ontology.md](ontology.md)、[ops/structured-connectors.md](ops/structured-connectors.md)、[ops/semantic-center.md](ops/semantic-center.md)。  
+制造试点（申洲越南厂延期）逐步登记与操作：[ops/shenzhou-vn-delay-playbook.md](ops/shenzhou-vn-delay-playbook.md)。
 
 页面内可「去体验」跳转对应功能，或「播放引导」重看 Tour。
 
