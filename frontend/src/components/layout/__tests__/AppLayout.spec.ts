@@ -71,14 +71,28 @@ describe('AppLayout', () => {
     async () => {
       const { wrapper, router } = await mountWith(['*'], '/assistant')
       const text = wrapper.text()
-      for (const title of ['知识库问答专家', '知识库', '搜索', '知识运营', '管理', '分析']) {
+      for (const title of [
+        '知识库问答专家',
+        '知识库',
+        '搜索',
+        '知识运营',
+        '企业本体管理',
+        '管理',
+        '分析',
+      ]) {
         expect(text).toContain(title)
       }
       expect(wrapper.get('[data-test="readiness-tag"]').text()).toBe('服务正常')
       expect(wrapper.find('.layout__bell').text()).toContain('3')
       expect(wrapper.get('[data-test="user-menu"]').text()).toContain('Alice')
       expect(wrapper.find('[data-test="help-menu"]').exists()).toBe(true)
-      for (const target of ['menu-assistant', 'menu-admin', 'menu-curation', 'global-search']) {
+      for (const target of [
+        'menu-assistant',
+        'menu-admin',
+        'menu-curation',
+        'menu-ontology-mgmt',
+        'global-search',
+      ]) {
         expect(wrapper.find(`[data-guide="${target}"]`).exists()).toBe(true)
       }
       expect(wrapper.find('[data-test="menu-admin-platform"]').exists()).toBe(true)

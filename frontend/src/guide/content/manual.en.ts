@@ -721,7 +721,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
           {
             title: 'Open and filter',
             detail:
-              'Admin → Terminology. Filter by canonical keyword, type (device / process / defect / policy clause / IT term / other), and status (enabled/disabled), then search.',
+              'Enterprise Ontology → Terminology. Filter by canonical keyword, type (device / process / defect / policy clause / IT term / other), and status (enabled/disabled), then search.',
           },
           {
             title: 'Create a term',
@@ -757,7 +757,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
           {
             title: 'Domains and sources',
             detail:
-              'Admin → Structured data. Pick a domain on the left (equipment often has device/WO/spare tabs; others use generic records). New source can choose a connector: MySQL, PostgreSQL, SQL Server, MongoDB, CSV, REST, or none (manual). Prefer a password env var name (e.g. MES_MYSQL_PASSWORD); never store secrets in the DB.',
+              'Enterprise Ontology → Structured data. Pick a domain on the left (equipment often has device/WO/spare tabs; others use generic records). New source can choose a connector: MySQL, PostgreSQL, SQL Server, MongoDB, CSV, REST, or none (manual). Prefer a password env var name (e.g. MES_MYSQL_PASSWORD); never store secrets in the DB.',
           },
           {
             title: 'Manual rows and search',
@@ -788,7 +788,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
           {
             title: 'Purpose',
             detail:
-              'Map MES/business tables or collections to entity + attribute drafts, approve, then publish. Agents / Open API read the published version only. Open Admin → Ontology Studio.',
+              'Map MES/business tables or collections to entity + attribute drafts, approve, then publish. Agents / Open API read the published version only. Open Enterprise Ontology → Ontology Studio.',
           },
           {
             title: 'Connect DB and import schema',
@@ -814,7 +814,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
           {
             title: 'Canonical and identifiers',
             detail:
-              'Open Admin → Cross-system Identity: create Canonical entities, attach system Identifiers, and use the Conflicts tab when IDs point at different entities. Conflicts are never silently overwritten.',
+              'Open Enterprise Ontology → Cross-system Identity: create Canonical entities, attach system Identifiers, and use the Conflicts tab when IDs point at different entities. Conflicts are never silently overwritten.',
           },
         ],
       },
@@ -825,7 +825,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
           {
             title: 'Maintain rules and ActionTypes',
             detail:
-              'Open Admin → Rules & Actions: configure ontology rules by priority (allow/deny/require_confirm) and action types (risk, systems, input schema). Disabled actions disappear from Open/MCP list_actions.',
+              'Open Enterprise Ontology → Rules & Actions: configure ontology rules by priority (allow/deny/require_confirm) and action types (risk, systems, input schema). Disabled actions disappear from Open/MCP list_actions.',
           },
         ],
       },

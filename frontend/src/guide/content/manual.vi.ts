@@ -717,7 +717,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
           {
             title: 'Mở và lọc',
             detail:
-              'Quản trị → Thuật ngữ. Lọc theo từ khóa tên chuẩn, loại (thiết bị / quy trình / lỗi / điều khoản chính sách / thuật ngữ IT / khác) và trạng thái (bật/tắt), rồi tìm kiếm.',
+              'Quản lý Ontology doanh nghiệp → Thuật ngữ. Lọc theo từ khóa tên chuẩn, loại (thiết bị / quy trình / lỗi / điều khoản chính sách / thuật ngữ IT / khác) và trạng thái (bật/tắt), rồi tìm kiếm.',
           },
           {
             title: 'Tạo thuật ngữ',
@@ -753,7 +753,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
           {
             title: 'Miền và nguồn',
             detail:
-              'Quản trị → Dữ liệu có cấu trúc. Chọn miền bên trái. «Nguồn mới» có thể chọn connector: MySQL, PostgreSQL, SQL Server, MongoDB, CSV, REST, hoặc không (thủ công). Mật khẩu dùng tên biến môi trường (ví dụ MES_MYSQL_PASSWORD), không lưu secret vào DB.',
+              'Quản lý Ontology doanh nghiệp → Dữ liệu có cấu trúc. Chọn miền bên trái. «Nguồn mới» có thể chọn connector: MySQL, PostgreSQL, SQL Server, MongoDB, CSV, REST, hoặc không (thủ công). Mật khẩu dùng tên biến môi trường (ví dụ MES_MYSQL_PASSWORD), không lưu secret vào DB.',
           },
           {
             title: 'Bản ghi thủ công và tìm kiếm',
@@ -784,7 +784,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
           {
             title: 'Mục đích',
             detail:
-              'Ánh xạ bảng/collection MES thành bản nháp thực thể + thuộc tính, duyệt rồi xuất bản. Agent / Open API chỉ đọc bản đã publish. Mở Quản trị → Ontology Studio.',
+              'Ánh xạ bảng/collection MES thành bản nháp thực thể + thuộc tính, duyệt rồi xuất bản. Agent / Open API chỉ đọc bản đã publish. Mở Quản lý Ontology doanh nghiệp → Ontology Studio.',
           },
           {
             title: 'Kết nối CSDL và nhập schema',
@@ -810,7 +810,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
           {
             title: 'Canonical và Identifier',
             detail:
-              'Mở Quản trị → Danh tính đa hệ thống: tạo Canonical, gắn Identifier, xem tab Xung đột khi ID trỏ tới thực thể khác. Không ghi đè im lặng.',
+              'Mở Quản lý Ontology doanh nghiệp → Danh tính đa hệ thống: tạo Canonical, gắn Identifier, xem tab Xung đột khi ID trỏ tới thực thể khác. Không ghi đè im lặng.',
           },
         ],
       },
@@ -821,7 +821,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
           {
             title: 'Bảo trì rules và ActionType',
             detail:
-              'Mở Quản trị → Quy tắc & Hành động: cấu hình quy tắc theo ưu tiên và loại hành động. Tắt hành động thì list_actions không còn thấy.',
+              'Mở Quản lý Ontology doanh nghiệp → Quy tắc & Hành động: cấu hình quy tắc theo ưu tiên và loại hành động. Tắt hành động thì list_actions không còn thấy.',
           },
         ],
       },

@@ -96,40 +96,6 @@ const adminChildren: (RouteRecordRaw & MenuRoute)[] = [
     meta: { title: 'route.adminAuditLogs', icon: 'Document', permission: 'admin:audit' },
   },
   {
-    path: '/admin/terminology',
-    name: 'admin-terminology',
-    component: () => import('@/views/admin/TerminologyView.vue'),
-    meta: { title: 'route.adminTerminology', icon: 'Collection', permission: 'admin:retrieval' },
-  },
-  {
-    path: '/admin/structured',
-    name: 'admin-structured',
-    component: () => import('@/views/admin/StructuredEquipmentView.vue'),
-    meta: { title: 'route.adminStructured', icon: 'SetUp', permission: 'admin:retrieval' },
-  },
-  {
-    path: '/admin/ontology',
-    name: 'admin-ontology',
-    component: () => import('@/views/admin/OntologyStudioView.vue'),
-    meta: { title: 'route.adminOntology', icon: 'Share', permission: 'admin:retrieval' },
-  },
-  {
-    path: '/admin/identity',
-    name: 'admin-identity',
-    component: () => import('@/views/admin/IdentityView.vue'),
-    meta: { title: 'route.adminIdentity', icon: 'Key', permission: 'admin:retrieval' },
-  },
-  {
-    path: '/admin/ontology-governance',
-    name: 'admin-ontology-governance',
-    component: () => import('@/views/admin/OntologyGovernanceView.vue'),
-    meta: {
-      title: 'route.adminOntologyGovernance',
-      icon: 'SetUp',
-      permission: 'admin:retrieval',
-    },
-  },
-  {
     path: '/admin/indexing',
     name: 'admin-indexing',
     component: () => import('@/views/admin/IndexingView.vue'),
@@ -197,6 +163,46 @@ const adminChildren: (RouteRecordRaw & MenuRoute)[] = [
   },
 ]
 
+/** Enterprise ontology admin (terms / structured / studio / identity / rules). */
+export const ONTOLOGY_MGMT_PERMISSIONS = ['admin:retrieval'] as const
+
+const ontologyMgmtChildren: (RouteRecordRaw & MenuRoute)[] = [
+  {
+    path: '/admin/terminology',
+    name: 'admin-terminology',
+    component: () => import('@/views/admin/TerminologyView.vue'),
+    meta: { title: 'route.adminTerminology', icon: 'Collection', permission: 'admin:retrieval' },
+  },
+  {
+    path: '/admin/structured',
+    name: 'admin-structured',
+    component: () => import('@/views/admin/StructuredEquipmentView.vue'),
+    meta: { title: 'route.adminStructured', icon: 'SetUp', permission: 'admin:retrieval' },
+  },
+  {
+    path: '/admin/ontology',
+    name: 'admin-ontology',
+    component: () => import('@/views/admin/OntologyStudioView.vue'),
+    meta: { title: 'route.adminOntology', icon: 'Share', permission: 'admin:retrieval' },
+  },
+  {
+    path: '/admin/identity',
+    name: 'admin-identity',
+    component: () => import('@/views/admin/IdentityView.vue'),
+    meta: { title: 'route.adminIdentity', icon: 'Key', permission: 'admin:retrieval' },
+  },
+  {
+    path: '/admin/ontology-governance',
+    name: 'admin-ontology-governance',
+    component: () => import('@/views/admin/OntologyGovernanceView.vue'),
+    meta: {
+      title: 'route.adminOntologyGovernance',
+      icon: 'SetUp',
+      permission: 'admin:retrieval',
+    },
+  },
+]
+
 export const CURATION_PERMISSIONS = ['gap:review', 'ko:edit', 'review:approve'] as const
 
 const curationChildren: (RouteRecordRaw & MenuRoute)[] = [
@@ -251,6 +257,17 @@ export const menuRoutes: (RouteRecordRaw & MenuRoute)[] = [
     component: () => import('@/views/curation/CurationView.vue'),
     meta: { title: 'route.curation', icon: 'Opportunity', permission: CURATION_PERMISSIONS },
     children: curationChildren,
+  },
+  {
+    path: '/ontology-mgmt',
+    name: 'ontology-mgmt',
+    component: () => import('@/views/ontology/OntologyMgmtView.vue'),
+    meta: {
+      title: 'route.ontologyMgmt',
+      icon: 'Share',
+      permission: ONTOLOGY_MGMT_PERMISSIONS,
+    },
+    children: ontologyMgmtChildren,
   },
   {
     path: '/admin',

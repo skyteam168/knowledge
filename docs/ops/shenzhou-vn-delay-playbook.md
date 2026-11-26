@@ -67,7 +67,7 @@ docker compose -f deploy/docker-compose.yml exec backend \
 
 ## 2. 对象清单与属性（登记口径）
 
-以下均可在「管理 → 结构化数据」中按类型查看；领域选 **制造试点**，数据源选 **制造试点 Fixture**。
+以下均可在「企业本体管理 → 结构化数据」中按类型查看；领域选 **制造试点**，数据源选 **制造试点 Fixture**。
 
 ### 2.1 工厂 `factory`
 
@@ -145,7 +145,7 @@ docker compose -f deploy/docker-compose.yml exec backend \
 
 ## 4. 跨系统身份（编号解析）
 
-「管理 → 跨系统身份」或结构化页 **编号解析**：
+「企业本体管理 → 跨系统身份」或结构化页 **编号解析**：
 
 | 对象类型 | 系统 | 外部编号 | 说明 |
 | --- | --- | --- | --- |
@@ -169,7 +169,7 @@ docker compose -f deploy/docker-compose.yml exec backend \
 3. 外部编号填 **`YN-MAT-3001`**（WMS 别名）或 **`MAT-3001`**（记录主号）；空值会提示「请输入外部编号」。
 4. 数据源可留空，或选「制造试点 Fixture」。
 5. 点击「解析」：应得到物料对象；若用了 WMS 别名，结果里 `matched_via` 为 `identity`，`canonical_id` 非空，`record_external_id` 为 `MAT-3001`。
-6. 也可在 **管理 → 跨系统身份** 用系统=`vn-wms`、编号=`YN-MAT-3001` 核对同一 Canonical。
+6. 也可在 **企业本体管理 → 跨系统身份** 用系统=`vn-wms`、编号=`YN-MAT-3001` 核对同一 Canonical。
 
 重复把已占用的 `(system, external_id)` 绑到另一 Canonical 应返回冲突（验收门禁期望 409）。
 
@@ -181,7 +181,7 @@ docker compose -f deploy/docker-compose.yml exec backend \
 
 ### 步骤 A · 建源与域
 
-1. 进入 **管理 → 结构化数据**。
+1. 进入 **企业本体管理 → 结构化数据**。
 2. **数据源**：新建，名称 `制造试点 Fixture`，类型选 WMS（或自定义），启用；`meta` 可写 `{"seed":true,"domain":"mfg","company":"申洲国际"}`。
 3. **业务域**：新建，编码 `mfg`，名称 `制造试点`，类型 generic，启用。
 
@@ -231,7 +231,7 @@ docker compose -f deploy/docker-compose.yml exec backend \
 
 ### 6.2 规则与动作
 
-进入 **管理 → 规则与动作**（或等价入口）：
+进入 **企业本体管理 → 规则与动作**（或等价入口）：
 
 1. **试运行** `production.query_risk`，参数可带 `risk_status=at_risk` → 至少命中 `MO-2001`。
 2. **调拨** `material.transfer`：

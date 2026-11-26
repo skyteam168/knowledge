@@ -54,7 +54,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
           {
             title: '管理员 / 平台工程',
             detail:
-              '组织侧：部门、用户、组织同步、用户组、角色、审计。概念侧：「术语表」「结构化数据」（见「概念层」与管理后台专节）。平台侧（管理 → 平台工程）：索引、模型、检索策略、评测、开放平台。也可用「AI 管理助手」。备份/告警/病毒扫描见运维文档。',
+              '组织侧：部门、用户、组织同步、用户组、角色、审计（「管理」）。概念侧：术语表、结构化数据、Ontology Studio、跨系统身份、规则与动作（「企业本体管理」）。平台侧（管理 → 平台工程）：索引、模型、检索策略、评测、开放平台。也可用「AI 管理助手」。备份/告警/病毒扫描见运维文档。',
             permission: ADMIN_PERMISSIONS,
           },
         ],
@@ -716,7 +716,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
           {
             title: '打开与筛选',
             detail:
-              '「管理 → 术语表」。按规范名关键词、类型（设备 / 工序·流程 / 缺陷 / 制度条款 / IT 术语 / 其他）、状态（启用/停用）筛选后搜索。',
+              '「企业本体管理 → 术语表」。按规范名关键词、类型（设备 / 工序·流程 / 缺陷 / 制度条款 / IT 术语 / 其他）、状态（启用/停用）筛选后搜索。',
           },
           {
             title: '新建术语',
@@ -752,7 +752,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
           {
             title: '域与数据源',
             detail:
-              '打开「管理 → 结构化数据」。左侧选业务域：设备域通常有设备/工单/备件页签；其它域为通用记录表。顶栏「新建数据源」可选连接器：MySQL、PostgreSQL、SQL Server、MongoDB、CSV、REST，或无连接器（手工）。密码请填环境变量名（如 MES_MYSQL_PASSWORD），勿写入库。',
+              '打开「企业本体管理 → 结构化数据」。左侧选业务域：设备域通常有设备/工单/备件页签；其它域为通用记录表。顶栏「新建数据源」可选连接器：MySQL、PostgreSQL、SQL Server、MongoDB、CSV、REST，或无连接器（手工）。密码请填环境变量名（如 MES_MYSQL_PASSWORD），勿写入库。',
           },
           {
             title: '手工录入与搜索',
@@ -783,7 +783,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
           {
             title: '目的',
             detail:
-              '把 MES/业务库的表或集合映射为「业务实体 + 属性」草稿，审核后发布；Agent / 开放平台只读已发布版本。打开「管理 → Ontology Studio」。',
+              '把 MES/业务库的表或集合映射为「业务实体 + 属性」草稿，审核后发布；Agent / 开放平台只读已发布版本。打开「企业本体管理 → Ontology Studio」。',
           },
           {
             title: '连接数据库导入 Schema',
@@ -809,7 +809,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
           {
             title: 'Canonical 与 Identifier',
             detail:
-              '打开「管理 → 跨系统身份」：创建 Canonical、挂各系统 Identifier、在「冲突」页签查看多系统 ID 指向不同实体的情况。冲突不可静默覆盖。',
+              '打开「企业本体管理 → 跨系统身份」：创建 Canonical、挂各系统 Identifier、在「冲突」页签查看多系统 ID 指向不同实体的情况。冲突不可静默覆盖。',
           },
         ],
       },
@@ -820,7 +820,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
           {
             title: '维护规则与 ActionType',
             detail:
-              '打开「管理 → 规则与动作」：按优先级配置 ontology 规则（allow/deny/require_confirm）与动作类型（风险、系统、输入 schema）。禁用动作后 Open/MCP list_actions 不可见。',
+              '打开「企业本体管理 → 规则与动作」：按优先级配置 ontology 规则（allow/deny/require_confirm）与动作类型（风险、系统、输入 schema）。禁用动作后 Open/MCP list_actions 不可见。',
           },
         ],
       },
