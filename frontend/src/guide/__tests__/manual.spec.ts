@@ -15,6 +15,7 @@ const ALL_SECTION_IDS = [
   'notifications',
   'concepts',
   'curation',
+  'ontology-mgmt',
   'admin',
   'admin-agent',
   'platform',

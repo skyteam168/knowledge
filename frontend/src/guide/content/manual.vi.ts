@@ -631,10 +631,157 @@ export const MANUAL_SECTIONS: ManualSection[] = [
     ],
   },
   {
+    id: 'ontology-mgmt',
+    title: 'Quản lý Ontology doanh nghiệp',
+    icon: 'Share',
+    summary:
+      'Hướng dẫn có hình: Thuật ngữ, Dữ liệu có cấu trúc, Ontology Studio, Danh tính đa hệ thống, Quy tắc & Hành động.',
+    permission: 'admin:retrieval',
+    route: '/admin/terminology',
+    topics: [
+      {
+        title: 'Lối vào và menu',
+        steps: [
+          {
+            title: 'Mở Quản lý Ontology doanh nghiệp',
+            detail:
+              'Mở rộng menu trái «Quản lý Ontology doanh nghiệp»: Thuật ngữ, Dữ liệu có cấu trúc, Ontology Studio, Danh tính đa hệ thống, Quy tắc & Hành động. Cần quyền quản trị ontology/truy xuất (vd admin:retrieval). Thứ tự gợi ý: từ điển → bản sao mã → mô hình ngữ nghĩa → danh tính → quy tắc/hành động.',
+            image: '/guide/ontology-mgmt/01-terminology-list.png',
+            imageAlt: 'Menu Ontology và danh sách Thuật ngữ',
+          },
+        ],
+      },
+      {
+        title: 'Thuật ngữ (từ điển thực thể)',
+        steps: [
+          {
+            title: 'Duyệt và lọc',
+            detail:
+              'Mở Thuật ngữ. Lọc theo từ khóa tên chuẩn, loại và trạng thái rồi Tìm kiếm. Lưới hiển thị tên, loại, trạng thái, bí danh và thao tác hàng.',
+            image: '/guide/ontology-mgmt/01-terminology-list.png',
+            imageAlt: 'Danh sách thuật ngữ và Đồng bộ từ đồng nghĩa',
+          },
+          {
+            title: 'Tạo thuật ngữ',
+            detail:
+              'Thuật ngữ mới: bắt buộc tên chuẩn; loại và trạng thái; mô tả; bí danh tùy chọn (phẩy hoặc xuống dòng) → Lưu. Giữ tên duy nhất, bí danh đầy đủ.',
+            image: '/guide/ontology-mgmt/02-terminology-create.png',
+            imageAlt: 'Hộp thoại tạo thuật ngữ',
+          },
+          {
+            title: 'Bí danh và Đồng bộ từ đồng nghĩa',
+            detail:
+              'Thêm bí danh trên lưới; nhấp × để xóa. Sau khi sửa thuật ngữ đang bật, bấm Đồng bộ từ đồng nghĩa để OpenSearch nạp lại. Thuật ngữ tắt bị bỏ qua.',
+          },
+          {
+            title: 'Xem trước quan hệ',
+            detail:
+              'Xem trước quan hệ mở đồ thị lực: xanh dương=thuật ngữ, xanh lá=bản sao cấu trúc, vàng=KO (~1 bước). Dùng để kiểm tra liên kết, không phải khám phá toàn kho.',
+            image: '/guide/ontology-mgmt/03-terminology-relation-preview.png',
+            imageAlt: 'Đồ thị xem trước quan hệ',
+          },
+          {
+            title: 'Bản thể học (chỉ đọc)',
+            detail:
+              'Bản thể học mở tóm tắt hợp đồng OWL chỉ đọc. Class/quan hệ nằm trong ontology/enterprise.ttl; thực thể vẫn ở CSDL này. Không có SPARQL trên web.',
+            image: '/guide/ontology-mgmt/04-terminology-ontology-readme.png',
+            imageAlt: 'Hộp thoại bản thể học',
+          },
+        ],
+      },
+      {
+        title: 'Dữ liệu có cấu trúc (bản sao id)',
+        steps: [
+          {
+            title: 'Miền và danh sách bản sao',
+            detail:
+              'Mở Dữ liệu có cấu trúc. Chọn miền bên trái, rồi nguồn/tìm kiếm bên phải. Sao chép external_id ERP/MES và ánh xạ tới thuật ngữ/KO; đồng bộ không tự tạo thuật ngữ/KO.',
+            image: '/guide/ontology-mgmt/05-structured-overview.png',
+            imageAlt: 'Miền dữ liệu có cấu trúc và danh sách thiết bị',
+          },
+          {
+            title: 'Nguồn dữ liệu mới',
+            detail:
+              'Nguồn mới: tên, loại (MES/ERP/…), connector (MySQL/PostgreSQL/SQL Server/MongoDB/CSV/REST hoặc không/thủ công) → Lưu. Ưu tiên tên biến môi trường mật khẩu; không lưu secret vào DB.',
+            image: '/guide/ontology-mgmt/06-structured-new-source.png',
+            imageAlt: 'Hộp thoại nguồn mới',
+          },
+          {
+            title: 'Ánh xạ, đồng bộ và resolve',
+            detail:
+              'Mở bảng ánh xạ của một dòng: dán UUID thuật ngữ/KO → Add mapping. Đồng bộ nguồn có connector từ thanh công cụ. Form Resolve ở cuối trang dùng cho QA ánh xạ.',
+          },
+        ],
+      },
+      {
+        title: 'Ontology Studio',
+        steps: [
+          {
+            title: 'Phiên bản và thực thể',
+            detail:
+              'Trái: phiên bản mô hình (đã xuất bản / đã lưu trữ). Phải: Bảng hoặc Canvas quan hệ. Agent/Open API chỉ thấy phiên bản published đang hiệu lực.',
+            image: '/guide/ontology-mgmt/07-ontology-studio-overview.png',
+            imageAlt: 'Ontology Studio mô hình đã xuất bản',
+          },
+          {
+            title: 'Kết nối CSDL',
+            detail:
+              'Trình hướng dẫn Kết nối CSDL: kết nối → chọn bảng → xem trước nhập. Chọn engine và thủ công/nguồn có sẵn, điền host/port/db và biến mật khẩu → liệt kê bảng → nhập bản nháp.',
+            image: '/guide/ontology-mgmt/08-ontology-studio-connect.png',
+            imageAlt: 'Trình hướng dẫn kết nối CSDL',
+          },
+          {
+            title: 'Gợi ý, duyệt, xuất bản, khôi phục',
+            detail:
+              'Trên bản nháp: Generate suggestions, Approve (hoặc duyệt tất cả), rồi Publish. Khôi phục phiên bản cũ từ danh sách trái. Gắn bằng chứng và biểu thức tính an toàn trên thuộc tính nếu cần.',
+          },
+        ],
+      },
+      {
+        title: 'Danh tính đa hệ thống',
+        steps: [
+          {
+            title: 'Duyệt Canonical',
+            detail:
+              'Tab Tất cả / Xung đột; tìm theo tên/ID hoặc loại đối tượng. Xung đột nghĩa là Identifier trỏ thực thể khác nhau — xử lý thủ công, không ghi đè im lặng.',
+            image: '/guide/ontology-mgmt/09-identity-overview.png',
+            imageAlt: 'Danh sách Canonical',
+          },
+          {
+            title: 'Tạo Canonical và gắn Identifier',
+            detail:
+              'Canonical mới: loại đối tượng và tên hiển thị → Lưu. Mở chi tiết để gắn Identifier hệ thống. Dùng tab Xung đột để đối soát.',
+            image: '/guide/ontology-mgmt/10-identity-new-canonical.png',
+            imageAlt: 'Hộp thoại Canonical mới',
+          },
+        ],
+      },
+      {
+        title: 'Quy tắc và hành động',
+        steps: [
+          {
+            title: 'Quy tắc và loại hành động',
+            detail:
+              'Duy trì quy tắc ontology (ưu tiên, allow/deny/require_confirm, bật/tắt) và loại hành động (rủi ro, hệ thống, bật/tắt). Tắt hành động thì list_actions không còn thấy.',
+            image: '/guide/ontology-mgmt/11-governance-overview.png',
+            imageAlt: 'Bảng quy tắc và loại hành động',
+          },
+          {
+            title: 'Chạy thử / phê duyệt / thực thi',
+            detail:
+              'Thao tác hàng mở hộp thoại với mẫu Payload JSON và khóa idempotency. Điền trường bắt buộc rồi Dry-run, Xin phê duyệt hoặc Thực thi. Hành động rủi ro cao thường cần phê duyệt trước. Làm mới Lịch sử thực thi bên dưới.',
+            image: '/guide/ontology-mgmt/12-governance-dry-run.png',
+            imageAlt: 'Hộp thoại chạy hành động với Payload JSON',
+          },
+        ],
+      },
+    ],
+  },
+  {
     id: 'admin',
     title: 'Quản trị',
     icon: 'Setting',
-    summary: 'Tổ chức, tài khoản, quyền hạn, kiểm toán, thuật ngữ, dữ liệu có cấu trúc và Ontology Studio.',
+    summary: 'Tổ chức, tài khoản, quyền hạn và kiểm toán. Thuật ngữ/cấu trúc/Studio xem chương Ontology.',
     permission: ADMIN_PERMISSIONS,
     topics: [
       {
@@ -702,126 +849,6 @@ export const MANUAL_SECTIONS: ManualSection[] = [
             title: 'Truy vấn',
             detail:
               'Mở Nhật ký kiểm toán và lọc theo hành động, loại tài nguyên/id, người thao tác và thời gian. Mở một dòng để xem chênh lệch trước/sau.',
-          },
-        ],
-      },
-      {
-        title: 'Thuật ngữ (từ điển thực thể)',
-        permission: 'admin:retrieval',
-        steps: [
-          {
-            title: 'Mục đích',
-            detail:
-              'Duy trì tên chuẩn + loại + bí danh. Cơ chế viết lại câu hỏi và tìm kiếm trên trang sẽ mở rộng truy vấn theo bí danh (ví dụ tên chuẩn “access control list”, bí danh “ACL”). Các thuật ngữ đang bật cũng có thể được đồng bộ vào từ đồng nghĩa OpenSearch cho nhánh BM25.',
-          },
-          {
-            title: 'Mở và lọc',
-            detail:
-              'Quản lý Ontology doanh nghiệp → Thuật ngữ. Lọc theo từ khóa tên chuẩn, loại (thiết bị / quy trình / lỗi / điều khoản chính sách / thuật ngữ IT / khác) và trạng thái (bật/tắt), rồi tìm kiếm.',
-          },
-          {
-            title: 'Tạo thuật ngữ',
-            detail:
-              'Thuật ngữ mới: tên chuẩn, loại, trạng thái, mô tả; có thể dán bí danh (phân tách bằng dấu phẩy hoặc xuống dòng) → Lưu. Hãy giữ tên là duy nhất và bí danh đầy đủ.',
-          },
-          {
-            title: 'Duy trì bí danh',
-            detail:
-              'Tại cột Bí danh, nhập nội dung rồi Add; nhấp × trên một nhãn để xóa. Hộp thoại chỉnh sửa thường thay đổi tên/loại/mô tả/trạng thái, còn bí danh được chỉnh trực tiếp trên lưới.',
-          },
-          {
-            title: 'Đồng bộ từ đồng nghĩa',
-            detail:
-              'Sau khi chỉnh sửa các thuật ngữ đang bật, nhấp Đồng bộ từ đồng nghĩa để ghi vào OpenSearch và nạp nóng. Các thuật ngữ bị tắt sẽ bị bỏ qua. Nếu bỏ qua bước này, từ đồng nghĩa trong chỉ mục sẽ bị lỗi thời.',
-          },
-          {
-            title: 'Xem trước quan hệ và bản thể học',
-            detail:
-              'Thao tác hàng “Xem trước quan hệ” sẽ mở đồ thị lực: xanh dương = thuật ngữ, xanh lá = dữ liệu có cấu trúc, vàng = KO (khoảng 1 bước). Bản thể học là bản tóm tắt hợp đồng OWL chỉ đọc (TTL nằm trong repo; các thực thể nằm trong CSDL này).',
-          },
-        ],
-      },
-      {
-        title: 'Dữ liệu có cấu trúc (bản sao id)',
-        permission: 'admin:retrieval',
-        steps: [
-          {
-            title: 'Mục đích',
-            detail:
-              'Sao chép các đối tượng từ ERP/MES/QMS (thiết bị, lệnh công việc, phụ tùng hoặc các dòng dữ liệu miền chung) và ánh xạ `external_id` tới thuật ngữ hoặc KO. Phần thiết bị/mã trong “Khái niệm liên quan” của hỏi đáp và API resolve phụ thuộc vào đây. Đồng bộ chỉ cập nhật các bản sao, không tự động tạo thuật ngữ hay KO.',
-          },
-          {
-            title: 'Miền và nguồn',
-            detail:
-              'Quản lý Ontology doanh nghiệp → Dữ liệu có cấu trúc. Chọn miền bên trái. «Nguồn mới» có thể chọn connector: MySQL, PostgreSQL, SQL Server, MongoDB, CSV, REST, hoặc không (thủ công). Mật khẩu dùng tên biến môi trường (ví dụ MES_MYSQL_PASSWORD), không lưu secret vào DB.',
-          },
-          {
-            title: 'Bản ghi thủ công và tìm kiếm',
-            detail:
-              'Lọc theo nguồn và từ khóa. Ở các miền không phải thiết bị, New record cho phép điền external id, loại đối tượng, tiêu đề, v.v. Nhấp vào một dòng để mở bảng ánh xạ bên dưới.',
-          },
-          {
-            title: 'Ánh xạ tới thuật ngữ / KO',
-            detail:
-              'Nhập id của thuật ngữ hoặc id của KO → Add mapping. Ánh xạ đúng sẽ cung cấp bí danh, mã định danh và tri thức liên quan cho phần hỏi đáp. Thông thường bạn sẽ dán UUID được sao chép từ danh sách Thuật ngữ hoặc KO.',
-          },
-          {
-            title: 'Đồng bộ một nguồn',
-            detail:
-              'Chọn nguồn có connector trong bộ lọc → Đồng bộ nguồn để kéo vào bản sao cục bộ; hoặc cấu hình sync_interval_minutes trong meta để scheduler kéo định kỳ. Chi tiết: docs/ops/structured-connectors.md.',
-          },
-          {
-            title: 'Resolve id (gỡ lỗi)',
-            detail:
-              'Biểu mẫu Resolve ở cuối trang: `object_type`, `external_id`, ... → Resolve rồi kiểm tra JSON. Tính năng này phục vụ QA ánh xạ, không dành cho nhân viên.',
-          },
-        ],
-      },
-      {
-        title: 'Ontology Studio (ngữ nghĩa tổ chức)',
-        permission: 'admin:retrieval',
-        steps: [
-          {
-            title: 'Mục đích',
-            detail:
-              'Ánh xạ bảng/collection MES thành bản nháp thực thể + thuộc tính, duyệt rồi xuất bản. Agent / Open API chỉ đọc bản đã publish. Mở Quản lý Ontology doanh nghiệp → Ontology Studio.',
-          },
-          {
-            title: 'Kết nối CSDL và nhập schema',
-            detail:
-              'Bấm «Kết nối CSDL»: chọn MySQL / PostgreSQL / SQL Server / MongoDB → điền host/port/database (và Schema/auth source) hoặc dùng nguồn cấu trúc có sẵn → liệt kê bảng → chọn bảng/collection → xem trước → nhập vào bản nháp. MongoDB không có schema cố định; trường được suy ra từ tài liệu mẫu. Ưu tiên biến MES_*_PASSWORD.',
-          },
-          {
-            title: 'Gợi ý, duyệt, xuất bản',
-            detail:
-              'Trên bản nháp có thể Generate suggestions cho nhãn/kiểu, rồi Approve (hoặc duyệt tất cả). Xuất bản sau khi ít nhất một thực thể được duyệt. Agent chỉ thấy mô hình published đang hiệu lực. Để khôi phục bản cũ, chọn phiên bản đã lưu trữ / published không active rồi bấm Khôi phục phiên bản này.',
-          },
-          {
-            title: 'Bằng chứng và biểu thức tính',
-            detail:
-              'Chọn thực thể rồi gắn KO/tài liệu/chunk trong Bằng chứng; sau publish Agent đọc tóm tắt qua describe_ontology. Thuộc tính có thể khai báo biểu thức an toàn (vd a+b); get_object trả giá trị suy ra.',
-          },
-        ],
-      },
-      {
-        title: 'Danh tính đa hệ thống',
-        permission: 'admin:retrieval',
-        steps: [
-          {
-            title: 'Canonical và Identifier',
-            detail:
-              'Mở Quản lý Ontology doanh nghiệp → Danh tính đa hệ thống: tạo Canonical, gắn Identifier, xem tab Xung đột khi ID trỏ tới thực thể khác. Không ghi đè im lặng.',
-          },
-        ],
-      },
-      {
-        title: 'Quy tắc và hành động',
-        permission: 'admin:retrieval',
-        steps: [
-          {
-            title: 'Bảo trì rules và ActionType',
-            detail:
-              'Mở Quản lý Ontology doanh nghiệp → Quy tắc & Hành động: cấu hình quy tắc theo ưu tiên và loại hành động. Tắt hành động thì list_actions không còn thấy.',
           },
         ],
       },

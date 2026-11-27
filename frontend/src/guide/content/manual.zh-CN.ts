@@ -630,10 +630,157 @@ export const MANUAL_SECTIONS: ManualSection[] = [
     ],
   },
   {
+    id: 'ontology-mgmt',
+    title: '企业本体管理',
+    icon: 'Share',
+    summary:
+      '图文教程：术语表、结构化数据、Ontology Studio、跨系统身份、规则与动作的完整操作步骤。',
+    permission: 'admin:retrieval',
+    route: '/admin/terminology',
+    topics: [
+      {
+        title: '入口与菜单',
+        steps: [
+          {
+            title: '打开企业本体管理',
+            detail:
+              '左侧菜单展开「企业本体管理」，可见五个子页：术语表、结构化数据、Ontology Studio、跨系统身份、规则与动作。需具备检索/本体相关管理权限（如 admin:retrieval）才会显示。建议按「词典 → 编号镜像 → 语义模型 → 跨系统身份 → 规则动作」顺序落地。',
+            image: '/guide/ontology-mgmt/01-terminology-list.png',
+            imageAlt: '左侧「企业本体管理」菜单与术语表列表',
+          },
+        ],
+      },
+      {
+        title: '术语表（实体词典）',
+        steps: [
+          {
+            title: '浏览与筛选',
+            detail:
+              '进入「术语表」。用规范名关键词、类型（设备 / 工序·流程 / 缺陷 / 制度条款 / IT 术语 / 其他 / 部件 / 故障模式）、状态（启用/停用）筛选后点「搜索」。表格展示规范名、类型、状态、别名与行操作。',
+            image: '/guide/ontology-mgmt/01-terminology-list.png',
+            imageAlt: '术语表列表、筛选栏与「新建术语」「同步同义词」',
+          },
+          {
+            title: '新建术语',
+            detail:
+              '点「新建术语」：必填规范名；选类型与状态；填写说明；别名可在创建时用逗号或换行一次填多个 →「保存」。规范名应唯一，口语别名尽量写全（如 ACL、访问控制）。',
+            image: '/guide/ontology-mgmt/02-terminology-create.png',
+            imageAlt: '新建术语弹窗：规范名、类型、状态、说明、别名',
+          },
+          {
+            title: '维护别名与同步同义词',
+            detail:
+              '在表格「别名」列输入后回车或点「添加别名」；点标签 × 删除。改完启用术语后务必点顶部「同步同义词」，写入 OpenSearch 并热加载；停用术语不参与同步。不同步则关键词检索同义词仍是旧的。',
+          },
+          {
+            title: '关系预览',
+            detail:
+              '行操作「关系预览」打开力导向图：蓝=术语、绿=结构化镜像、黄=知识条目（约 1 跳邻居），用于核对挂接是否完整，不是全库探索工具。',
+            image: '/guide/ontology-mgmt/03-terminology-relation-preview.png',
+            imageAlt: '术语「关系预览」力导向图与图例',
+          },
+          {
+            title: '本体说明（只读）',
+            detail:
+              '点「本体说明」可查看 OWL 合约摘要：类/关系定义在仓库 ontology/enterprise.ttl；实例仍在本库术语表、KO、结构化页维护。网页不能改 OWL，也不提供 SPARQL。',
+            image: '/guide/ontology-mgmt/04-terminology-ontology-readme.png',
+            imageAlt: '「本体说明」只读弹窗',
+          },
+        ],
+      },
+      {
+        title: '结构化数据（编号镜像）',
+        steps: [
+          {
+            title: '业务域与镜像列表',
+            detail:
+              '打开「结构化数据」。左侧选业务域（如设备维保 / 物料 / 制造试点）；右侧选数据源、搜索并浏览设备/工单/备件（或通用记录）。把 ERP/MES 等 external_id 镜像到本库，再映射到术语或知识条目；同步不会自动创建术语或 KO。',
+            image: '/guide/ontology-mgmt/05-structured-overview.png',
+            imageAlt: '结构化数据：业务域、数据源与设备列表',
+          },
+          {
+            title: '新建数据源',
+            detail:
+              '点「新建数据源」：填名称，选类型（MES/ERP/QMS 等）与连接器（MySQL / PostgreSQL / SQL Server / MongoDB / CSV / REST，或「无（手工）」）→ 保存。密码请填环境变量名（如 MES_MYSQL_PASSWORD），勿把明文密钥写入库。也可用「新建业务域」扩展域。',
+            image: '/guide/ontology-mgmt/06-structured-new-source.png',
+            imageAlt: '新建数据源弹窗',
+          },
+          {
+            title: '映射、同步与编号解析',
+            detail:
+              '点某一行打开映射区：粘贴术语 ID 或知识条目 ID →「添加映射」。带连接器的数据源可选中后点「同步数据源」拉取镜像。页底「编号解析」填 object_type、external_id →「解析」，用于联调验收，不是员工日常功能。',
+          },
+        ],
+      },
+      {
+        title: 'Ontology Studio（组织语义）',
+        steps: [
+          {
+            title: '版本列表与实体表',
+            detail:
+              '打开 Ontology Studio。左侧是模型版本（已发布生效 / 已归档）；右侧可切换「表格 / 关系画布」。已发布版本上可查看实体标识、显示名、对象类型、状态，以及右侧属性与「语义证据」。Agent / 开放平台只读已发布版本。',
+            image: '/guide/ontology-mgmt/07-ontology-studio-overview.png',
+            imageAlt: 'Ontology Studio 已发布模型与实体表',
+          },
+          {
+            title: '连接数据库导入 Schema',
+            detail:
+              '点「连接数据库」：三步向导（连接 → 选表 → 预览导入）。选引擎与「手动连接 / 已有数据源」，填主机端口库名与密码环境变量 →「读取表列表」→ 勾选表/集合 → 预览后导入为草稿。也可用「新建草稿」「导入 Schema」。',
+            image: '/guide/ontology-mgmt/08-ontology-studio-connect.png',
+            imageAlt: '连接数据库向导：引擎、连接方式与连接参数',
+          },
+          {
+            title: '建议、批准、发布与回滚',
+            detail:
+              '在草稿中可「生成建议」优化中文显示名/类型，再「批准」或「批准全部草稿」；至少批准一个实体后点「发布」。发布后组织生效语义模型切换。若需恢复，在左侧选历史版本点「回滚为此版本」。属性可挂安全计算口径；语义证据挂 KO/文档/chunk ID。',
+          },
+        ],
+      },
+      {
+        title: '跨系统身份',
+        steps: [
+          {
+            title: '浏览 Canonical',
+            detail:
+              '打开「跨系统身份」。页签「全部 / 冲突」；可按名称/ID、对象类型搜索。列表展示显示名、对象类型、状态与更新时间。冲突表示多系统 Identifier 指向不同实体，必须人工处理，不可静默覆盖。',
+            image: '/guide/ontology-mgmt/09-identity-overview.png',
+            imageAlt: '跨系统身份 Canonical 列表',
+          },
+          {
+            title: '新建 Canonical 与挂 Identifier',
+            detail:
+              '点「新建 Canonical」：填对象类型（如 device、material）与显示名 → 保存。打开详情后挂各系统 Identifier（系统名 + 外部编号）。切换「冲突」页签处理对账问题。',
+            image: '/guide/ontology-mgmt/10-identity-new-canonical.png',
+            imageAlt: '新建 Canonical 弹窗',
+          },
+        ],
+      },
+      {
+        title: '规则与动作',
+        steps: [
+          {
+            title: '业务规则与动作类型',
+            detail:
+              '打开「规则与动作」。上区维护业务规则：优先级、裁决（allow / deny / require_confirm）、启用开关与说明。下区维护动作类型：风险等级、目标系统、启用开关。禁用动作后 Open/MCP list_actions 不可见。',
+            image: '/guide/ontology-mgmt/11-governance-overview.png',
+            imageAlt: '规则与动作：业务规则表与动作类型表',
+          },
+          {
+            title: '试运行 / 审批 / 执行',
+            detail:
+              '在动作行点「试运行」「申请审批」或「执行」。弹窗会带出动作名、Payload JSON 模板与幂等键；按模板补全必填字段（如 canonical_id、note）后再提交。高风险动作通常需先审批。页底「执行历史」可刷新查看结果。',
+            image: '/guide/ontology-mgmt/12-governance-dry-run.png',
+            imageAlt: '运行动作弹窗：Payload JSON 与试运行',
+          },
+        ],
+      },
+    ],
+  },
+  {
     id: 'admin',
     title: '管理后台',
     icon: 'Setting',
-    summary: '组织、账号、权限、审计、术语、结构化数据与 Ontology Studio。',
+    summary: '组织、账号、权限与审计。术语/结构化/Studio 等见「企业本体管理」章节。',
     permission: ADMIN_PERMISSIONS,
     topics: [
       {
@@ -701,126 +848,6 @@ export const MANUAL_SECTIONS: ManualSection[] = [
             title: '查询',
             detail:
               '打开「审计日志」，按动作、资源类型、资源 ID、操作人、时间筛选。点开条目可看变更前后对比，用于追责与排障。',
-          },
-        ],
-      },
-      {
-        title: '术语表（实体词典）',
-        permission: 'admin:retrieval',
-        steps: [
-          {
-            title: '目的',
-            detail:
-              '维护「规范名 + 类型 + 别名」。问答改写与站内搜索会按别名扩展检索词（例如规范名「访问控制列表」、别名「ACL」）。启用术语还可同步到 OpenSearch 同义词，加强关键词一路命中。',
-          },
-          {
-            title: '打开与筛选',
-            detail:
-              '「企业本体管理 → 术语表」。按规范名关键词、类型（设备 / 工序·流程 / 缺陷 / 制度条款 / IT 术语 / 其他）、状态（启用/停用）筛选后搜索。',
-          },
-          {
-            title: '新建术语',
-            detail:
-              '点「新建术语」：填规范名、类型、状态、说明；创建时可批量填别名（逗号或换行）→ 保存。规范名应唯一、口语别名尽量写全。',
-          },
-          {
-            title: '维护别名',
-            detail:
-              '在表格「别名」列输入后点「添加」；点标签 × 删除。编辑弹窗一般改规范名/类型/说明/状态，别名以表格维护为准。',
-          },
-          {
-            title: '同步同义词',
-            detail:
-              '改完启用术语后点顶部「同步同义词」，写入 OpenSearch 并热加载。停用术语不参与同步。不同步则索引侧同义词仍是旧的。',
-          },
-          {
-            title: '关系预览与本体说明',
-            detail:
-              '行操作「关系预览」打开力导向图：蓝=术语、绿=结构化镜像、黄=知识条目（约 1 跳），用于核对挂接。「本体说明」只读查看 OWL 合约摘要（类与关系定义在仓库 TTL，实例在本库）。',
-          },
-        ],
-      },
-      {
-        title: '结构化数据（编号镜像）',
-        permission: 'admin:retrieval',
-        steps: [
-          {
-            title: '目的',
-            detail:
-              '把 ERP/MES/QMS 等对象（设备、工单、备件或通用业务域记录）镜像到本库，并把 external_id 映射到术语或知识条目。问答「相关概念」里的设备/编号、编号解析接口都依赖这里。同步只更新镜像表，不会自动创建术语或 KO。',
-          },
-          {
-            title: '域与数据源',
-            detail:
-              '打开「企业本体管理 → 结构化数据」。左侧选业务域：设备域通常有设备/工单/备件页签；其它域为通用记录表。顶栏「新建数据源」可选连接器：MySQL、PostgreSQL、SQL Server、MongoDB、CSV、REST，或无连接器（手工）。密码请填环境变量名（如 MES_MYSQL_PASSWORD），勿写入库。',
-          },
-          {
-            title: '手工录入与搜索',
-            detail:
-              '选数据源、关键词搜索列表。非设备域可用「新建记录」填写外部编号、对象类型、标题等。点某一行打开下方映射区。',
-          },
-          {
-            title: '映射到术语 / KO',
-            detail:
-              '在映射区输入术语 ID 或知识条目 ID →「添加映射」。映射正确后，问答相关概念才能带出别名、编号与关联知识。当前多为粘贴 UUID，请先从术语表/KO 列表复制 ID。',
-          },
-          {
-            title: '同步数据源',
-            detail:
-              '筛选中选中带连接器的数据源 →「同步数据源」拉取到本地镜像；也可在 meta 配置 sync_interval_minutes 由调度周期同步。参数说明见 docs/ops/structured-connectors.md。',
-          },
-          {
-            title: '编号解析（联调）',
-            detail:
-              '页底「编号解析」：填 object_type、external_id 等 →「解析」，查看 JSON 是否解析到术语/KO。用于验收映射，不是员工功能。',
-          },
-        ],
-      },
-      {
-        title: 'Ontology Studio（组织语义）',
-        permission: 'admin:retrieval',
-        steps: [
-          {
-            title: '目的',
-            detail:
-              '把 MES/业务库的表或集合映射为「业务实体 + 属性」草稿，审核后发布；Agent / 开放平台只读已发布版本。打开「企业本体管理 → Ontology Studio」。',
-          },
-          {
-            title: '连接数据库导入 Schema',
-            detail:
-              '点「连接数据库」：选引擎 MySQL / PostgreSQL / SQL Server / MongoDB → 手动填写主机端口库名（及 Schema/认证库）或复用已有结构化数据源 →「读取表列表」勾选表/集合 → 读结构预览 →「导入到草稿」。MongoDB 无固定表结构，字段由样本文档推断。密码优先用环境变量（MES_*_PASSWORD）。',
-          },
-          {
-            title: '建议、批准与发布',
-            detail:
-              '草稿中可「生成建议」改中文显示名/类型，再「批准」或「批准全部草稿」；至少批准一个实体后「发布」。发布后该组织生效语义模型切换，Agent 只见本版本。若需恢复历史版，在左侧选中已归档/非生效已发布版本，点「回滚为此版本」。',
-          },
-          {
-            title: '语义证据与计算口径',
-            detail:
-              '选中实体后可在「语义证据」挂 KO/文档/chunk ID 与备注；发布后 Agent 经 describe_ontology 只读摘要（无越权正文）。属性可填安全计算口径（如 a+b），get_object 可返回派生值。',
-          },
-        ],
-      },
-      {
-        title: '跨系统身份',
-        permission: 'admin:retrieval',
-        steps: [
-          {
-            title: 'Canonical 与 Identifier',
-            detail:
-              '打开「企业本体管理 → 跨系统身份」：创建 Canonical、挂各系统 Identifier、在「冲突」页签查看多系统 ID 指向不同实体的情况。冲突不可静默覆盖。',
-          },
-        ],
-      },
-      {
-        title: '规则与动作',
-        permission: 'admin:retrieval',
-        steps: [
-          {
-            title: '维护规则与 ActionType',
-            detail:
-              '打开「企业本体管理 → 规则与动作」：按优先级配置 ontology 规则（allow/deny/require_confirm）与动作类型（风险、系统、输入 schema）。禁用动作后 Open/MCP list_actions 不可见。',
           },
         ],
       },

@@ -7,6 +7,10 @@ import * as zhCN from './content/manual.zh-CN'
 export interface ManualStep {
   title: string
   detail: string
+  /** Public URL under `/guide/...` (served from `frontend/public/guide`). */
+  image?: string
+  /** Accessible label for the screenshot. */
+  imageAlt?: string
   /** Only shown to users holding one of these permissions. */
   permission?: PermissionRequirement
 }

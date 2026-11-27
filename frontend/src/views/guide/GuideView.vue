@@ -15,6 +15,7 @@ import {
   Promotion,
   Search,
   Setting,
+  Share,
   Star,
   VideoPlay,
 } from '@element-plus/icons-vue'
@@ -35,6 +36,7 @@ const ICONS: Record<string, Component> = {
   Promotion,
   Search,
   Setting,
+  Share,
   Star,
 }
 
@@ -126,9 +128,20 @@ async function playTour(section: ManualSection): Promise<void> {
           <ol class="guide-steps">
             <li v-for="(st, i) in topic.steps" :key="st.title" class="guide-step">
               <span class="guide-step__no">{{ i + 1 }}</span>
-              <div>
+              <div class="guide-step__body">
                 <div class="guide-step__title">{{ st.title }}</div>
                 <div class="guide-step__detail">{{ st.detail }}</div>
+                <figure v-if="st.image" class="guide-step__figure">
+                  <img
+                    class="guide-step__image"
+                    :src="st.image"
+                    :alt="st.imageAlt || st.title"
+                    loading="lazy"
+                  />
+                  <figcaption v-if="st.imageAlt" class="guide-step__caption">
+                    {{ st.imageAlt }}
+                  </figcaption>
+                </figure>
               </div>
             </li>
           </ol>
@@ -305,11 +318,38 @@ async function playTour(section: ManualSection): Promise<void> {
   color: var(--el-text-color-primary);
 }
 
+.guide-step__body {
+  min-width: 0;
+  flex: 1;
+}
+
 .guide-step__detail {
   margin-top: 2px;
   line-height: 1.7;
   color: var(--el-text-color-regular);
   font-size: 13px;
+  white-space: pre-wrap;
+}
+
+.guide-step__figure {
+  margin: 10px 0 0;
+  padding: 0;
+}
+
+.guide-step__image {
+  display: block;
+  max-width: min(100%, 920px);
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  background: var(--el-fill-color-blank);
+}
+
+.guide-step__caption {
+  margin-top: 6px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
 }
 
 .guide-section__actions {

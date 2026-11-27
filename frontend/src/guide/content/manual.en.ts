@@ -635,10 +635,157 @@ export const MANUAL_SECTIONS: ManualSection[] = [
     ],
   },
   {
+    id: 'ontology-mgmt',
+    title: 'Enterprise Ontology',
+    icon: 'Share',
+    summary:
+      'Illustrated guide: Terminology, Structured data, Ontology Studio, Cross-system Identity, and Rules & Actions.',
+    permission: 'admin:retrieval',
+    route: '/admin/terminology',
+    topics: [
+      {
+        title: 'Entry and menu',
+        steps: [
+          {
+            title: 'Open Enterprise Ontology',
+            detail:
+              'Expand Enterprise Ontology in the left menu: Terminology, Structured data, Ontology Studio, Cross-system Identity, Rules & Actions. Requires ontology/retrieval admin permission (e.g. admin:retrieval). Suggested order: dictionary → id mirrors → semantic model → identity → rules/actions.',
+            image: '/guide/ontology-mgmt/01-terminology-list.png',
+            imageAlt: 'Enterprise Ontology menu and Terminology list',
+          },
+        ],
+      },
+      {
+        title: 'Terminology (entity dictionary)',
+        steps: [
+          {
+            title: 'Browse and filter',
+            detail:
+              'Open Terminology. Filter by canonical keyword, type, and status, then Search. The grid shows name, type, status, aliases, and row actions.',
+            image: '/guide/ontology-mgmt/01-terminology-list.png',
+            imageAlt: 'Terminology list with filters and Sync synonyms',
+          },
+          {
+            title: 'Create a term',
+            detail:
+              'New term: required canonical name; type and status; description; optional aliases (comma or newlines) → Save. Keep names unique and aliases complete.',
+            image: '/guide/ontology-mgmt/02-terminology-create.png',
+            imageAlt: 'Create term dialog',
+          },
+          {
+            title: 'Aliases and Sync synonyms',
+            detail:
+              'Add aliases in the grid; click × to remove. After editing enabled terms, click Sync synonyms so OpenSearch reloads. Disabled terms are skipped.',
+          },
+          {
+            title: 'Relation preview',
+            detail:
+              'Relation preview opens a force graph: blue=term, green=structured mirror, yellow=KO (~1 hop). Use it to check links, not to explore the whole graph.',
+            image: '/guide/ontology-mgmt/03-terminology-relation-preview.png',
+            imageAlt: 'Relation preview graph and legend',
+          },
+          {
+            title: 'Ontology readme (read-only)',
+            detail:
+              'Ontology opens a read-only OWL contract summary. Classes/relations live in ontology/enterprise.ttl; instances stay in this DB. No SPARQL on the web UI.',
+            image: '/guide/ontology-mgmt/04-terminology-ontology-readme.png',
+            imageAlt: 'Ontology readme dialog',
+          },
+        ],
+      },
+      {
+        title: 'Structured data (id mirrors)',
+        steps: [
+          {
+            title: 'Domains and mirror list',
+            detail:
+              'Open Structured data. Pick a domain on the left, then source/search on the right. Mirror ERP/MES external_ids here and map them to terms or KOs; sync never auto-creates terms/KOs.',
+            image: '/guide/ontology-mgmt/05-structured-overview.png',
+            imageAlt: 'Structured data domains and equipment list',
+          },
+          {
+            title: 'New data source',
+            detail:
+              'New source: name, type (MES/ERP/…), connector (MySQL/PostgreSQL/SQL Server/MongoDB/CSV/REST or none/manual) → Save. Prefer a password env var name; never store secrets in the DB.',
+            image: '/guide/ontology-mgmt/06-structured-new-source.png',
+            imageAlt: 'New data source dialog',
+          },
+          {
+            title: 'Map, sync, and resolve',
+            detail:
+              'Open a row mapping panel: paste terminology or KO UUID → Add mapping. Sync connector sources from the toolbar. Bottom Resolve form is for mapping QA, not employees.',
+          },
+        ],
+      },
+      {
+        title: 'Ontology Studio',
+        steps: [
+          {
+            title: 'Versions and entities',
+            detail:
+              'Left: model versions (published / archived). Right: Table or Relationship canvas. Agents/Open API only see the published active version.',
+            image: '/guide/ontology-mgmt/07-ontology-studio-overview.png',
+            imageAlt: 'Ontology Studio published model and entity table',
+          },
+          {
+            title: 'Connect database',
+            detail:
+              'Connect database wizard: connect → select tables → preview import. Choose engine and manual/existing source, fill host/port/db and password env var → List tables → import as draft.',
+            image: '/guide/ontology-mgmt/08-ontology-studio-connect.png',
+            imageAlt: 'Connect database wizard',
+          },
+          {
+            title: 'Suggest, approve, publish, rollback',
+            detail:
+              'On a draft: Generate suggestions, Approve (or Approve all), then Publish. Roll back to a prior version from the left list. Attach evidence IDs and optional safe compute expressions on attributes.',
+          },
+        ],
+      },
+      {
+        title: 'Cross-system identity',
+        steps: [
+          {
+            title: 'Browse Canonicals',
+            detail:
+              'All / Conflicts tabs; search by name/ID or object type. Conflicts mean identifiers point at different entities—resolve manually, never overwrite silently.',
+            image: '/guide/ontology-mgmt/09-identity-overview.png',
+            imageAlt: 'Cross-system identity list',
+          },
+          {
+            title: 'Create Canonical and attach identifiers',
+            detail:
+              'New Canonical: object type and display name → Save. Open detail to attach system Identifiers. Use Conflicts for reconciliation.',
+            image: '/guide/ontology-mgmt/10-identity-new-canonical.png',
+            imageAlt: 'New Canonical dialog',
+          },
+        ],
+      },
+      {
+        title: 'Rules and actions',
+        steps: [
+          {
+            title: 'Rules and action types',
+            detail:
+              'Maintain ontology rules (priority, allow/deny/require_confirm, enabled) and action types (risk, system, enabled). Disabled actions disappear from Open/MCP list_actions.',
+            image: '/guide/ontology-mgmt/11-governance-overview.png',
+            imageAlt: 'Rules and action types tables',
+          },
+          {
+            title: 'Dry-run / approve / execute',
+            detail:
+              'Row actions open a dialog with Payload JSON template and idempotency key. Fill required fields, then Dry-run, Request approval, or Execute. High-risk actions usually need approval first. Refresh Execution history below.',
+            image: '/guide/ontology-mgmt/12-governance-dry-run.png',
+            imageAlt: 'Run action dialog with Payload JSON',
+          },
+        ],
+      },
+    ],
+  },
+  {
     id: 'admin',
     title: 'Administration',
     icon: 'Setting',
-    summary: 'Organization, accounts, permissions, audit, terminology, structured data, and Ontology Studio.',
+    summary: 'Organization, accounts, permissions, and audit. See Enterprise Ontology for terms/structured/Studio.',
     permission: ADMIN_PERMISSIONS,
     topics: [
       {
@@ -706,126 +853,6 @@ export const MANUAL_SECTIONS: ManualSection[] = [
             title: 'Query',
             detail:
               'Open Audit log and filter by action, resource type/id, actor, and time. Open a row for before/after diffs.',
-          },
-        ],
-      },
-      {
-        title: 'Terminology (entity dictionary)',
-        permission: 'admin:retrieval',
-        steps: [
-          {
-            title: 'Purpose',
-            detail:
-              'Maintain canonical name + type + aliases. Q&A rewrite and site search expand queries by alias (e.g. canonical “access control list”, alias “ACL”). Enabled terms can also sync into OpenSearch synonyms for the BM25 path.',
-          },
-          {
-            title: 'Open and filter',
-            detail:
-              'Enterprise Ontology → Terminology. Filter by canonical keyword, type (device / process / defect / policy clause / IT term / other), and status (enabled/disabled), then search.',
-          },
-          {
-            title: 'Create a term',
-            detail:
-              'New term: canonical name, type, status, description; optionally paste aliases (comma or newlines) → Save. Keep names unique and aliases complete.',
-          },
-          {
-            title: 'Maintain aliases',
-            detail:
-              'In the Aliases column type and Add; click × on a tag to remove. The edit dialog usually changes name/type/description/status—aliases are edited in the grid.',
-          },
-          {
-            title: 'Sync synonyms',
-            detail:
-              'After editing enabled terms, click Sync synonyms to write OpenSearch and hot-reload. Disabled terms are skipped. Skipping sync leaves index synonyms stale.',
-          },
-          {
-            title: 'Relation preview and ontology',
-            detail:
-              'Row action Relation preview opens a force graph: blue=term, green=structured, yellow=KO (~1 hop). Ontology is a read-only OWL contract summary (TTL in the repo; instances in this DB).',
-          },
-        ],
-      },
-      {
-        title: 'Structured data (id mirrors)',
-        permission: 'admin:retrieval',
-        steps: [
-          {
-            title: 'Purpose',
-            detail:
-              'Mirror ERP/MES/QMS objects (equipment, work orders, spare parts, or generic domain rows) and map external_id to terms or KOs. Q&A “Related concepts” equipment/ids and the resolve API depend on this. Sync updates mirrors only—it does not auto-create terms or KOs.',
-          },
-          {
-            title: 'Domains and sources',
-            detail:
-              'Enterprise Ontology → Structured data. Pick a domain on the left (equipment often has device/WO/spare tabs; others use generic records). New source can choose a connector: MySQL, PostgreSQL, SQL Server, MongoDB, CSV, REST, or none (manual). Prefer a password env var name (e.g. MES_MYSQL_PASSWORD); never store secrets in the DB.',
-          },
-          {
-            title: 'Manual rows and search',
-            detail:
-              'Filter by source and keyword. On non-equipment domains, New record fills external id, object type, title, etc. Click a row to open the mapping panel below.',
-          },
-          {
-            title: 'Map to term / KO',
-            detail:
-              'Enter a terminology id or KO id → Add mapping. Correct mappings feed aliases, ids, and related knowledge in Q&A. You usually paste UUIDs copied from Terminology or KO lists.',
-          },
-          {
-            title: 'Sync a source',
-            detail:
-              'Select a connector-enabled source in the filter → Sync source to pull into the local mirror; or set sync_interval_minutes in meta for scheduled pulls. Details: docs/ops/structured-connectors.md.',
-          },
-          {
-            title: 'Id resolve (debug)',
-            detail:
-              'Bottom Resolve form: object_type, external_id, … → Resolve and inspect JSON. For mapping QA, not for employees.',
-          },
-        ],
-      },
-      {
-        title: 'Ontology Studio (org semantics)',
-        permission: 'admin:retrieval',
-        steps: [
-          {
-            title: 'Purpose',
-            detail:
-              'Map MES/business tables or collections to entity + attribute drafts, approve, then publish. Agents / Open API read the published version only. Open Enterprise Ontology → Ontology Studio.',
-          },
-          {
-            title: 'Connect DB and import schema',
-            detail:
-              'Click Connect database: choose MySQL / PostgreSQL / SQL Server / MongoDB → enter host/port/database (and Schema/auth source) manually or reuse an existing structured source → List tables → select tables/collections → preview → Import to draft. MongoDB has no fixed schema; fields are inferred from sample documents. Prefer MES_*_PASSWORD env vars.',
-          },
-          {
-            title: 'Suggest, approve, publish',
-            detail:
-              'On a draft, Generate suggestions for Chinese labels/types, then Approve (or Approve all drafts). Publish after at least one entity is approved. Agents then see only this org’s active published model. To restore a prior version, select an archived / non-active published version and click Roll back to this version.',
-          },
-          {
-            title: 'Evidence and compute expressions',
-            detail:
-              'With an entity selected, attach KO/document/chunk IDs under Evidence; after publish, Agents get summaries via describe_ontology (no privileged body text). Attributes may declare a safe compute expression (e.g. a+b); get_object can return derived values.',
-          },
-        ],
-      },
-      {
-        title: 'Cross-system identity',
-        permission: 'admin:retrieval',
-        steps: [
-          {
-            title: 'Canonical and identifiers',
-            detail:
-              'Open Enterprise Ontology → Cross-system Identity: create Canonical entities, attach system Identifiers, and use the Conflicts tab when IDs point at different entities. Conflicts are never silently overwritten.',
-          },
-        ],
-      },
-      {
-        title: 'Rules and actions',
-        permission: 'admin:retrieval',
-        steps: [
-          {
-            title: 'Maintain rules and ActionTypes',
-            detail:
-              'Open Enterprise Ontology → Rules & Actions: configure ontology rules by priority (allow/deny/require_confirm) and action types (risk, systems, input schema). Disabled actions disappear from Open/MCP list_actions.',
           },
         ],
       },
