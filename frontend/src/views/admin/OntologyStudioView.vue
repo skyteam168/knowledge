@@ -45,6 +45,7 @@ import type {
 } from '@/api/types'
 import EmptyState from '@/components/EmptyState.vue'
 import { formatDateTime } from '@/utils/format'
+import { layoutOntologyCanvas } from './ontologyCanvasLayout'
 
 const { t } = useI18n()
 
@@ -980,65 +981,32 @@ function onAttrSelectionChange(rows: SemanticAttribute[]): void {
 const canvasInspectorId = ref<string | null>(null)
 const canvasMode = ref<'table' | 'canvas'>('table')
 
-interface CanvasNode {
-  id: string
-  kind: 'entity' | 'attribute'
-  label: string
-  x: number
-  y: number
-  entityId?: string
-}
-
 interface CanvasEdge {
   from: string
   to: string
   label: string
 }
 
-const canvasNodes = computed<CanvasNode[]>(() => {
-  if (!detail.value) return []
-  const entities = detail.value.entities
-  const attrs = detail.value.attributes
-  const nodes: CanvasNode[] = []
-  entities.forEach((e, i) => {
-    const col = i % 3
-    const row = Math.floor(i / 3)
-    nodes.push({
-      id: `e:${e.id}`,
-      kind: 'entity',
-      label: e.label || e.local_name,
-      x: 80 + col * 220,
-      y: 60 + row * 180,
-    })
-    const mine = attrs.filter((a) => a.entity_id === e.id)
-    mine.forEach((a, j) => {
-      nodes.push({
-        id: `a:${a.id}`,
-        kind: 'attribute',
-        label: a.label || a.name,
-        x: 80 + col * 220 + 40,
-        y: 60 + row * 180 + 55 + j * 36,
-        entityId: e.id,
-      })
-    })
-  })
-  return nodes
+const canvasLayout = computed(() => {
+  if (!detail.value) return { nodes: [], width: 720, height: 420 }
+  return layoutOntologyCanvas(detail.value.entities, detail.value.attributes)
 })
+
+const canvasNodes = computed(() => canvasLayout.value.nodes)
 
 const canvasEdges = computed<CanvasEdge[]>(() => {
   if (!detail.value) return []
-  const edges: CanvasEdge[] = []
-  for (const a of detail.value.attributes) {
-    edges.push({ from: `e:${a.entity_id}`, to: `a:${a.id}`, label: 'has' })
-  }
-  for (const m of detail.value.mappings) {
-    edges.push({
-      from: `a:${m.attribute_id}`,
-      to: `a:${m.attribute_id}`,
-      label: `${m.table_name}.${m.column_name}`,
-    })
-  }
-  return edges.filter((e) => e.from !== e.to)
+  return detail.value.attributes.map((a) => ({
+    from: `e:${a.entity_id}`,
+    to: `a:${a.id}`,
+    label: 'has',
+  }))
+})
+
+const canvasNodeMap = computed(() => {
+  const map = new Map<string, (typeof canvasNodes.value)[number]>()
+  for (const n of canvasNodes.value) map.set(n.id, n)
+  return map
 })
 
 const canvasInspector = computed(() => {
@@ -1210,73 +1178,77 @@ function selectCanvasNode(id: string): void {
           </div>
 
           <div v-if="canvasMode === 'canvas'" class="canvas-split">
-            <svg
-              class="relation-canvas"
-              viewBox="0 0 720 420"
-              role="img"
-              :aria-label="t('ontology.viewCanvas')"
-            >
-              <defs>
-                <marker
-                  id="arrow"
-                  viewBox="0 0 10 10"
-                  refX="8"
-                  refY="5"
-                  markerWidth="6"
-                  markerHeight="6"
-                  orient="auto-start-reverse"
-                >
-                  <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b" />
-                </marker>
-              </defs>
-              <g v-for="(edge, idx) in canvasEdges" :key="'edge-' + idx">
-                <line
-                  v-if="canvasNodes.find((n) => n.id === edge.from) && canvasNodes.find((n) => n.id === edge.to)"
-                  :x1="canvasNodes.find((n) => n.id === edge.from)!.x"
-                  :y1="canvasNodes.find((n) => n.id === edge.from)!.y"
-                  :x2="canvasNodes.find((n) => n.id === edge.to)!.x"
-                  :y2="canvasNodes.find((n) => n.id === edge.to)!.y"
-                  stroke="#94a3b8"
-                  stroke-width="1.5"
-                  marker-end="url(#arrow)"
-                />
-              </g>
-              <g
-                v-for="node in canvasNodes"
-                :key="node.id"
-                class="canvas-node"
-                :class="{ active: canvasInspectorId === node.id }"
-                @click="selectCanvasNode(node.id)"
+            <div class="relation-canvas-scroll">
+              <svg
+                class="relation-canvas"
+                :viewBox="`0 0 ${canvasLayout.width} ${canvasLayout.height}`"
+                :width="canvasLayout.width"
+                :height="canvasLayout.height"
+                role="img"
+                :aria-label="t('ontology.viewCanvas')"
               >
-                <rect
-                  v-if="node.kind === 'entity'"
-                  :x="node.x - 48"
-                  :y="node.y - 18"
-                  width="96"
-                  height="36"
-                  rx="8"
-                  fill="#1d4ed8"
-                />
-                <rect
-                  v-else
-                  :x="node.x - 42"
-                  :y="node.y - 14"
-                  width="84"
-                  height="28"
-                  rx="6"
-                  fill="#0f766e"
-                />
-                <text
-                  :x="node.x"
-                  :y="node.y + 4"
-                  text-anchor="middle"
-                  fill="#fff"
-                  font-size="11"
+                <defs>
+                  <marker
+                    id="arrow"
+                    viewBox="0 0 10 10"
+                    refX="8"
+                    refY="5"
+                    markerWidth="6"
+                    markerHeight="6"
+                    orient="auto-start-reverse"
+                  >
+                    <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b" />
+                  </marker>
+                </defs>
+                <g v-for="(edge, idx) in canvasEdges" :key="'edge-' + idx">
+                  <line
+                    v-if="canvasNodeMap.get(edge.from) && canvasNodeMap.get(edge.to)"
+                    :x1="canvasNodeMap.get(edge.from)!.x"
+                    :y1="canvasNodeMap.get(edge.from)!.y"
+                    :x2="canvasNodeMap.get(edge.to)!.x"
+                    :y2="canvasNodeMap.get(edge.to)!.y"
+                    stroke="#94a3b8"
+                    stroke-width="1.5"
+                    marker-end="url(#arrow)"
+                  />
+                </g>
+                <g
+                  v-for="node in canvasNodes"
+                  :key="node.id"
+                  class="canvas-node"
+                  :class="{ active: canvasInspectorId === node.id }"
+                  @click="selectCanvasNode(node.id)"
                 >
-                  {{ node.label.length > 10 ? node.label.slice(0, 10) + '…' : node.label }}
-                </text>
-              </g>
-            </svg>
+                  <rect
+                    v-if="node.kind === 'entity'"
+                    :x="node.x - 48"
+                    :y="node.y - 18"
+                    width="96"
+                    height="36"
+                    rx="8"
+                    fill="#1d4ed8"
+                  />
+                  <rect
+                    v-else
+                    :x="node.x - 42"
+                    :y="node.y - 14"
+                    width="84"
+                    height="28"
+                    rx="6"
+                    fill="#0f766e"
+                  />
+                  <text
+                    :x="node.x"
+                    :y="node.y + 4"
+                    text-anchor="middle"
+                    fill="#fff"
+                    font-size="11"
+                  >
+                    {{ node.label.length > 10 ? node.label.slice(0, 10) + '…' : node.label }}
+                  </text>
+                </g>
+              </svg>
+            </div>
             <aside class="canvas-inspector">
               <div class="pane-title">{{ t('ontology.inspector') }}</div>
               <EmptyState
@@ -1932,12 +1904,16 @@ function selectCanvasNode(id: string): void {
   gap: 12px;
   min-height: 420px;
 }
-.relation-canvas {
-  width: 100%;
-  height: 420px;
+.relation-canvas-scroll {
+  max-height: min(70vh, 720px);
+  overflow: auto;
   background: linear-gradient(180deg, #f8fafc, #eef2ff);
   border: 1px solid var(--el-border-color-lighter);
   border-radius: 8px;
+}
+.relation-canvas {
+  display: block;
+  min-width: 100%;
 }
 .canvas-node {
   cursor: pointer;
@@ -1945,6 +1921,9 @@ function selectCanvasNode(id: string): void {
 .canvas-node.active rect {
   stroke: #f59e0b;
   stroke-width: 3;
+}
+html.dark .relation-canvas-scroll {
+  background: linear-gradient(180deg, #0f172a, #1e293b);
 }
 .canvas-inspector {
   border: 1px solid var(--el-border-color-lighter);
